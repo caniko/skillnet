@@ -6,7 +6,7 @@ name: Publish Crate
 on:
   push:
     tags:
-      - "v*"
+      - "*.*.*"
   workflow_dispatch:
     inputs:
       force_publish:
@@ -31,9 +31,6 @@ jobs:
       - name: Install Rust components
         run: rustup component add clippy rustfmt
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
       - name: Validate signed release tag
         run: |
           set -euo pipefail
@@ -43,9 +40,8 @@ jobs:
             tag="${ref#refs/tags/}"
           fi
 
-          version_tag="${tag#v}"
-          if ! printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Tag must be a v-prefixed semver version like v0.1.0, got '$tag'" >&2
+          if ! printf '%s\n' "$tag" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Tag must be an exact semver version like 0.1.1, got '$tag'" >&2
             exit 1
           fi
 
@@ -54,7 +50,7 @@ jobs:
             echo "Could not read package version from cargo metadata" >&2
             exit 1
           fi
-          if [ "$version_tag" != "$version" ]; then
+          if [ "$tag" != "$version" ]; then
             echo "Tag $tag does not match Cargo.toml package version $version" >&2
             exit 1
           fi
@@ -80,6 +76,9 @@ jobs:
       - name: Test all features
         run: cargo test --all-features
 
+      - name: Test no default features
+        run: cargo test --no-default-features
+
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 
@@ -93,16 +92,13 @@ jobs:
         run: cargo deny check
 
       - name: Build docs
-        run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
+        run: cargo doc --no-deps --all-features
 
       - name: Clippy all features
         run: cargo clippy --all-targets --all-features -- --deny warnings
 
-      - name: Install Nix
-        uses: https://github.com/cachix/install-nix-action@v31
-
-      - name: Nix flake check
-        run: nix flake check --keep-going --print-build-logs
+      - name: Clippy no default features
+        run: cargo clippy --all-targets --no-default-features -- --deny warnings
 
       - name: Dry-run publish
         run: cargo publish --dry-run

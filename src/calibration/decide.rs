@@ -1,10 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context};
-use rusqlite::params;
-use rusqlite::OptionalExtension;
 
-use super::Db;
+use super::{db::DbParam as P, Db};
 
 pub enum Decision {
     Accept,
@@ -27,13 +25,11 @@ pub fn run(
     rationale: String,
 ) -> anyhow::Result<()> {
     let existing = db
-        .connection()
-        .query_row(
-            "SELECT decision FROM calibration_proposals WHERE id = ?1",
-            [proposal_id],
-            |row| row.get::<_, String>(0),
+        .query_optional(
+            "SELECT decision FROM calibration_proposals WHERE id = $1",
+            &[P::from(proposal_id)],
+            |row| row.get_string(0),
         )
-        .optional()
         .context("failed to read proposal decision")?;
 
     let Some(existing) = existing else {
@@ -44,11 +40,16 @@ pub fn run(
     }
 
     let stored = decision.as_stored();
-    db.connection_mut().execute(
+    db.execute(
         "UPDATE calibration_proposals
-        SET decision = ?1, decided_at = ?2, rationale = ?3
-        WHERE id = ?4 AND decision = 'pending'",
-        params![stored, unix_timestamp()?, rationale, proposal_id],
+        SET decision = $1, decided_at = $2, rationale = $3
+        WHERE id = $4 AND decision = 'pending'",
+        &[
+            P::from(stored),
+            P::from(unix_timestamp()?),
+            P::from(rationale.as_str()),
+            P::from(proposal_id),
+        ],
     )?;
 
     println!("proposal {proposal_id} {stored}");

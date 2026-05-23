@@ -1,0 +1,2 @@
+[alias]
+test-pg = ["test", "--features", "postgres", "--all-targets"]

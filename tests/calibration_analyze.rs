@@ -34,7 +34,7 @@ impl Fixture {
 
     fn command(&self) -> Command {
         let mut command = Command::cargo_bin("skillnet").unwrap();
-        command.env("AI_SKILLS_REPO", self.repo.path());
+        command.env("skillnet_DATA_DIR", self.repo.path().join("data"));
         command
     }
 

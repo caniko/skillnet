@@ -4,10 +4,10 @@ use std::{
 };
 
 use anyhow::Context;
-use rusqlite::params;
 
 use super::{
     analyze::{self, AnalyzeOptions},
+    db::DbParam as P,
     Db,
 };
 
@@ -75,7 +75,7 @@ pub fn run(db: &mut Db, input: ProposeInput) -> anyhow::Result<()> {
     let supporting_plan_ids = serde_json::to_string(&input.supporting_plan_ids)
         .context("failed to serialize supporting plan ids")?;
 
-    db.connection_mut().execute(
+    let id = db.execute_returning_id(
         "INSERT INTO calibration_proposals (
             proposed_at,
             trigger_name,
@@ -87,21 +87,19 @@ pub fn run(db: &mut Db, input: ProposeInput) -> anyhow::Result<()> {
             filter_tags,
             decision,
             rationale
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'pending', ?9)",
-        params![
-            unix_timestamp()?,
-            input.trigger,
-            current_threshold,
-            input.new_threshold,
-            supporting_plan_ids,
-            trigger.fire_rate,
-            signal_rate,
-            filter_tags,
-            input.rationale,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9)",
+        &[
+            P::from(unix_timestamp()?),
+            P::from(input.trigger.as_str()),
+            P::from(current_threshold),
+            P::from(input.new_threshold),
+            P::from(&supporting_plan_ids),
+            P::from(trigger.fire_rate),
+            P::from(signal_rate),
+            P::nullable_text(filter_tags.as_deref()),
+            P::from(input.rationale.as_str()),
         ],
     )?;
-
-    let id = db.connection().last_insert_rowid();
     println!(
         "proposal {id} pending: {} {} -> {}",
         trigger.trigger,
@@ -124,39 +122,48 @@ pub fn list(db: &Db, filter: ProposalFilter) -> anyhow::Result<()> {
         FROM calibration_proposals"
         .to_string();
     if filter.decision().is_some() {
-        sql.push_str(" WHERE decision = ?1");
+        sql.push_str(" WHERE decision = $1");
     }
     sql.push_str(" ORDER BY id");
 
-    let mut stmt = db.connection().prepare(&sql)?;
-    let mut rows = if let Some(decision) = filter.decision() {
-        stmt.query([decision])?
+    let params = if let Some(decision) = filter.decision() {
+        vec![P::from(decision)]
     } else {
-        stmt.query([])?
+        Vec::new()
     };
+    let rows = db.query_all(&sql, &params, |row| {
+        let ids_raw = row.get_string(7)?;
+        let ids: Vec<String> = serde_json::from_str(&ids_raw).unwrap_or_default();
+        Ok((
+            row.get_i64(0)?,
+            row.get_string(1)?,
+            row.get_f64(2)?,
+            row.get_f64(3)?,
+            row.get_string(4)?,
+            row.get_f64(5)?,
+            row.get_f64(6)?,
+            ids,
+        ))
+    })?;
 
     println!(
         "{:<5} {:<28} {:>9} {:>9} {:<9} {:>7} {:>8} SUPPORT",
         "ID", "TRIGGER", "CURRENT", "PROPOSED", "DECISION", "FIRE%", "SIGNAL"
     );
-    let mut count = 0;
-    while let Some(row) = rows.next()? {
-        count += 1;
-        let ids_raw: String = row.get(7)?;
-        let ids: Vec<String> = serde_json::from_str(&ids_raw).unwrap_or_default();
+    for (id, trigger, current, proposed, decision, fire_rate, signal_rate, ids) in &rows {
         println!(
             "{:<5} {:<28} {:>9} {:>9} {:<9} {:>6.1}% {:>+8.2} {}",
-            row.get::<_, i64>(0)?,
-            row.get::<_, String>(1)?,
-            analyze::pretty_threshold(row.get::<_, f64>(2)?),
-            analyze::pretty_threshold(row.get::<_, f64>(3)?),
-            row.get::<_, String>(4)?,
-            row.get::<_, f64>(5)? * 100.0,
-            row.get::<_, f64>(6)?,
+            id,
+            trigger,
+            analyze::pretty_threshold(*current),
+            analyze::pretty_threshold(*proposed),
+            decision,
+            fire_rate * 100.0,
+            signal_rate,
             ids.join(","),
         );
     }
-    if count == 0 {
+    if rows.is_empty() {
         println!("no proposals");
     }
     Ok(())

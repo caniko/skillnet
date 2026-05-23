@@ -39,7 +39,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::Context;
 use serde::Serialize;
 
-use super::Db;
+use super::{db::DbParam as P, Db};
 
 #[derive(Debug)]
 pub struct AnalyzeOptions {
@@ -221,7 +221,7 @@ fn load_rows(
     options: &AnalyzeOptions,
     tags: &BTreeMap<String, BTreeMap<String, BTreeSet<String>>>,
 ) -> anyhow::Result<Vec<TriggerRow>> {
-    let mut stmt = db.connection().prepare(
+    let rows = db.query_all(
         "SELECT
             t.plan_id,
             t.name,
@@ -236,24 +236,24 @@ fn load_rows(
         JOIN plans p ON p.id = t.plan_id
         JOIN verifications v ON v.plan_id = t.plan_id
         ORDER BY p.created_at, t.id",
+        &[],
+        |row| {
+            Ok(TriggerRow {
+                plan_id: row.get_string(0)?,
+                name: row.get_string(1)?,
+                threshold: row.get_f64(2)?,
+                fired: row.get_bool(3)?,
+                section_added: row.get_optional_string(4)?,
+                created_at: row.get_i64(5)?,
+                outcome: row.get_string(6)?,
+                surprises: row.get_optional_string(7)?,
+                emergency_changes: row.get_optional_string(8)?,
+            })
+        },
     )?;
-    let rows = stmt.query_map([], |row| {
-        Ok(TriggerRow {
-            plan_id: row.get(0)?,
-            name: row.get(1)?,
-            threshold: row.get(2)?,
-            fired: row.get::<_, i64>(3)? != 0,
-            section_added: row.get(4)?,
-            created_at: row.get(5)?,
-            outcome: row.get(6)?,
-            surprises: row.get(7)?,
-            emergency_changes: row.get(8)?,
-        })
-    })?;
 
     let mut out = Vec::new();
     for row in rows {
-        let row = row.context("failed to read calibration trigger row")?;
         if options
             .trigger
             .as_ref()
@@ -270,20 +270,14 @@ fn load_rows(
 }
 
 fn load_tags(db: &Db) -> anyhow::Result<BTreeMap<String, BTreeMap<String, BTreeSet<String>>>> {
-    let mut stmt = db
-        .connection()
-        .prepare("SELECT plan_id, key, value FROM tags ORDER BY plan_id, key, value")?;
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-        ))
-    })?;
+    let rows = db.query_all(
+        "SELECT plan_id, key, value FROM tags ORDER BY plan_id, key, value",
+        &[],
+        |row| Ok((row.get_string(0)?, row.get_string(1)?, row.get_string(2)?)),
+    )?;
 
     let mut tags: BTreeMap<String, BTreeMap<String, BTreeSet<String>>> = BTreeMap::new();
-    for row in rows {
-        let (plan_id, key, value) = row.context("failed to read calibration tag row")?;
+    for (plan_id, key, value) in rows {
         tags.entry(plan_id)
             .or_default()
             .entry(key)
@@ -506,15 +500,12 @@ fn skew_warnings(
 }
 
 fn tag_values(db: &Db, key: &str) -> anyhow::Result<Vec<String>> {
-    let mut stmt = db
-        .connection()
-        .prepare("SELECT DISTINCT value FROM tags WHERE key = ?1 ORDER BY value")?;
-    let rows = stmt.query_map([key], |row| row.get::<_, String>(0))?;
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row.with_context(|| format!("failed to read {key} tag value"))?);
-    }
-    Ok(out)
+    db.query_all(
+        "SELECT DISTINCT value FROM tags WHERE key = $1 ORDER BY value",
+        &[P::from(key)],
+        |row| row.get_string(0),
+    )
+    .with_context(|| format!("failed to read {key} tag values"))
 }
 
 fn has_structured_surprise(surprises: Option<&str>, prefix: &str, trigger: &str) -> bool {

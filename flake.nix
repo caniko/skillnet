@@ -16,6 +16,10 @@
       url = "github:cachix/git-hooks.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     advisory-db = {
       url = "git+https://github.com/RustSec/advisory-db.git?ref=main";
       flake = false;
@@ -25,6 +29,7 @@
   outputs = {
     self,
     advisory-db,
+    home-manager,
     nixpkgs,
     rs-harbor,
     flake-utils,
@@ -32,7 +37,9 @@
     treefmt-nix,
     git-hooks,
     ...
-  }:
+  }: let
+    hmModule = import ./nix/hm-module.nix;
+  in
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {
         inherit system;
@@ -115,6 +122,11 @@
           cp -r docs/book $out
         '';
       };
+
+      hmModuleTest = import ./nix/test-hm-module.nix {
+        inherit home-manager package pkgs;
+        module = hmModule;
+      };
     in {
       packages = {
         default = package;
@@ -136,6 +148,7 @@
         docs = docs;
         audit = auditCheck;
         deny = denyCheck;
+        hm-module = hmModuleTest;
       };
 
       devShells.default = craneLib.devShell {
@@ -156,5 +169,11 @@
           ++ pre-commit-check.enabledPackages;
         shellHook = pre-commit-check.shellHook;
       };
-    });
+    })
+    // {
+      hmModules = {
+        default = hmModule;
+        skillnet = hmModule;
+      };
+    };
 }

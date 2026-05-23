@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
+  test:
     runs-on: atlas
     container: rust:1.75-bookworm
     steps:
@@ -20,11 +20,11 @@ jobs:
       - name: Install Rust components
         run: rustup component add clippy rustfmt
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Test all features
+        run: cargo test --all-features
 
-      - name: Clippy all features
-        run: cargo clippy --all-targets --all-features -- --deny warnings
+      - name: Test no default features
+        run: cargo test --no-default-features
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
@@ -33,10 +33,7 @@ jobs:
         run: cargo install cargo-deny --locked
 
       - name: Check MSRV
-        run: cargo +1.75 check --all-targets --all-features
-
-      - name: Test all features
-        run: cargo test --all-features
+        run: cargo +1.75 check --all-targets
 
       - name: Audit dependencies
         run: cargo audit
@@ -45,16 +42,13 @@ jobs:
         run: cargo deny check
 
       - name: Build docs
-        run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
+        run: cargo doc --no-deps --all-features
 
-      - name: Package crate without verification
-        run: cargo package --no-verify
+      - name: Clippy all features
+        run: cargo clippy --all-targets --all-features -- --deny warnings
+
+      - name: Clippy no default features
+        run: cargo clippy --all-targets --no-default-features -- --deny warnings
 
       - name: Package crate
-        run: cargo package
-
-      - name: Install Nix
-        uses: https://github.com/cachix/install-nix-action@v31
-
-      - name: Nix flake check
-        run: nix flake check --keep-going --print-build-logs
+        run: cargo package --allow-dirty

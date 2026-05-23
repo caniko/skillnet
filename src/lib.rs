@@ -3,5 +3,5 @@
 //! live agent directories, and recording calibration data for
 //! `multi-phase-plan`.
 //!
-//! The supported interface in `0.1.0` is the `skillnet` binary. This crate
+//! The supported interface in `0.1.1` is the `skillnet` binary. This crate
 //! does not commit to a stable embeddable Rust API yet.

@@ -25,6 +25,10 @@ pub(super) struct Cli {
     #[arg(long, default_value = "skillnet.catalog.toml", global = true)]
     pub(super) catalog_config: Utf8PathBuf,
 
+    /// Postgres URL for the calibration database.
+    #[arg(long, value_name = "URL", global = true)]
+    pub(super) database_url: Option<String>,
+
     /// Print planned filesystem changes without mutating files.
     #[arg(long, global = true)]
     pub(super) dry_run: bool,
@@ -86,6 +90,56 @@ pub(crate) enum CalibrationCommand {
     /// Read a plan sidecar verify section and record verification outcome.
     Verify { plan_dir: Utf8PathBuf },
     // PHASE 03 commands here
+    /// Add user tags to a recorded plan.
+    Tag {
+        plan_id: String,
+        /// Tags to add, as key=value. May be repeated.
+        #[arg(required = true, value_parser = parse_kv)]
+        tags: Vec<(String, String)>,
+    },
+    /// Remove user tags from a recorded plan.
+    Untag {
+        plan_id: String,
+        /// Tags to remove, as key=value. May be repeated.
+        #[arg(required = true, value_parser = parse_kv)]
+        tags: Vec<(String, String)>,
+    },
+    /// Dump one recorded plan as JSON.
+    Show { plan_id: String },
+    /// Query recorded plans.
+    Query {
+        /// Restrict results to plans with this tag, as key=value. May be repeated.
+        #[arg(long, value_parser = parse_kv)]
+        tag: Vec<(String, String)>,
+        /// Restrict results to plans with this trigger.
+        #[arg(long)]
+        trigger: Option<String>,
+        /// Restrict trigger matches to fired rows.
+        #[arg(long, conflicts_with = "missed")]
+        fired: bool,
+        /// Restrict trigger matches to missed rows.
+        #[arg(long, conflicts_with = "fired")]
+        missed: bool,
+        /// Maximum number of plans to return.
+        #[arg(long, default_value = "100")]
+        limit: u32,
+        /// Output format.
+        #[arg(long, default_value = "table")]
+        format: QueryFormat,
+    },
+    /// Apply pending schema migrations.
+    Migrate,
+    /// Vacuum the calibration database.
+    Vacuum,
+    /// Export all recorded plans.
+    Export {
+        /// Output format.
+        #[arg(long, default_value = "jsonl")]
+        format: ExportFormat,
+        /// Write output to this path instead of stdout.
+        #[arg(long)]
+        out: Option<Utf8PathBuf>,
+    },
     /// Analyze verified calibration rows and propose threshold changes.
     Analyze {
         /// Restrict analysis to plans with this tag, as key=value. May be repeated.
@@ -157,6 +211,17 @@ pub(crate) enum AnalyzeFormat {
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum QueryFormat {
+    Table,
+    Json,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum ExportFormat {
+    Jsonl,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
 pub(crate) enum Decision {
     Accept,
     Reject,
@@ -172,7 +237,19 @@ pub(crate) fn parse_kv(raw: &str) -> Result<(String, String), String> {
     if value.is_empty() {
         return Err("tag value must not be empty".to_string());
     }
+    if !valid_tag_key(key) {
+        return Err(
+            "tag key must match ^[a-z][a-z0-9_-]*$ (lowercase letters, numbers, '_' and '-')"
+                .to_string(),
+        );
+    }
     Ok((key.to_string(), value.to_string()))
+}
+
+fn valid_tag_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    matches!(chars.next(), Some('a'..='z'))
+        && chars.all(|ch| matches!(ch, 'a'..='z' | '0'..='9' | '_' | '-'))
 }
 
 #[derive(Debug, Subcommand)]

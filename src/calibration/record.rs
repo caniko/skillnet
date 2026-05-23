@@ -4,9 +4,8 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use rusqlite::params;
 
-use super::{sidecar::Sidecar, Db};
+use super::{db::DbParam as P, db::Tx, sidecar::Sidecar, Db};
 
 pub fn run(plan_dir: &Path, db: &mut Db) -> anyhow::Result<()> {
     let sidecar = Sidecar::load(plan_dir)?;
@@ -15,18 +14,15 @@ pub fn run(plan_dir: &Path, db: &mut Db) -> anyhow::Result<()> {
     let trigger_count = sidecar.triggers.len();
     let phase_count = sidecar.phases.len();
     let tag_count = tags.values().map(BTreeSet::len).sum::<usize>();
+    let plan_path = plan_dir.display().to_string();
     let capture_reasons = serde_json::to_string(&sidecar.meta_heuristics_fired)
         .context("failed to serialize capture reasons")?;
     let routing_dist =
         serde_json::to_string(&sidecar.plan.routing_dist).context("failed to serialize routing")?;
 
-    let tx = db
-        .connection_mut()
-        .transaction()
-        .context("failed to start calibration record transaction")?;
-
-    tx.execute(
-        "INSERT INTO plans (
+    db.transaction(|tx| {
+        tx.execute(
+            "INSERT INTO plans (
             id,
             created_at,
             name,
@@ -40,7 +36,7 @@ pub fn run(plan_dir: &Path, db: &mut Db) -> anyhow::Result<()> {
             routing_dist,
             shape_hash,
             capture_reasons
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT(id) DO UPDATE SET
             created_at = excluded.created_at,
             name = excluded.name,
@@ -54,72 +50,73 @@ pub fn run(plan_dir: &Path, db: &mut Db) -> anyhow::Result<()> {
             routing_dist = excluded.routing_dist,
             shape_hash = excluded.shape_hash,
             capture_reasons = excluded.capture_reasons",
-        params![
-            sidecar.plan.id,
-            sidecar.plan.created_at,
-            sidecar.plan.name,
-            plan_dir.display().to_string(),
-            sidecar.plan.flavor,
-            sidecar.plan.worktype,
-            i64::from(sidecar.plan.phase_count),
-            i64::from(sidecar.plan.wave_count),
-            i64::from(sidecar.plan.max_chain_depth),
-            i64::from(sidecar.plan.repo_spread),
-            routing_dist,
-            sidecar.plan.shape_hash,
-            capture_reasons,
-        ],
-    )
-    .context("failed to upsert plan")?;
+            &[
+                P::from(&sidecar.plan.id),
+                P::from(sidecar.plan.created_at),
+                P::from(&sidecar.plan.name),
+                P::from(&plan_path),
+                P::from(&sidecar.plan.flavor),
+                P::nullable_text(sidecar.plan.worktype.as_deref()),
+                P::from(i64::from(sidecar.plan.phase_count)),
+                P::from(i64::from(sidecar.plan.wave_count)),
+                P::from(i64::from(sidecar.plan.max_chain_depth)),
+                P::from(i64::from(sidecar.plan.repo_spread)),
+                P::from(&routing_dist),
+                P::from(&sidecar.plan.shape_hash),
+                P::from(&capture_reasons),
+            ],
+        )
+        .context("failed to upsert plan")?;
 
-    delete_record_children(&tx, &plan_id)?;
+        delete_record_children(tx, &plan_id)?;
 
-    for trigger in &sidecar.triggers {
-        tx.execute(
-            "INSERT INTO triggers (
+        for trigger in &sidecar.triggers {
+            tx.execute(
+                "INSERT INTO triggers (
                 plan_id,
                 name,
                 input_value,
                 threshold,
                 fired,
                 section_added
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                plan_id,
-                trigger.name,
-                trigger.input_value,
-                trigger.threshold,
-                trigger.fired,
-                trigger.section_added,
-            ],
-        )
-        .context("failed to insert trigger")?;
-    }
+            ) VALUES ($1, $2, $3, $4, $5, $6)",
+                &[
+                    P::from(&plan_id),
+                    P::from(&trigger.name),
+                    P::from(trigger.input_value),
+                    P::from(trigger.threshold),
+                    P::from(trigger.fired),
+                    P::nullable_text(trigger.section_added.as_deref()),
+                ],
+            )
+            .context("failed to insert trigger")?;
+        }
 
-    for phase in &sidecar.phases {
-        let files = serde_json::to_string(&phase.files).context("failed to serialize files")?;
-        tx.execute(
-            "INSERT INTO phases (
+        for phase in &sidecar.phases {
+            let files = serde_json::to_string(&phase.files).context("failed to serialize files")?;
+            tx.execute(
+                "INSERT INTO phases (
                 plan_id,
                 ordinal,
                 slug,
                 routing_tier,
                 files
-            ) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                plan_id,
-                i64::from(phase.ordinal),
-                phase.slug,
-                phase.routing_tier,
-                files,
-            ],
-        )
-        .context("failed to insert phase")?;
-    }
+            ) VALUES ($1, $2, $3, $4, $5)",
+                &[
+                    P::from(&plan_id),
+                    P::from(i64::from(phase.ordinal)),
+                    P::from(&phase.slug),
+                    P::from(&phase.routing_tier),
+                    P::from(&files),
+                ],
+            )
+            .context("failed to insert phase")?;
+        }
 
-    insert_tags(&tx, &plan_id, &tags)?;
-    tx.commit()
-        .context("failed to commit calibration record transaction")?;
+        insert_tags(tx, &plan_id, &tags)?;
+        Ok(())
+    })
+    .context("failed to commit calibration record transaction")?;
 
     println!(
         "recorded {plan_id} ({trigger_count} triggers, {phase_count} phases, {tag_count} tags)"
@@ -151,26 +148,25 @@ pub fn run_verify(plan_dir: &Path, db: &mut Db) -> anyhow::Result<()> {
         .count();
     let total = verify.phase_outcomes.len();
 
-    let tx = db
-        .connection_mut()
-        .transaction()
-        .context("failed to start calibration verify transaction")?;
+    db.transaction(|tx| {
+        let plan_exists: bool = tx
+            .query_one(
+                "SELECT EXISTS (SELECT 1 FROM plans WHERE id = $1)",
+                &[P::from(&plan_id)],
+                |row| row.get_bool(0),
+            )
+            .context("failed to check plan existence")?;
+        if !plan_exists {
+            bail!("plan {} has not been recorded", plan_id);
+        }
 
-    let plan_exists: bool = tx
-        .query_row(
-            "SELECT EXISTS (SELECT 1 FROM plans WHERE id = ?1)",
-            [&plan_id],
-            |row| row.get(0),
+        tx.execute(
+            "DELETE FROM verifications WHERE plan_id = $1",
+            &[P::from(&plan_id)],
         )
-        .context("failed to check plan existence")?;
-    if !plan_exists {
-        bail!("plan {} has not been recorded", plan_id);
-    }
-
-    tx.execute("DELETE FROM verifications WHERE plan_id = ?1", [&plan_id])
         .context("failed to delete prior verification")?;
-    tx.execute(
-        "INSERT INTO verifications (
+        tx.execute(
+            "INSERT INTO verifications (
             plan_id,
             verified_at,
             elapsed_seconds,
@@ -178,30 +174,31 @@ pub fn run_verify(plan_dir: &Path, db: &mut Db) -> anyhow::Result<()> {
             phase_outcomes,
             emergency_changes,
             surprises
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![
-            plan_id,
-            verify.verified_at,
-            verify.elapsed_seconds,
-            verify.outcome,
-            phase_outcomes,
-            emergency_changes,
-            verify.surprises,
-        ],
-    )
-    .context("failed to insert verification")?;
-    tx.execute(
-        "DELETE FROM tags WHERE plan_id = ?1 AND key = 'outcome'",
-        [&plan_id],
-    )
-    .context("failed to delete prior outcome tag")?;
-    tx.execute(
-        "INSERT INTO tags (plan_id, key, value) VALUES (?1, 'outcome', ?2)",
-        params![plan_id, verify.outcome],
-    )
-    .context("failed to insert outcome tag")?;
-    tx.commit()
-        .context("failed to commit calibration verify transaction")?;
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            &[
+                P::from(&plan_id),
+                P::from(verify.verified_at),
+                P::nullable_i64(verify.elapsed_seconds),
+                P::from(&verify.outcome),
+                P::from(&phase_outcomes),
+                P::nullable_text(emergency_changes.as_deref()),
+                P::nullable_text(verify.surprises.as_deref()),
+            ],
+        )
+        .context("failed to insert verification")?;
+        tx.execute(
+            "DELETE FROM tags WHERE plan_id = $1 AND key = 'outcome'",
+            &[P::from(&plan_id)],
+        )
+        .context("failed to delete prior outcome tag")?;
+        tx.execute(
+            "INSERT INTO tags (plan_id, key, value) VALUES ($1, 'outcome', $2)",
+            &[P::from(&plan_id), P::from(&verify.outcome)],
+        )
+        .context("failed to insert outcome tag")?;
+        Ok(())
+    })
+    .context("failed to commit calibration verify transaction")?;
 
     println!(
         "verified {plan_id}: {} ({passed}/{total} phases passed)",
@@ -210,26 +207,29 @@ pub fn run_verify(plan_dir: &Path, db: &mut Db) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn delete_record_children(tx: &rusqlite::Transaction<'_>, plan_id: &str) -> anyhow::Result<()> {
-    tx.execute("DELETE FROM triggers WHERE plan_id = ?1", [plan_id])
-        .context("failed to delete prior triggers")?;
-    tx.execute("DELETE FROM phases WHERE plan_id = ?1", [plan_id])
+fn delete_record_children(tx: &mut Tx<'_>, plan_id: &str) -> anyhow::Result<()> {
+    tx.execute(
+        "DELETE FROM triggers WHERE plan_id = $1",
+        &[P::from(plan_id)],
+    )
+    .context("failed to delete prior triggers")?;
+    tx.execute("DELETE FROM phases WHERE plan_id = $1", &[P::from(plan_id)])
         .context("failed to delete prior phases")?;
-    tx.execute("DELETE FROM tags WHERE plan_id = ?1", [plan_id])
+    tx.execute("DELETE FROM tags WHERE plan_id = $1", &[P::from(plan_id)])
         .context("failed to delete prior tags")?;
     Ok(())
 }
 
 fn insert_tags(
-    tx: &rusqlite::Transaction<'_>,
+    tx: &mut Tx<'_>,
     plan_id: &str,
     tags: &BTreeMap<String, BTreeSet<String>>,
 ) -> anyhow::Result<()> {
     for (key, values) in tags {
         for value in values {
             tx.execute(
-                "INSERT INTO tags (plan_id, key, value) VALUES (?1, ?2, ?3)",
-                params![plan_id, key, value],
+                "INSERT INTO tags (plan_id, key, value) VALUES ($1, $2, $3)",
+                &[P::from(plan_id), P::from(key), P::from(value)],
             )
             .with_context(|| format!("failed to insert tag {key}:{value}"))?;
         }

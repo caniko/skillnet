@@ -4,6 +4,12 @@
 
 The CLI tree was reorganized around what you're acting on: `sync`, `skill`, `scope`, `project`, `catalog`. Every old verb maps to one new verb. No hidden aliases - old invocations error.
 
+## 0.2.x storage backends
+
+`0.2.x` adds optional Postgres support behind the `postgres` Cargo feature.
+SQLite remains the default calibration backend, so existing users do not need
+to migrate data or change configuration.
+
 ## Removed top-level shortcuts
 
 | Old | New |

@@ -9,7 +9,10 @@ use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 
 use crate::commands::Context;
-use crate::{catalog, commands};
+use crate::{
+    catalog, commands,
+    config::{Config, DbOverrides},
+};
 
 use args::{CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, SyncCommand};
 use scope::{resolve_scope, resolve_scopes};
@@ -19,6 +22,7 @@ pub(crate) fn run() -> Result<()> {
         config,
         mirror_root,
         catalog_config,
+        database_url,
         dry_run,
         command,
     } = Cli::parse();
@@ -32,7 +36,11 @@ pub(crate) fn run() -> Result<()> {
     }
 
     if let Command::Calibration(args) = command {
-        return commands::calibration::run(args);
+        let database = Config::load_database_or_default(&config)?;
+        return commands::calibration::run(
+            args,
+            database.resolve_db_with_overrides(&DbOverrides { database_url })?,
+        );
     }
 
     let ctx = Context::load(&config, &mirror_root, &catalog_config, dry_run)?;
