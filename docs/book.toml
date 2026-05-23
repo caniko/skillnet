@@ -1,0 +1,7 @@
+[book]
+title = "skillnet"
+language = "en"
+src = "src"
+
+[build]
+create-missing = false

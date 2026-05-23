@@ -1,0 +1,49 @@
+[package]
+name = "skillnet"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Reconcile and manage local AI skill mirrors; calibration data for the multi-phase-plan skill."
+license = "MIT OR Apache-2.0"
+repository = "https://codeberg.org/caniko/skillnet"
+homepage = "https://codeberg.org/caniko/skillnet"
+documentation = "https://docs.rs/skillnet"
+readme = "README.md"
+keywords = ["ai", "skills", "calibration", "claude", "codex"]
+categories = ["command-line-utilities", "development-tools"]
+include = [
+    "src/**",
+    "tests/**",
+    "data/multi-phase-plan/schema/*.sql",
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "docs/book.toml",
+    "docs/src/**",
+]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+anyhow = "1.0"
+camino = { version = "1.1", features = ["serde1"] }
+clap = { version = "4.5", features = ["derive"] }
+clap_complete = "4.5"
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+toml = "0.8"
+toml_edit = "0.22"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+walkdir = "2.5"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.13"

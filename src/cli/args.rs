@@ -1,0 +1,304 @@
+use camino::Utf8PathBuf;
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "skillnet",
+    version,
+    about = "Reconcile and manage AI skills",
+    long_about = "Reconcile AI skill directories from live agent sources into a mirror, edit mirrored skills, and sync selected mirror state back to live .agents/skills and .claude/skills directories.",
+    subcommand_required = false,
+    arg_required_else_help = false,
+    disable_help_subcommand = true
+)]
+pub(super) struct Cli {
+    /// Path to the skillnet TOML configuration file.
+    #[arg(long, default_value = "skillnet.toml", global = true)]
+    pub(super) config: Utf8PathBuf,
+
+    /// Root directory containing the global/ and projects/ mirror directories.
+    #[arg(long, default_value = ".", global = true)]
+    pub(super) mirror_root: Utf8PathBuf,
+
+    /// Path to the skill catalog metadata configuration file.
+    #[arg(long, default_value = "skillnet.catalog.toml", global = true)]
+    pub(super) catalog_config: Utf8PathBuf,
+
+    /// Print planned filesystem changes without mutating files.
+    #[arg(long, global = true)]
+    pub(super) dry_run: bool,
+
+    #[command(subcommand)]
+    pub(super) command: Option<Command>,
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum Command {
+    /// Show scope divergence and catalog health.
+    Status,
+    /// Generate shell completion scripts.
+    Completions {
+        /// Shell to generate completions for.
+        shell: Shell,
+    },
+    /// Pull from live sources, push to live targets, and inspect divergence.
+    Sync {
+        #[command(subcommand)]
+        command: SyncCommand,
+    },
+    /// List, inspect, and edit mirrored skill directories.
+    Skill {
+        #[command(subcommand)]
+        command: SkillCommand,
+    },
+    /// Inspect configured mirror scopes and their live sources.
+    Scope {
+        #[command(subcommand)]
+        command: ScopeCommand,
+    },
+    /// Manage configured project roots.
+    Project {
+        #[command(subcommand)]
+        command: ProjectCommand,
+    },
+    /// Generate and validate skill catalog metadata.
+    Catalog {
+        #[command(subcommand)]
+        command: CatalogCommand,
+    },
+    /// Record and verify multi-phase-plan calibration data.
+    Calibration(CalibrationArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CalibrationArgs {
+    #[command(subcommand)]
+    pub command: CalibrationCommand,
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(crate) enum CalibrationCommand {
+    /// Read a plan sidecar and record plan metadata.
+    Record { plan_dir: Utf8PathBuf },
+    /// Read a plan sidecar verify section and record verification outcome.
+    Verify { plan_dir: Utf8PathBuf },
+    // PHASE 03 commands here
+    /// Analyze verified calibration rows and propose threshold changes.
+    Analyze {
+        /// Restrict analysis to plans with this tag, as key=value. May be repeated.
+        #[arg(long, value_parser = parse_kv)]
+        filter_tag: Vec<(String, String)>,
+        /// Restrict analysis to one trigger name.
+        #[arg(long)]
+        trigger: Option<String>,
+        /// Minimum fired rows required before a threshold proposal is trusted.
+        #[arg(long, default_value = "10")]
+        min_n: u32,
+        /// Output format.
+        #[arg(long, default_value = "table")]
+        format: AnalyzeFormat,
+    },
+    /// Persist a calibration threshold proposal.
+    Propose {
+        /// Trigger name to adjust.
+        #[arg(long)]
+        trigger: String,
+        /// Proposed replacement threshold.
+        #[arg(long)]
+        new_threshold: f64,
+        /// Restrict supporting analysis to plans with this tag, as key=value.
+        #[arg(long, value_parser = parse_kv)]
+        filter_tag: Vec<(String, String)>,
+        /// Human rationale for opening the proposal.
+        #[arg(long)]
+        rationale: String,
+        /// Comma-separated supporting plan ids.
+        #[arg(long, value_delimiter = ',', required = true)]
+        supporting_plan_ids: Vec<String>,
+    },
+    /// List persisted threshold proposals.
+    Proposals {
+        /// Show pending proposals.
+        #[arg(long, conflicts_with_all = ["accepted", "rejected"])]
+        pending: bool,
+        /// Show accepted proposals.
+        #[arg(long, conflicts_with_all = ["pending", "rejected"])]
+        accepted: bool,
+        /// Show rejected proposals.
+        #[arg(long, conflicts_with_all = ["pending", "accepted"])]
+        rejected: bool,
+    },
+    /// Accept or reject a pending proposal.
+    Decide {
+        /// Proposal id.
+        proposal_id: i64,
+        /// Decision to record.
+        decision: Decision,
+        /// Human rationale for the decision.
+        #[arg(long)]
+        rationale: String,
+    },
+    /// Emit a SKILL.md changelog block from accepted proposals.
+    ExportChangelog {
+        /// Include proposals decided on or after YYYY-MM-DD.
+        #[arg(long)]
+        since: Option<String>,
+    },
+    // PHASE 04 commands here
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum AnalyzeFormat {
+    Table,
+    Json,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum Decision {
+    Accept,
+    Reject,
+}
+
+pub(crate) fn parse_kv(raw: &str) -> Result<(String, String), String> {
+    let (key, value) = raw
+        .split_once('=')
+        .ok_or_else(|| "expected key=value".to_string())?;
+    if key.is_empty() {
+        return Err("tag key must not be empty".to_string());
+    }
+    if value.is_empty() {
+        return Err("tag value must not be empty".to_string());
+    }
+    Ok((key.to_string(), value.to_string()))
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum SyncCommand {
+    /// Read live sources and rebuild selected mirror scopes.
+    Pull {
+        /// Mirror scope to pull. May be repeated.
+        #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
+        scope: Vec<String>,
+        /// Pull every configured scope.
+        #[arg(long)]
+        all: bool,
+        /// Push selected mirror scopes after a successful pull.
+        #[arg(long)]
+        then_push: bool,
+    },
+    /// Write selected mirror scopes back to live .agents and .claude directories.
+    Push {
+        /// Mirror scope to push. May be repeated.
+        #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
+        scope: Vec<String>,
+        /// Push every configured scope.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Show read-only divergence for selected scopes.
+    Status {
+        /// Mirror scope to inspect. May be repeated.
+        #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
+        scope: Vec<String>,
+    },
+    /// Show file-level mirror/live diffs for selected scopes.
+    Diff {
+        /// Mirror scope to diff. May be repeated.
+        #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
+        scope: Vec<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum SkillCommand {
+    /// List mirrored skills for selected scopes.
+    List {
+        /// Mirror scope to list. May be repeated.
+        #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
+        scope: Vec<String>,
+        /// List every configured scope.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Show metadata for one mirrored skill.
+    Show {
+        /// Skill path as <scope>/<skill>.
+        path: String,
+    },
+    /// Delete one mirrored skill.
+    Delete {
+        /// Skill path as <scope>/<skill>.
+        path: String,
+    },
+    /// Rename one mirrored skill within its current scope.
+    Rename {
+        /// Skill path as <scope>/<old>.
+        path: String,
+        /// New skill directory name.
+        new: String,
+    },
+    /// Move one mirrored skill to another scope or scope/name destination.
+    Move {
+        /// Source skill path as <scope>/<skill>.
+        from: String,
+        /// Destination scope, optionally with a new name as <scope>/<name>.
+        to: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum ScopeCommand {
+    /// List configured mirror scopes.
+    List,
+    /// Print configured live source directories for one scope or all scopes.
+    Sources {
+        /// Mirror scope to inspect.
+        #[arg(long, value_name = "SCOPE")]
+        scope: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum ProjectCommand {
+    /// List configured projects and their root paths.
+    List,
+    /// Add a configured project root.
+    Add {
+        /// Project name used as the mirror scope.
+        name: String,
+        /// Project repository root path. Relative paths are expanded before writing.
+        path: Utf8PathBuf,
+        /// Allow adding a project path that does not exist yet.
+        #[arg(long)]
+        allow_missing: bool,
+    },
+    /// Remove a configured project root.
+    Remove {
+        /// Project name to remove.
+        name: String,
+        /// Also delete projects/<name> from the mirror if it exists.
+        #[arg(long)]
+        prune_mirror: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum CatalogCommand {
+    /// Rebuild CATALOG.md, ROUTING.md, SKILL_CONFLICTS.md, and project INDEX.md files.
+    Generate,
+    /// Validate effective catalog metadata and routing hygiene.
+    Lint,
+    /// Search skill names, descriptions, tags, categories, and projects.
+    Search {
+        /// Case-insensitive search query.
+        query: String,
+    },
+}
