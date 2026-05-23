@@ -12,7 +12,7 @@ concurrency:
 jobs:
   test:
     runs-on: atlas
-    container: rust:1.75-bookworm
+    container: rust:1.88-bookworm
     steps:
       - name: Checkout
         uses: https://code.forgejo.org/actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
         run: cargo install cargo-deny --locked
 
       - name: Check MSRV
-        run: cargo +1.75 check --all-targets
+        run: cargo +1.88 check --all-targets
 
       - name: Audit dependencies
         run: cargo audit

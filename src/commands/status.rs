@@ -66,7 +66,7 @@ fn print_catalog_health(ctx: &Context) {
 fn print_cache_health(ctx: &Context) {
     let (path, cache, modified) = sync::cache_metadata(ctx);
     if cache.stamps.is_empty() {
-        println!("cache: {} no cache yet (run `skillnet sync pull`)", path);
+        println!("cache: {path} no cache yet (run `skillnet sync pull`)");
     } else {
         println!(
             "cache: {} last updated {}",

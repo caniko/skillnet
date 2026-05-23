@@ -157,7 +157,7 @@ pub fn run_verify(plan_dir: &Path, db: &mut Db) -> anyhow::Result<()> {
             )
             .context("failed to check plan existence")?;
         if !plan_exists {
-            bail!("plan {} has not been recorded", plan_id);
+            bail!("plan {plan_id} has not been recorded");
         }
 
         tx.execute(

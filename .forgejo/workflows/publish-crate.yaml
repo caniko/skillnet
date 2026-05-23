@@ -23,7 +23,7 @@ jobs:
   publish:
     enable-openid-connect: true
     runs-on: atlas
-    container: rust:1.75-bookworm
+    container: rust:1.88-bookworm
     steps:
       - name: Checkout
         uses: https://code.forgejo.org/actions/checkout@v4

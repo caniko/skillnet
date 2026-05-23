@@ -2,7 +2,7 @@
 name = "skillnet"
 version = "0.2.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.88"
 description = "Reconcile and manage local AI skill mirrors; calibration data for the multi-phase-plan skill."
 license = "MIT OR Apache-2.0"
 repository = "https://codeberg.org/caniko/skillnet"

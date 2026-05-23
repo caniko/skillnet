@@ -81,20 +81,20 @@ impl CatalogRule {
     pub(super) fn matches(&self, entry: &SkillEntry, rel: &str) -> bool {
         self.path_prefix
             .as_deref()
-            .map_or(true, |prefix| rel.starts_with(prefix))
-            && self.name.as_deref().map_or(true, |name| entry.name == name)
+            .is_none_or(|prefix| rel.starts_with(prefix))
+            && self.name.as_deref().is_none_or(|name| entry.name == name)
             && self
                 .name_prefix
                 .as_deref()
-                .map_or(true, |prefix| entry.name.starts_with(prefix))
+                .is_none_or(|prefix| entry.name.starts_with(prefix))
             && self
                 .name_suffix
                 .as_deref()
-                .map_or(true, |suffix| entry.name.ends_with(suffix))
+                .is_none_or(|suffix| entry.name.ends_with(suffix))
             && self
                 .project
                 .as_deref()
-                .map_or(true, |project| entry.project.as_deref() == Some(project))
+                .is_none_or(|project| entry.project.as_deref() == Some(project))
     }
 
     pub(super) fn apply(&self, entry: &mut SkillEntry) {

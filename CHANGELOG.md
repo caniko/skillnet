@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the global `--database-url` flag plus `SKILLNET_DATABASE_URL` and `SKILLNET_DB_URL` environment-variable overrides.
 - Extend the Home Manager module with `programs.skillnet.database.{backend,path,url}` and Postgres session-variable wiring.
 - Add backend parity coverage for calibration database round trips.
+- Raise the crate MSRV and Forgejo release containers to Rust 1.88 for dependencies and release tooling that require a newer Cargo.
 
 ## [0.1.1] - 2026-05-23
 

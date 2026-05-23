@@ -40,8 +40,7 @@ fn export_jsonl(db: &Db, out: Option<&Utf8Path>) -> anyhow::Result<()> {
                 .open(path)
                 .with_context(|| {
                     format!(
-                        "failed to create export file {}; refusing to overwrite existing files",
-                        path
+                        "failed to create export file {path}; refusing to overwrite existing files"
                     )
                 })?,
         )),

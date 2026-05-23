@@ -149,7 +149,7 @@ runner the rest of caniko's projects use; the existing
    name = "skillnet"
    version = "0.1.0"
    edition = "2021"
-   rust-version = "1.75"        # bump if any dep requires newer
+   rust-version = "1.88"        # bump if any dep requires newer
    description = "Reconcile and manage local AI skill mirrors; calibration data for the multi-phase-plan skill."
    license = "MIT OR Apache-2.0"
    repository = "https://codeberg.org/caniko/skillnet"
