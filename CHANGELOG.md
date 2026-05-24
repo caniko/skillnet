@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-24
+
+`0.4.0` adds the first-class heuristics catalog, helper commands,
+walkthrough orchestrator, and SemVer-stable `analyze --format json` schema.
+`ai-skills` can consume this release as the calibration backend for
+`multi-phase-plan`.
+
+### Added
+
+- Heuristics catalog under `src/calibration/catalog/`, with user-facing
+  heuristics, meta-heuristics, code defaults, and runtime threshold overrides
+  through the `heuristic_thresholds` table.
+- `skillnet calibration init <plan-dir>` to bootstrap `.calibration.json` from
+  a plan directory.
+- `skillnet calibration eval <plan-dir>` to evaluate catalog heuristics and
+  emit trigger rows.
+- `skillnet calibration meta-heuristics <plan-dir>` to report firing
+  meta-heuristics.
+- `skillnet calibration shape-hash <plan-dir>` to print a deterministic plan
+  shape hash.
+- `skillnet calibration heuristics list|show` to inspect the heuristic
+  catalog.
+- `skillnet calibration walkthrough` to run the orchestrated calibration flow:
+  analyze, propose, decide, and export changelog. It supports
+  `--non-interactive`, `--decisions <file>`, `--dry-run`, and
+  `--skill-md <path>`.
+- mdBook pages documenting the calibration JSON schema and verifier surprises
+  convention.
+
+### Changed
+
+- `skillnet calibration analyze --format json` is now a SemVer-stable schema.
+  The top-level object includes `schema_version: 1`, and trigger rows include
+  `threshold_source` provenance for default and override thresholds.
+- `skillnet calibration decide accept` writes accepted thresholds to
+  `heuristic_thresholds`, closing the calibration loop.
+
+### Schema migrations
+
+- Added `data/multi-phase-plan/schema/002-heuristic-thresholds.sql` and
+  `data/multi-phase-plan/schema-pg/002-heuristic-thresholds.sql`. The
+  migrations create the override table and seed code defaults idempotently.
+
 ## [0.3.0] - 2026-05-24
 
 ### Added
@@ -52,5 +95,6 @@ Initial release.
 
 No stable Rust library API is committed in `0.1.0`; the supported surface is the `skillnet` binary.
 
-[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.3.0...HEAD
+[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.4.0...HEAD
+[0.4.0]: https://codeberg.org/caniko/skillnet/compare/0.3.0...0.4.0
 [0.3.0]: https://codeberg.org/caniko/skillnet/compare/0.2.0...0.3.0

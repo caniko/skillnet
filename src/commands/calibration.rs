@@ -56,6 +56,28 @@ pub fn run(args: CalibrationArgs, target: DbTarget) -> Result<()> {
             ),
             HeuristicsCommand::Show { name } => calibration::heuristics_cmd::show(&db, &name),
         },
+        CalibrationCommand::Walkthrough {
+            since,
+            skill_md,
+            interactive,
+            non_interactive,
+            decisions,
+            dry_run,
+            filter_tag,
+            min_n,
+        } => calibration::walkthrough::run(
+            &mut db,
+            calibration::walkthrough::WalkthroughOptions {
+                since,
+                skill_md,
+                interactive,
+                non_interactive,
+                decisions,
+                dry_run,
+                filter_tags: filter_tag,
+                min_n,
+            },
+        ),
         // PHASE 03 commands here
         CalibrationCommand::Tag { plan_id, tags } => {
             calibration::tag::add_tags(&mut db, &plan_id, &tags)

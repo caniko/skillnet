@@ -9,7 +9,8 @@ Top-level commands:
 - `scope`: inspect configured mirror scopes and their live sources.
 - `project`: manage configured project roots.
 - `catalog`: generate and validate skill catalog metadata.
-- `calibration`: record and analyze `multi-phase-plan` calibration data.
+- `calibration`: record, inspect, analyze, and tune `multi-phase-plan`
+  calibration data.
 
 Examples:
 
@@ -19,6 +20,8 @@ skillnet sync status --scope global
 skillnet skill show global/rust-project-flake
 skillnet project list
 skillnet catalog lint
+skillnet calibration heuristics list
+skillnet calibration walkthrough --dry-run
 ```
 
 ## Config File Location

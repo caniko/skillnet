@@ -16,5 +16,6 @@ pub mod record;
 pub mod shape_hash;
 pub mod sidecar;
 pub mod tag;
+pub mod walkthrough;
 
 pub use db::Db;

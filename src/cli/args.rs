@@ -124,8 +124,33 @@ pub(crate) enum CalibrationCommand {
         #[command(subcommand)]
         command: HeuristicsCommand,
     },
-    // WALKTHROUGH command here
-    // PHASE 03 commands here
+    /// Run the full analyze -> propose -> decide -> changelog calibration flow.
+    Walkthrough {
+        /// Explicit changelog lower bound, in YYYY-MM-DD form.
+        #[arg(long)]
+        since: Option<String>,
+        /// SKILL.md path used to auto-detect the latest changelog date.
+        #[arg(long)]
+        skill_md: Option<Utf8PathBuf>,
+        /// Force TTY prompts.
+        #[arg(long, conflicts_with = "non_interactive")]
+        interactive: bool,
+        /// Disable prompts and read choices from --decisions.
+        #[arg(long, conflicts_with = "interactive")]
+        non_interactive: bool,
+        /// JSON decisions file for --non-interactive mode.
+        #[arg(long, requires = "non_interactive")]
+        decisions: Option<Utf8PathBuf>,
+        /// Walk the flow without writing proposals or decisions.
+        #[arg(long)]
+        dry_run: bool,
+        /// Restrict analysis to plans with this tag, as key=value. May be repeated.
+        #[arg(long, value_parser = parse_kv)]
+        filter_tag: Vec<(String, String)>,
+        /// Minimum fired rows required before a threshold proposal is trusted.
+        #[arg(long, default_value = "10")]
+        min_n: u32,
+    },
     /// Add user tags to a recorded plan.
     Tag {
         plan_id: String,
