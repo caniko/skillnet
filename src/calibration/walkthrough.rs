@@ -365,9 +365,9 @@ fn load_decisions(path: Option<&Utf8PathBuf>) -> anyhow::Result<DecisionsFile> {
         return Ok(DecisionsFile::default());
     };
     let raw = fs::read_to_string(path)
-        .with_context(|| format!("failed to read decisions file {}", path))?;
+        .with_context(|| format!("failed to read decisions file {path}"))?;
     let entries: Vec<DecisionEntry> = serde_json::from_str(&raw)
-        .with_context(|| format!("failed to parse decisions file {}", path))?;
+        .with_context(|| format!("failed to parse decisions file {path}"))?;
     let mut by_trigger = BTreeMap::new();
     for entry in entries {
         validate_decision_tags(&entry)?;
@@ -464,7 +464,7 @@ fn resolve_since(
         return Ok(None);
     };
     let content =
-        fs::read_to_string(path).with_context(|| format!("failed to read SKILL.md {}", path))?;
+        fs::read_to_string(path).with_context(|| format!("failed to read SKILL.md {path}"))?;
     // Strictly match changelog footer headings produced by export-changelog:
     // `### YYYY-MM-DD — ...`. Loose Markdown dates are intentionally ignored.
     let heading = Regex::new(r"^### (\d{4}-\d{2}-\d{2}) —").expect("valid changelog regex");
