@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-24
+
+### Added
+
+- CLI: `SKILLNET_CONFIG`, `SKILLNET_CATALOG_CONFIG`, `SKILLNET_MIRROR_ROOT` env-var fallbacks for the corresponding global flags. `skillnet status` no longer requires `./skillnet.toml` in cwd.
+- HM module: `programs.skillnet.settings` and `catalogSettings` declarative options render `skillnet.toml` / `skillnet.catalog.toml` from Nix and auto-export the env vars above.
+- HM module: `programs.skillnet.configFile` / `catalogConfigFile` for pointing at user-managed TOMLs without rendering them from Nix.
+- HM module: `programs.skillnet.database.urlFile` reads the Postgres URL from a file at shell init, keeping secrets out of the world-readable `hm-session-vars.sh`.
+
+### Fixed
+
+- HM module: `programs.skillnet.database.path` for SQLite is now honoured end-to-end; activation creates the parent directory.
+- HM module: `programs.skillnet.skillsRoot` missing on disk now warns instead of aborting `home-manager switch`.
+
+### Removed
+
+- HM module: `programs.skillnet.extraConfig`, a no-op placeholder in 0.2.0 superseded by `settings`.
+
 ## [0.2.0] - 2026-05-23
 
 - Add a backend abstraction for calibration storage and an optional `postgres` Cargo feature.
@@ -33,3 +51,6 @@ Initial release.
 - Add release metadata, crates.io packaging rules, mdBook docs, and Forgejo-ready release infrastructure.
 
 No stable Rust library API is committed in `0.1.0`; the supported surface is the `skillnet` binary.
+
+[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.3.0...HEAD
+[0.3.0]: https://codeberg.org/caniko/skillnet/compare/0.2.0...0.3.0

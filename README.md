@@ -27,14 +27,29 @@ inputs.skillnet.url = "git+ssh://git@codeberg.org/caniko/skillnet.git";
 imports = [ inputs.skillnet.hmModules.default ];
 programs.skillnet = {
   enable = true;
-  database.url = "postgres://user:password@db.example.com/skillnet";
+  settings = {
+    mirror_root = "/home/alice/skills-mirror";
+    scopes = [
+      {
+        name = "global";
+        sources = [ "/home/alice/.claude/skills" ];
+      }
+    ];
+  };
+  database = {
+    backend = "postgres";
+    urlFile = config.age.secrets.skillnet-pg-url.path;
+  };
 };
 ```
 
 The module is exported as both `hmModules.default` and `hmModules.skillnet`.
-It installs `skillnet` on `PATH`. When SQLite is selected, it also creates the
-runtime data directory and exports `skillnet_DATA_DIR` and `SKILLNET_DATA_DIR`
-for the CLI.
+It installs `skillnet` on `PATH`. When `settings` is declared, the module
+renders `skillnet.toml` and exports `SKILLNET_CONFIG`, `SKILLNET_CATALOG_CONFIG`,
+and `SKILLNET_MIRROR_ROOT` for the CLI. Without `settings`, you can still drop
+your own TOMLs and point `programs.skillnet.configFile` at them. When SQLite is
+selected, the module also creates the runtime data directory and exports
+`skillnet_DATA_DIR` and `SKILLNET_DATA_DIR`.
 
 If you also want the module to define where the `ai-skills` checkout lives,
 set `skillsRoot`. On atlas, that path is:
@@ -43,8 +58,8 @@ set `skillsRoot`. On atlas, that path is:
 programs.skillnet.skillsRoot = "/data/nvme0/can/Projects/ai-skills";
 ```
 
-When configured, the module exports `AI_SKILLS_REPO` and activation fails if
-the checkout directory is missing. `skillsRoot` points at the skills checkout;
+When configured, the module exports `AI_SKILLS_REPO` and warns if the checkout
+directory is missing. `skillsRoot` points at the skills checkout;
 `dataDir` remains skillnet's runtime database and cache location.
 
 Postgres is the default calibration backend and requires a connection URL.
@@ -66,8 +81,8 @@ The Postgres backend is included in default builds. If you override
 a package that includes the `postgres` feature when using the Postgres backend.
 
 The `database.url` value is written into the Nix store. For production secrets,
-prefer setting `SKILLNET_DATABASE_URL` through your usual secret mechanism, such
-as `sops-nix`, `agenix`, or a shell-sourced environment file.
+prefer `database.urlFile`, which reads the Postgres URL from a file at shell
+initialization time.
 
 Options:
 
@@ -82,11 +97,17 @@ Options:
   when unset, calibration data lives at
   `<dataDir>/multi-phase-plan/calibration.sqlite`.
 - `programs.skillnet.database.url` sets `SKILLNET_DATABASE_URL` and is required
-  when `programs.skillnet.database.backend = "postgres"`.
+  when `programs.skillnet.database.backend = "postgres"` and `urlFile` is
+  unset.
+- `programs.skillnet.database.urlFile` reads a Postgres URL from a file at
+  shell initialization time.
+- `programs.skillnet.settings` and `programs.skillnet.catalogSettings` render
+  `skillnet.toml` and `skillnet.catalog.toml` from Nix.
+- `programs.skillnet.configFile` and `programs.skillnet.catalogConfigFile`
+  point the CLI at user-managed TOML files.
 - `programs.skillnet.package` overrides the package. If `pkgs.skillnet` is not
   available in your package set, use
   `inputs.skillnet.packages.${pkgs.system}.skillnet`.
-- `programs.skillnet.extraConfig` is reserved for future declarative config.
 
 ## Storage backends
 
@@ -131,15 +152,16 @@ programs.skillnet = {
   enable = true;
   package = inputs.skillnet.packages.${pkgs.system}.skillnet;
   database = {
-    url = "postgres://skillnet@localhost/skillnet";
+    backend = "postgres";
+    urlFile = config.age.secrets.skillnet-pg-url.path;
   };
 };
 ```
 
 `--database-url <URL>` overrides both environment and config for one command.
 Plain URLs in `programs.skillnet.database.url` are written into the Nix store;
-use `sops-nix`, `agenix`, or another secret-backed environment mechanism for
-production credentials.
+use `programs.skillnet.database.urlFile` with `sops-nix`, `agenix`, or another
+secret-backed file for production credentials.
 
 ## Quick Start
 

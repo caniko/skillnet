@@ -21,6 +21,22 @@ skillnet project list
 skillnet catalog lint
 ```
 
+## Config File Location
+
+`skillnet --config <path>` is the highest-precedence source. When the flag is
+omitted, the binary reads:
+
+| Rank | Source            | Resolves to              |
+| ---- | ----------------- | ------------------------ |
+| 1    | `--config <path>` | absolute or cwd-relative |
+| 2    | `SKILLNET_CONFIG` | absolute path            |
+| 3    | default           | `./skillnet.toml`        |
+
+The same precedence applies to `--catalog-config` /
+`SKILLNET_CATALOG_CONFIG` and `--mirror-root` / `SKILLNET_MIRROR_ROOT`. The
+Home Manager module exports these env vars automatically when
+`programs.skillnet.settings` is declared.
+
 ## Calibration Database
 
 Calibration commands use Postgres by default. The backend can be selected in

@@ -14,15 +14,25 @@ use clap_complete::Shell;
 )]
 pub(super) struct Cli {
     /// Path to the skillnet TOML configuration file.
-    #[arg(long, default_value = "skillnet.toml", global = true)]
+    #[arg(
+        long,
+        env = "SKILLNET_CONFIG",
+        default_value = "skillnet.toml",
+        global = true
+    )]
     pub(super) config: Utf8PathBuf,
 
     /// Root directory containing the global/ and projects/ mirror directories.
-    #[arg(long, default_value = ".", global = true)]
+    #[arg(long, env = "SKILLNET_MIRROR_ROOT", default_value = ".", global = true)]
     pub(super) mirror_root: Utf8PathBuf,
 
     /// Path to the skill catalog metadata configuration file.
-    #[arg(long, default_value = "skillnet.catalog.toml", global = true)]
+    #[arg(
+        long,
+        env = "SKILLNET_CATALOG_CONFIG",
+        default_value = "skillnet.catalog.toml",
+        global = true
+    )]
     pub(super) catalog_config: Utf8PathBuf,
 
     /// Postgres URL for the calibration database.
@@ -378,4 +388,69 @@ pub(super) enum CatalogCommand {
         /// Case-insensitive search query.
         query: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_args_read_environment_fallbacks() {
+        temp_env::with_var("SKILLNET_CONFIG", Some("/tmp/foo.toml"), || {
+            temp_env::with_var("SKILLNET_CATALOG_CONFIG", Some("/tmp/catalog.toml"), || {
+                temp_env::with_var("SKILLNET_MIRROR_ROOT", Some("/tmp/mirror"), || {
+                    let cli = Cli::parse_from(["skillnet", "status"]);
+
+                    assert_eq!(cli.config, Utf8PathBuf::from("/tmp/foo.toml"));
+                    assert_eq!(cli.catalog_config, Utf8PathBuf::from("/tmp/catalog.toml"));
+                    assert_eq!(cli.mirror_root, Utf8PathBuf::from("/tmp/mirror"));
+                });
+            });
+        });
+    }
+
+    #[test]
+    fn path_args_prefer_flags_over_environment() {
+        temp_env::with_var("SKILLNET_CONFIG", Some("/tmp/foo.toml"), || {
+            temp_env::with_var("SKILLNET_CATALOG_CONFIG", Some("/tmp/catalog.toml"), || {
+                temp_env::with_var("SKILLNET_MIRROR_ROOT", Some("/tmp/mirror"), || {
+                    let cli = Cli::parse_from([
+                        "skillnet",
+                        "--config",
+                        "/tmp/bar.toml",
+                        "--catalog-config",
+                        "/tmp/flag-catalog.toml",
+                        "--mirror-root",
+                        "/tmp/flag-mirror",
+                        "status",
+                    ]);
+
+                    assert_eq!(cli.config, Utf8PathBuf::from("/tmp/bar.toml"));
+                    assert_eq!(
+                        cli.catalog_config,
+                        Utf8PathBuf::from("/tmp/flag-catalog.toml")
+                    );
+                    assert_eq!(cli.mirror_root, Utf8PathBuf::from("/tmp/flag-mirror"));
+                });
+            });
+        });
+    }
+
+    #[test]
+    fn path_args_keep_literal_defaults_without_flags_or_environment() {
+        temp_env::with_var("SKILLNET_CONFIG", None::<&str>, || {
+            temp_env::with_var("SKILLNET_CATALOG_CONFIG", None::<&str>, || {
+                temp_env::with_var("SKILLNET_MIRROR_ROOT", None::<&str>, || {
+                    let cli = Cli::parse_from(["skillnet", "status"]);
+
+                    assert_eq!(cli.config, Utf8PathBuf::from("skillnet.toml"));
+                    assert_eq!(
+                        cli.catalog_config,
+                        Utf8PathBuf::from("skillnet.catalog.toml")
+                    );
+                    assert_eq!(cli.mirror_root, Utf8PathBuf::from("."));
+                });
+            });
+        });
+    }
 }

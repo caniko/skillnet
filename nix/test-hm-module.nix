@@ -8,6 +8,9 @@
   dataDir = "${homeDirectory}/.local/share/skillnet";
   skillsRoot = "${homeDirectory}/ai-skills";
   postgresUrl = "postgres://skillnet-test@example.invalid/skillnet";
+  declarativeMirrorRoot = "${homeDirectory}/skills-mirror";
+  declarativeSource = "${homeDirectory}/.claude/skills";
+  urlFile = "/run/secrets/pg-url";
 
   mkHmConfig = extraSkillnetConfig:
     home-manager.lib.homeManagerConfiguration {
@@ -18,6 +21,8 @@
           home.username = "skillnet-test";
           home.homeDirectory = homeDirectory;
           home.stateVersion = "24.11";
+
+          programs.bash.enable = true;
 
           programs.skillnet =
             {
@@ -38,10 +43,38 @@
       url = postgresUrl;
     };
   };
+  declarativeConfig = mkHmConfig {
+    database.backend = "sqlite";
+    settings = {
+      database.backend = "sqlite";
+      global = {
+        sources = [
+          {
+            label = "claude";
+            path = declarativeSource;
+            priority = 1;
+          }
+        ];
+        sync_paths = [];
+        stale_codex_skill_paths = [];
+      };
+    };
+    catalogSettings = {
+      settings = {};
+      rules = [];
+    };
+  };
+  urlFileConfig = mkHmConfig {
+    database = {
+      backend = "postgres";
+      urlFile = urlFile;
+    };
+  };
 in
   pkgs.runCommand "skillnet-hm-module-test"
   {
     nativeBuildInputs = [
+      pkgs.nix
       package
     ];
   }
@@ -50,7 +83,10 @@ in
 
     rm -rf ${homeDirectory}
     mkdir -p ${homeDirectory}
+    mkdir -p ${homeDirectory}/.local/state/nix/profiles
     mkdir -p ${skillsRoot}
+    mkdir -p ${declarativeMirrorRoot}/global
+    mkdir -p ${declarativeSource}
 
     export HOME=${homeDirectory}
     export USER=skillnet-test
@@ -59,7 +95,7 @@ in
     grep -F 'Activating %s" "skillnet-data-dir"' ${sqliteConfig.activationPackage}/activate >/dev/null
     grep -F 'mkdir -p ${dataDir}' ${sqliteConfig.activationPackage}/activate >/dev/null
     grep -F 'Activating %s" "skillnet-skills-root"' ${sqliteConfig.activationPackage}/activate >/dev/null
-    grep -F 'configured programs.skillnet.skillsRoot does not exist: ${skillsRoot}' ${sqliteConfig.activationPackage}/activate >/dev/null
+    grep -F 'skipping for now.' ${sqliteConfig.activationPackage}/activate >/dev/null
     mkdir -p ${dataDir}
     test -d ${dataDir}
 
@@ -84,7 +120,7 @@ in
     ! grep -F 'Activating %s" "skillnet-data-dir"' ${postgresConfig.activationPackage}/activate >/dev/null
     ! grep -F 'mkdir -p ${dataDir}' ${postgresConfig.activationPackage}/activate >/dev/null
     grep -F 'Activating %s" "skillnet-skills-root"' ${postgresConfig.activationPackage}/activate >/dev/null
-    grep -F 'configured programs.skillnet.skillsRoot does not exist: ${skillsRoot}' ${postgresConfig.activationPackage}/activate >/dev/null
+    grep -F 'skipping for now.' ${postgresConfig.activationPackage}/activate >/dev/null
     test -x ${postgresConfig.activationPackage}/home-path/bin/skillnet
     unset __HM_SESS_VARS_SOURCED
     . ${postgresConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
@@ -92,6 +128,37 @@ in
     test -z "''${SKILLNET_DATA_DIR:-}"
     test "''${AI_SKILLS_REPO:-}" = "${skillsRoot}"
     test "''${SKILLNET_DATABASE_URL:-}" = "${postgresUrl}"
+
+    unset skillnet_DATA_DIR
+    unset SKILLNET_DATA_DIR
+    unset SKILLNET_CONFIG
+    unset SKILLNET_CATALOG_CONFIG
+    unset SKILLNET_DATABASE_URL
+    unset AI_SKILLS_REPO
+
+    ! grep -F 'SKILLNET_DATABASE_URL=' ${urlFileConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh >/dev/null
+    grep -R -F 'SKILLNET_DATABASE_URL' ${urlFileConfig.activationPackage}/home-files >/dev/null
+    grep -R -F '${urlFile}' ${urlFileConfig.activationPackage}/home-files >/dev/null
+
+    rm -rf ${skillsRoot}
+    DRY_RUN=1 ${declarativeConfig.activationPackage}/activate --driver-version 1 2>activation-stderr.log
+    grep -F 'skipping for now.' activation-stderr.log >/dev/null
+
+    unset __HM_SESS_VARS_SOURCED
+    . ${declarativeConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
+    test -n "''${SKILLNET_CONFIG:-}"
+    test -n "''${SKILLNET_CATALOG_CONFIG:-}"
+    mkdir -p "$(dirname "$SKILLNET_CONFIG")"
+    ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml "$SKILLNET_CONFIG"
+    ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.catalog.toml "$SKILLNET_CATALOG_CONFIG"
+    test -f "$SKILLNET_CONFIG"
+    test -f "$SKILLNET_CATALOG_CONFIG"
+
+    export PATH="${declarativeConfig.activationPackage}/home-path/bin:$PATH"
+    cd /tmp
+    test ! -e skillnet.toml
+    skillnet status >/dev/null
+    ( unset SKILLNET_CONFIG; ! skillnet status >/dev/null 2>&1 )
 
     touch $out
   ''
