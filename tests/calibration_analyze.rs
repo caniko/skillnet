@@ -360,7 +360,7 @@ fn proposal_decision_and_changelog_flow() {
     assert_eq!(json["triggers"][0]["default_threshold"], 4.0);
     assert_eq!(json["triggers"][0]["current_threshold"], 7.0);
     assert_eq!(
-        json["triggers"][0]["threshold_source"]["source"],
+        json["triggers"][0]["threshold_source"]["type"],
         "override"
     );
 
