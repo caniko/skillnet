@@ -552,6 +552,13 @@ fn sqlite_query_optional<T>(
         return Ok(None);
     };
     let row = sqlite_row(row)?;
+    if rows
+        .next()
+        .with_context(|| format!("failed to fetch second row for SQL: {sql}"))?
+        .is_some()
+    {
+        bail!("query returned more than one row for SQL: {sql}");
+    }
     map(&row).map(Some)
 }
 

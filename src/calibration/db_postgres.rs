@@ -1,7 +1,4 @@
-use std::{
-    cell::{Cell, RefCell},
-    error::Error,
-};
+use std::{cell::RefCell, error::Error};
 
 use anyhow::{bail, Context};
 use postgres::{
@@ -14,12 +11,10 @@ use super::{DbParam, DbRow, DbValue};
 
 pub struct PostgresBackend {
     client: RefCell<Client>,
-    last_insert_id: Cell<Option<i64>>,
 }
 
 pub struct PostgresTransaction<'db> {
     tx: Transaction<'db>,
-    last_insert_id: &'db Cell<Option<i64>>,
 }
 
 enum ParamValue {
@@ -42,17 +37,11 @@ impl PostgresBackend {
         let client = Client::connect(url, NoTls).context("failed to connect to postgres")?;
         Ok(Self {
             client: RefCell::new(client),
-            last_insert_id: Cell::new(None),
         })
     }
 
     pub fn execute(&self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<usize> {
-        execute_client(
-            &mut *self.client.borrow_mut(),
-            &self.last_insert_id,
-            sql,
-            params,
-        )
+        execute_client(&mut *self.client.borrow_mut(), sql, params)
     }
 
     pub fn execute_returning_id(&self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<i64> {
@@ -64,9 +53,7 @@ impl PostgresBackend {
             .borrow_mut()
             .query_one(&sql, &refs)
             .with_context(|| format!("failed to execute postgres SQL: {sql}"))?;
-        let id = row_i64(&row, 0)?;
-        self.last_insert_id.set(Some(id));
-        Ok(id)
+        row_i64(&row, 0)
     }
 
     pub fn execute_batch(&self, sql: &str) -> anyhow::Result<()> {
@@ -103,16 +90,13 @@ impl PostgresBackend {
             .get_mut()
             .transaction()
             .context("failed to start postgres transaction")?;
-        f(PostgresTransaction {
-            tx,
-            last_insert_id: &self.last_insert_id,
-        })
+        f(PostgresTransaction { tx })
     }
 }
 
 impl PostgresTransaction<'_> {
     pub fn execute(&mut self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<usize> {
-        execute_client(&mut self.tx, self.last_insert_id, sql, params)
+        execute_client(&mut self.tx, sql, params)
     }
 
     pub fn execute_batch(&mut self, sql: &str) -> anyhow::Result<()> {
@@ -220,7 +204,6 @@ impl PgClient for Transaction<'_> {
 
 fn execute_client(
     client: &mut impl PgClient,
-    last_insert_id: &Cell<Option<i64>>,
     sql: &str,
     params: &[DbParam<'_>],
 ) -> anyhow::Result<usize> {
@@ -229,13 +212,6 @@ fn execute_client(
     let changed = client
         .execute_pg(sql, &refs)
         .with_context(|| format!("failed to execute postgres SQL: {sql}"))?;
-    if sql.trim_start().to_ascii_uppercase().starts_with("INSERT ") {
-        if let Ok(Some(row)) = client.query_opt_pg("SELECT lastval()", &[]) {
-            if let Ok(id) = row.try_get::<_, i64>(0) {
-                last_insert_id.set(Some(id));
-            }
-        }
-    }
     usize::try_from(changed).context("postgres changed-row count does not fit in usize")
 }
 
