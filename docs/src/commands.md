@@ -26,16 +26,21 @@ skillnet catalog lint
 `skillnet --config <path>` is the highest-precedence source. When the flag is
 omitted, the binary reads:
 
-| Rank | Source            | Resolves to              |
-| ---- | ----------------- | ------------------------ |
-| 1    | `--config <path>` | absolute or cwd-relative |
-| 2    | `SKILLNET_CONFIG` | absolute path            |
-| 3    | default           | `./skillnet.toml`        |
+| Rank | Source                         | Resolves to              |
+| ---- | ------------------------------ | ------------------------ |
+| 1    | `--config <path>`              | absolute or cwd-relative |
+| 2    | `SKILLNET_CONFIG`              | absolute or cwd-relative |
+| 3    | XDG config file, when present  | `$XDG_CONFIG_HOME/skillnet/skillnet.toml`, or `~/.config/skillnet/skillnet.toml` |
+| 4    | legacy cwd config, when present | `./skillnet.toml`       |
+| 5    | missing-config error path      | XDG path                 |
 
-The same precedence applies to `--catalog-config` /
-`SKILLNET_CATALOG_CONFIG` and `--mirror-root` / `SKILLNET_MIRROR_ROOT`. The
-Home Manager module exports these env vars automatically when
-`programs.skillnet.settings` is declared.
+The same file precedence applies to `--catalog-config` /
+`SKILLNET_CATALOG_CONFIG`, using `skillnet.catalog.toml` as the file name.
+
+The mirror root precedence is `--mirror-root`, then `SKILLNET_MIRROR_ROOT`,
+then `mirror_root` in `skillnet.toml`, then `.`. The Home Manager module writes
+declarative settings to XDG config paths so shell-specific env imports are not
+required for normal generated config.
 
 ## Calibration Database
 

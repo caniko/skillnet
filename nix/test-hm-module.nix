@@ -147,20 +147,24 @@ in
 
     unset __HM_SESS_VARS_SOURCED
     . ${declarativeConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
-    test -n "''${SKILLNET_CONFIG:-}"
-    test -n "''${SKILLNET_CATALOG_CONFIG:-}"
-    test "''${SKILLNET_MIRROR_ROOT:-}" = "${declarativeMirrorRoot}"
-    mkdir -p "$(dirname "$SKILLNET_CONFIG")"
-    ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml "$SKILLNET_CONFIG"
-    ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.catalog.toml "$SKILLNET_CATALOG_CONFIG"
-    test -f "$SKILLNET_CONFIG"
-    test -f "$SKILLNET_CATALOG_CONFIG"
+    test -z "''${SKILLNET_CONFIG:-}"
+    test -z "''${SKILLNET_CATALOG_CONFIG:-}"
+    test -z "''${SKILLNET_MIRROR_ROOT:-}"
+    mkdir -p ${homeDirectory}/.config/skillnet
+    ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml ${homeDirectory}/.config/skillnet/skillnet.toml
+    ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.catalog.toml ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
+    test -f ${homeDirectory}/.config/skillnet/skillnet.toml
+    test -f ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
+    grep -F "mirror_root = '${declarativeMirrorRoot}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F "backend = 'sqlite'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
 
     export PATH="${declarativeConfig.activationPackage}/home-path/bin:$PATH"
     cd /tmp
     test ! -e skillnet.toml
+    unset SKILLNET_CONFIG
+    unset SKILLNET_CATALOG_CONFIG
+    unset SKILLNET_MIRROR_ROOT
     skillnet status >/dev/null
-    ( unset SKILLNET_CONFIG; ! skillnet status >/dev/null 2>&1 )
 
     touch $out
   ''

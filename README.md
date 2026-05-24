@@ -50,13 +50,15 @@ programs.skillnet = {
 
 The module is exported as both `hmModules.default` and `hmModules.skillnet`.
 It installs `skillnet` on `PATH`. When `settings` is declared, the module
-renders `skillnet.toml` and exports `SKILLNET_CONFIG` for the CLI. When
-`catalogSettings` is declared, it renders `skillnet.catalog.toml` and exports
-`SKILLNET_CATALOG_CONFIG`. Set `mirrorRoot` to export `SKILLNET_MIRROR_ROOT`.
-Without `settings`, you can still drop your own TOMLs and point
+renders `$XDG_CONFIG_HOME/skillnet/skillnet.toml`, which the CLI discovers by
+default. When `catalogSettings` is declared, it renders
+`$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`. `mirrorRoot` and the
+declarative database options are folded into generated `skillnet.toml`, so a
+normal declarative Home Manager install does not depend on shell-specific env
+imports. Without `settings`, you can still drop your own TOMLs and point
 `programs.skillnet.configFile` at them. When SQLite is selected, the module also
 creates the runtime data directory and exports `skillnet_DATA_DIR` and
-`SKILLNET_DATA_DIR`.
+`SKILLNET_DATA_DIR` for compatibility.
 
 If you also want the module to define where the `ai-skills` checkout lives,
 set `skillsRoot`. On atlas, that path is:
@@ -95,8 +97,8 @@ Options:
 
 - `programs.skillnet.dataDir` defaults to `${config.xdg.dataHome}/skillnet`.
   This is skillnet's runtime database and cache location.
-- `programs.skillnet.mirrorRoot` optionally sets `SKILLNET_MIRROR_ROOT`, the
-  root containing the `global/` and `projects/` mirror directories.
+- `programs.skillnet.mirrorRoot` sets `mirror_root` in generated
+  `skillnet.toml`, or `SKILLNET_MIRROR_ROOT` when using user-managed config.
 - `programs.skillnet.skillsRoot` optionally sets the `ai-skills` checkout root
   and exports it as `AI_SKILLS_REPO`; atlas uses
   `/data/nvme0/can/Projects/ai-skills`.
@@ -105,9 +107,9 @@ Options:
 - `programs.skillnet.database.path` optionally sets the SQLite database path;
   when unset, calibration data lives at
   `<dataDir>/multi-phase-plan/calibration.sqlite`.
-- `programs.skillnet.database.url` sets `SKILLNET_DATABASE_URL` and is required
-  when `programs.skillnet.database.backend = "postgres"` and `urlFile` is
-  unset.
+- `programs.skillnet.database.url` is written into generated `skillnet.toml`
+  when `settings` is declared, or exported as `SKILLNET_DATABASE_URL` for
+  user-managed config.
 - `programs.skillnet.database.urlFile` reads a Postgres URL from a file at
   shell initialization time.
 - `programs.skillnet.settings` and `programs.skillnet.catalogSettings` render
@@ -221,7 +223,10 @@ cargo test-pg
 - Live global sources typically come from `~/.agents/skills`, `~/.claude/skills`, and `~/.codex/skills`.
 - Project scopes can add `.agents/skills`, `.claude/skills`, `.codex/skills`, root `skills`, plugin skill directories, and other configured paths.
 
-Configuration lives in `skillnet.toml`. Catalog metadata lives in `skillnet.catalog.toml`.
+Configuration lives in `$XDG_CONFIG_HOME/skillnet/skillnet.toml`, falling back
+to `./skillnet.toml` for legacy cwd-based usage. Catalog metadata uses
+`$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`, with the same legacy fallback
+to `./skillnet.catalog.toml`.
 
 ## Command Surface
 

@@ -10,6 +10,7 @@ use crate::model::{Source, Target};
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub global: GlobalConfig,
+    pub mirror_root: Option<String>,
     #[serde(default)]
     pub database: DatabaseConfig,
     #[serde(default)]
@@ -265,6 +266,30 @@ pub fn expand_path(raw: &str) -> Result<Utf8PathBuf> {
             .and_then(|p| Utf8PathBuf::from_path_buf(p).map_err(|_| anyhow!("cwd is not UTF-8")))
             .map(|cwd| cwd.join(path))
     }
+}
+
+pub fn default_config_path() -> Result<Utf8PathBuf> {
+    default_xdg_config_path("skillnet.toml")
+}
+
+pub fn default_catalog_config_path() -> Result<Utf8PathBuf> {
+    default_xdg_config_path("skillnet.catalog.toml")
+}
+
+pub fn legacy_config_path() -> Utf8PathBuf {
+    Utf8PathBuf::from("skillnet.toml")
+}
+
+pub fn legacy_catalog_config_path() -> Utf8PathBuf {
+    Utf8PathBuf::from("skillnet.catalog.toml")
+}
+
+fn default_xdg_config_path(file_name: &str) -> Result<Utf8PathBuf> {
+    let config_home = match non_empty(env::var("XDG_CONFIG_HOME").ok().as_deref()) {
+        Some(path) => Utf8PathBuf::from(path),
+        None => home_dir()?.join(".config"),
+    };
+    Ok(config_home.join("skillnet").join(file_name))
 }
 
 fn expand_paths(raws: &[String]) -> Result<Vec<Utf8PathBuf>> {

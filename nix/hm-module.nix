@@ -8,6 +8,25 @@
   tomlFormat = pkgs.formats.toml {};
   generatedConfigFile = "${config.xdg.configHome}/skillnet/skillnet.toml";
   generatedCatalogConfigFile = "${config.xdg.configHome}/skillnet/skillnet.catalog.toml";
+  generatedDatabaseSettings =
+    (cfg.settings.database or {})
+    // {
+      backend = cfg.database.backend;
+    }
+    // lib.optionalAttrs (cfg.database.path != null) {
+      path = cfg.database.path;
+    }
+    // lib.optionalAttrs (cfg.database.url != null) {
+      url = cfg.database.url;
+    };
+  generatedSettings =
+    cfg.settings
+    // {
+      database = generatedDatabaseSettings;
+    }
+    // lib.optionalAttrs (cfg.mirrorRoot != null) {
+      mirror_root = cfg.mirrorRoot;
+    };
 in {
   options.programs.skillnet = {
     enable = lib.mkEnableOption "skillnet, the AI skill mirror and calibration CLI";
@@ -30,7 +49,7 @@ in {
     mirrorRoot = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Optional root directory containing the global/ and projects/ skill mirror directories. Exported as SKILLNET_MIRROR_ROOT.";
+      description = "Optional root directory containing the global/ and projects/ skill mirror directories. Written as mirror_root when settings is declared; otherwise exported as SKILLNET_MIRROR_ROOT.";
     };
 
     settings = lib.mkOption {
@@ -53,10 +72,12 @@ in {
       '';
       description = ''
         Declarative content of skillnet.toml, written to
-        $XDG_CONFIG_HOME/skillnet/skillnet.toml and exported via
-        SKILLNET_CONFIG when configFile is unset. Pass-through:
-        skillnet validates the schema at runtime. Leave null, and leave
-        configFile null, to keep the binary's cwd-based default behaviour.
+        $XDG_CONFIG_HOME/skillnet/skillnet.toml. The CLI discovers this
+        XDG path by default. The module also folds in programs.skillnet.database
+        and mirrorRoot so shell-specific env import is not required for normal
+        declarative installs. Pass-through: skillnet validates the schema at
+        runtime. Leave null, and leave configFile null, to use a user-managed
+        config file.
       '';
     };
 
@@ -65,9 +86,9 @@ in {
       default = null;
       description = ''
         Declarative content of skillnet.catalog.toml, written to
-        $XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml and exported via
-        SKILLNET_CATALOG_CONFIG when catalogConfigFile is unset.
-        Pass-through: skillnet validates the schema at runtime.
+        $XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml. The CLI discovers this
+        XDG path by default. Pass-through: skillnet validates the schema at
+        runtime.
       '';
     };
 
@@ -76,9 +97,8 @@ in {
       default = null;
       description = ''
         Absolute path to skillnet.toml. When set, exported as
-        SKILLNET_CONFIG so the binary can be invoked from any directory,
-        overriding the generated path from settings. Leave null with
-        settings unset to keep the cwd-based default behaviour.
+        SKILLNET_CONFIG, overriding the generated XDG path from settings.
+        Leave null to let the CLI use XDG config discovery.
       '';
     };
 
@@ -163,14 +183,12 @@ in {
     }
 
     (lib.mkIf (cfg.settings != null) {
-      programs.skillnet.configFile = lib.mkDefault generatedConfigFile;
       xdg.enable = lib.mkDefault true;
       xdg.configFile."skillnet/skillnet.toml".source =
-        tomlFormat.generate "skillnet.toml" cfg.settings;
+        tomlFormat.generate "skillnet.toml" generatedSettings;
     })
 
     (lib.mkIf (cfg.catalogSettings != null) {
-      programs.skillnet.catalogConfigFile = lib.mkDefault generatedCatalogConfigFile;
       xdg.enable = lib.mkDefault true;
       xdg.configFile."skillnet/skillnet.catalog.toml".source =
         tomlFormat.generate "skillnet.catalog.toml" cfg.catalogSettings;
@@ -184,7 +202,7 @@ in {
       home.sessionVariables.SKILLNET_CATALOG_CONFIG = toString cfg.catalogConfigFile;
     })
 
-    (lib.mkIf (cfg.mirrorRoot != null) {
+    (lib.mkIf (cfg.mirrorRoot != null && cfg.settings == null) {
       home.sessionVariables.SKILLNET_MIRROR_ROOT = cfg.mirrorRoot;
     })
 
@@ -203,7 +221,7 @@ in {
       '';
     })
 
-    (lib.mkIf (cfg.database.backend == "postgres" && cfg.database.urlFile == null) {
+    (lib.mkIf (cfg.database.backend == "postgres" && cfg.database.urlFile == null && cfg.settings == null) {
       home.sessionVariables.SKILLNET_DATABASE_URL = cfg.database.url;
     })
 

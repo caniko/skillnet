@@ -18,15 +18,18 @@ pub struct Context {
 impl Context {
     pub fn load(
         config_path: &Utf8Path,
-        mirror_root: &Utf8Path,
+        mirror_root: Option<&Utf8PathBuf>,
         catalog_config_path: &Utf8Path,
         dry_run: bool,
     ) -> Result<Self> {
+        let config = Config::load(config_path)?;
+        let mirror_root = crate::cli::resolve_mirror_root(&config, mirror_root)?;
+
         Ok(Self {
             config_path: config_path.to_path_buf(),
             catalog_config_path: catalog_config_path.to_path_buf(),
-            config: Config::load(config_path)?,
-            mirror_root: mirror_root.to_path_buf(),
+            config,
+            mirror_root,
             dry_run,
         })
     }

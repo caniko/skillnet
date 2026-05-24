@@ -4,14 +4,18 @@ mod scope;
 #[allow(unused_imports)]
 pub use scope::{configured_scopes, scope_value_parser, Scope, SkillPath};
 
-use anyhow::Result;
+use anyhow::{Context as AnyhowContext, Result};
+use camino::Utf8PathBuf;
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 
 use crate::commands::Context;
 use crate::{
     catalog, commands,
-    config::{Config, DbOverrides},
+    config::{
+        default_catalog_config_path, default_config_path, expand_path, legacy_catalog_config_path,
+        legacy_config_path, Config, DbOverrides,
+    },
 };
 
 use args::{CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, SyncCommand};
@@ -26,6 +30,8 @@ pub(crate) fn run() -> Result<()> {
         dry_run,
         command,
     } = Cli::parse();
+    let config = resolve_config_path(config)?;
+    let catalog_config = resolve_catalog_config_path(catalog_config)?;
     let command = command.unwrap_or(Command::Status);
 
     if let Command::Completions { shell } = &command {
@@ -43,7 +49,7 @@ pub(crate) fn run() -> Result<()> {
         );
     }
 
-    let ctx = Context::load(&config, &mirror_root, &catalog_config, dry_run)?;
+    let ctx = Context::load(&config, mirror_root.as_ref(), &catalog_config, dry_run)?;
 
     match command {
         Command::Status => commands::status::run(&ctx),
@@ -54,6 +60,60 @@ pub(crate) fn run() -> Result<()> {
         Command::Catalog { command } => run_catalog_command(&ctx, command),
         Command::Calibration(_) => unreachable!("handled before config loading"),
         Command::Completions { .. } => unreachable!("handled before config loading"),
+    }
+}
+
+fn resolve_config_path(flag_or_env: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> {
+    match flag_or_env {
+        Some(path) => Ok(path),
+        None => {
+            let xdg = default_config_path()?;
+            if xdg.exists() {
+                return Ok(xdg);
+            }
+
+            let legacy = legacy_config_path();
+            if legacy.exists() {
+                return Ok(legacy);
+            }
+
+            Ok(xdg)
+        }
+    }
+}
+
+fn resolve_catalog_config_path(flag_or_env: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> {
+    match flag_or_env {
+        Some(path) => Ok(path),
+        None => {
+            let xdg = default_catalog_config_path()?;
+            if xdg.exists() {
+                return Ok(xdg);
+            }
+
+            let legacy = legacy_catalog_config_path();
+            if legacy.exists() {
+                return Ok(legacy);
+            }
+
+            Ok(xdg)
+        }
+    }
+}
+
+pub(crate) fn resolve_mirror_root(
+    config: &Config,
+    flag_or_env: Option<&Utf8PathBuf>,
+) -> Result<Utf8PathBuf> {
+    if let Some(path) = flag_or_env {
+        return Ok(path.to_path_buf());
+    }
+
+    match config.mirror_root.as_deref() {
+        Some(raw) if !raw.trim().is_empty() => {
+            expand_path(raw).with_context(|| format!("failed to resolve mirror_root `{raw}`"))
+        }
+        _ => Ok(Utf8PathBuf::from(".")),
     }
 }
 
