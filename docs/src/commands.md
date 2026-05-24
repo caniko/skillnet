@@ -26,21 +26,23 @@ skillnet catalog lint
 `skillnet --config <path>` is the highest-precedence source. When the flag is
 omitted, the binary reads:
 
-| Rank | Source                         | Resolves to              |
-| ---- | ------------------------------ | ------------------------ |
-| 1    | `--config <path>`              | absolute or cwd-relative |
-| 2    | `SKILLNET_CONFIG`              | absolute or cwd-relative |
-| 3    | XDG config file, when present  | `$XDG_CONFIG_HOME/skillnet/skillnet.toml`, or `~/.config/skillnet/skillnet.toml` |
-| 4    | legacy cwd config, when present | `./skillnet.toml`       |
-| 5    | missing-config error path      | XDG path                 |
+| Rank | Source                          | Resolves to                                                                      |
+| ---- | ------------------------------- | -------------------------------------------------------------------------------- |
+| 1    | `--config <path>`               | absolute or cwd-relative                                                         |
+| 2    | `SKILLNET_CONFIG`               | absolute or cwd-relative                                                         |
+| 3    | XDG config file, when present   | `$XDG_CONFIG_HOME/skillnet/skillnet.toml`, or `~/.config/skillnet/skillnet.toml` |
+| 4    | legacy cwd config, when present | `./skillnet.toml`                                                                |
+| 5    | missing-config error path       | XDG path                                                                         |
 
 The same file precedence applies to `--catalog-config` /
 `SKILLNET_CATALOG_CONFIG`, using `skillnet.catalog.toml` as the file name.
 
-The mirror root precedence is `--mirror-root`, then `SKILLNET_MIRROR_ROOT`,
-then `mirror_root` in `skillnet.toml`, then `.`. The Home Manager module writes
-declarative settings to XDG config paths so shell-specific env imports are not
-required for normal generated config.
+The destination root precedence is `--mirror-root`, then
+`SKILLNET_MIRROR_ROOT`, then `skills_root` in `skillnet.toml`, then the legacy
+`mirror_root` key, then `.`. When the destination is a Git repository,
+`skillnet status` reports branch, origin, and dirty state. Commands that write
+to the mirror destination refuse to run when that repository is dirty unless
+`--allow-dirty-destination` is passed.
 
 ## Calibration Database
 

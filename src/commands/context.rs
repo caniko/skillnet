@@ -13,6 +13,7 @@ pub struct Context {
     pub config: Config,
     pub mirror_root: Utf8PathBuf,
     pub dry_run: bool,
+    pub allow_dirty_destination: bool,
 }
 
 impl Context {
@@ -21,6 +22,7 @@ impl Context {
         mirror_root: Option<&Utf8PathBuf>,
         catalog_config_path: &Utf8Path,
         dry_run: bool,
+        allow_dirty_destination: bool,
     ) -> Result<Self> {
         let config = Config::load(config_path)?;
         let mirror_root = crate::cli::resolve_mirror_root(&config, mirror_root)?;
@@ -31,7 +33,15 @@ impl Context {
             config,
             mirror_root,
             dry_run,
+            allow_dirty_destination,
         })
+    }
+
+    pub(crate) fn ensure_destination_clean(&self) -> Result<()> {
+        if self.dry_run || self.allow_dirty_destination {
+            return Ok(());
+        }
+        crate::vcs::ensure_clean(&self.mirror_root)
     }
 
     pub(super) fn all_targets(&self) -> Result<Vec<Target>> {

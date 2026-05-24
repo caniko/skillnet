@@ -21,6 +21,7 @@ use validate::validate_entries;
 pub(crate) use frontmatter::parse_frontmatter;
 
 pub fn generate(ctx: &Context) -> Result<()> {
+    ctx.ensure_destination_clean()?;
     let config = CatalogConfig::load(&ctx.catalog_config_path)?;
     let entries = load_entries(ctx, &config)?;
     let lint_errors = validate_entries(&entries, &config);

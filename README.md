@@ -52,7 +52,7 @@ The module is exported as both `hmModules.default` and `hmModules.skillnet`.
 It installs `skillnet` on `PATH`. When `settings` is declared, the module
 renders `$XDG_CONFIG_HOME/skillnet/skillnet.toml`, which the CLI discovers by
 default. When `catalogSettings` is declared, it renders
-`$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`. `mirrorRoot` and the
+`$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`. `skillsRoot`, `mirrorRoot`, and the
 declarative database options are folded into generated `skillnet.toml`, so a
 normal declarative Home Manager install does not depend on shell-specific env
 imports. Without `settings`, you can still drop your own TOMLs and point
@@ -67,8 +67,9 @@ set `skillsRoot`. On atlas, that path is:
 programs.skillnet.skillsRoot = "/data/nvme0/can/Projects/ai-skills";
 ```
 
-When configured, the module exports `AI_SKILLS_REPO` and warns if the checkout
-directory is missing. `skillsRoot` points at the skills checkout;
+When configured, the module writes `skills_root` into `skillnet.toml`, exports
+`AI_SKILLS_REPO` for compatibility, and warns if the checkout directory is
+missing. `skillsRoot` points at the skills checkout and VCS working tree;
 `dataDir` remains skillnet's runtime database and cache location.
 
 Postgres is the default calibration backend and requires a connection URL.
@@ -97,11 +98,12 @@ Options:
 
 - `programs.skillnet.dataDir` defaults to `${config.xdg.dataHome}/skillnet`.
   This is skillnet's runtime database and cache location.
-- `programs.skillnet.mirrorRoot` sets `mirror_root` in generated
-  `skillnet.toml`, or `SKILLNET_MIRROR_ROOT` when using user-managed config.
-- `programs.skillnet.skillsRoot` optionally sets the `ai-skills` checkout root
-  and exports it as `AI_SKILLS_REPO`; atlas uses
+- `programs.skillnet.skillsRoot` sets `skills_root` in generated
+  `skillnet.toml`, exports `AI_SKILLS_REPO` for compatibility, and is the
+  canonical mirror destination/VCS working tree; atlas uses
   `/data/nvme0/can/Projects/ai-skills`.
+- `programs.skillnet.mirrorRoot` is the legacy mirror destination option. When
+  both `skillsRoot` and `mirrorRoot` are set, they must match.
 - `programs.skillnet.database.backend` selects `sqlite` or `postgres` and
   defaults to `postgres`.
 - `programs.skillnet.database.path` optionally sets the SQLite database path;

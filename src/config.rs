@@ -10,6 +10,7 @@ use crate::model::{Source, Target};
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub global: GlobalConfig,
+    pub skills_root: Option<String>,
     pub mirror_root: Option<String>,
     #[serde(default)]
     pub database: DatabaseConfig,

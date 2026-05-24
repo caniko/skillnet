@@ -72,6 +72,7 @@ enum LiveHash {
 }
 
 pub fn pull(ctx: &Context, scopes: &[Scope], then_push: bool) -> Result<()> {
+    ctx.ensure_destination_clean()?;
     let mut cache = cache::load(&ctx.mirror_root);
 
     for target in ctx.targets(scopes)? {

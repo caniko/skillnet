@@ -29,12 +29,38 @@ pub fn run(ctx: &Context) -> Result<()> {
     }
 
     println!();
+    print_destination_health(ctx);
+
+    println!();
     print_catalog_health(ctx);
 
     println!();
     print_cache_health(ctx);
 
     Ok(())
+}
+
+fn print_destination_health(ctx: &Context) {
+    match crate::vcs::status(&ctx.mirror_root) {
+        Ok(Some(status)) => {
+            let state = if status.is_dirty() {
+                format!("dirty ({} entries)", status.dirty_entries)
+            } else {
+                "clean".to_string()
+            };
+            let branch = status.branch.as_deref().unwrap_or("(detached)");
+            let remote = status.remote.as_deref().unwrap_or("(no origin)");
+            println!(
+                "destination: {} git {state}, branch {branch}, origin {remote}",
+                status.root
+            );
+        }
+        Ok(None) => println!("destination: {} not a git repository", ctx.mirror_root),
+        Err(err) => println!(
+            "destination: {} git status unavailable: {err}",
+            ctx.mirror_root
+        ),
+    }
 }
 
 fn print_catalog_health(ctx: &Context) {

@@ -66,6 +66,7 @@ pub fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
 }
 
 pub fn delete(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
+    ctx.ensure_destination_clean()?;
     let target = ctx.target(&skill_path.scope)?;
     let path = target.mirror_path.join(&skill_path.skill);
     ensure_skill_exists(skill_path, &path)?;
@@ -78,6 +79,7 @@ pub fn delete(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
 }
 
 pub fn rename(ctx: &Context, skill_path: &SkillPath, new: &str, force: bool) -> Result<()> {
+    ctx.ensure_destination_clean()?;
     let target = ctx.target(&skill_path.scope)?;
     let src = target.mirror_path.join(&skill_path.skill);
     let dest = target.mirror_path.join(new);
@@ -103,6 +105,7 @@ pub fn move_skill(
     copy: bool,
     force: bool,
 ) -> Result<()> {
+    ctx.ensure_destination_clean()?;
     let from = ctx.target(&from_path.scope)?;
     let to = ctx.target(to_scope)?;
     let src = from.mirror_path.join(&from_path.skill);

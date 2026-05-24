@@ -26,6 +26,9 @@
     }
     // lib.optionalAttrs (cfg.mirrorRoot != null) {
       mirror_root = cfg.mirrorRoot;
+    }
+    // lib.optionalAttrs (cfg.skillsRoot != null) {
+      skills_root = cfg.skillsRoot;
     };
 in {
   options.programs.skillnet = {
@@ -115,7 +118,7 @@ in {
     skillsRoot = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Optional root of the ai-skills checkout containing the skill mirror and calibration artifacts.";
+      description = "Optional root of the ai-skills checkout. Written as skills_root when settings is declared and used as the canonical mirror destination/VCS working tree.";
     };
 
     database = {
@@ -176,6 +179,14 @@ in {
         {
           assertion = cfg.mirrorRoot == null || lib.hasPrefix "/" cfg.mirrorRoot;
           message = "programs.skillnet.mirrorRoot must be an absolute path.";
+        }
+        {
+          assertion = cfg.skillsRoot == null || lib.hasPrefix "/" cfg.skillsRoot;
+          message = "programs.skillnet.skillsRoot must be an absolute path.";
+        }
+        {
+          assertion = cfg.skillsRoot == null || cfg.mirrorRoot == null || cfg.skillsRoot == cfg.mirrorRoot;
+          message = "programs.skillnet.skillsRoot and programs.skillnet.mirrorRoot must match; separate mirror and repository roots are not supported yet.";
         }
       ];
 

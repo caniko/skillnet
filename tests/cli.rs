@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command as StdCommand};
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -51,6 +51,12 @@ impl Fixture {
         command.args(["--catalog-config", catalog_config.to_str().unwrap()]);
         command
     }
+
+    fn raw_command(&self, config: &Path) -> Command {
+        let mut command = Command::cargo_bin("skillnet").unwrap();
+        command.args(["--config", config.to_str().unwrap()]);
+        command
+    }
 }
 
 fn write_skill(root: &Path, name: &str, body: &str) {
@@ -61,6 +67,27 @@ fn write_skill(root: &Path, name: &str, body: &str) {
 
 fn minimal_config() -> &'static str {
     "[global]\nsources = []\nsync_paths = []\nstale_codex_skill_paths = []\n"
+}
+
+fn minimal_config_with_skills_root(root: &Path) -> String {
+    format!(
+        r#"skills_root = "{}"
+
+[global]
+sources = []
+sync_paths = []
+stale_codex_skill_paths = []
+"#,
+        root.display()
+    )
+}
+
+fn init_git_repo(path: &Path) {
+    StdCommand::new("git")
+        .args(["init"])
+        .current_dir(path)
+        .output()
+        .unwrap();
 }
 
 fn global_config(agents: &Path, claude: &Path, codex: &Path) -> String {
@@ -515,6 +542,72 @@ fn no_args_runs_status() {
         .success()
         .stdout(predicate::str::contains("scopes:"))
         .stdout(predicate::str::contains("global"));
+}
+
+#[test]
+fn status_reports_git_destination_from_skills_root() {
+    let fixture = Fixture::new();
+    init_git_repo(fixture.root());
+    let config = fixture.write_config(minimal_config_with_skills_root(fixture.root()));
+
+    fixture
+        .raw_command(&config)
+        .args(["status"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("destination:"))
+        .stdout(predicate::str::contains("git"));
+}
+
+#[test]
+fn dirty_git_destination_blocks_mutating_mirror_commands() {
+    let fixture = Fixture::new();
+    init_git_repo(fixture.root());
+    let agents = fixture.path("home/.agents/skills");
+    let claude = fixture.path("home/.claude/skills");
+    let codex = fixture.path("home/.codex/skills");
+    write_skill(&agents, "alpha", "a");
+    fs::create_dir_all(&claude).unwrap();
+    fs::create_dir_all(&codex).unwrap();
+    fs::write(fixture.path("untracked.txt"), "dirty").unwrap();
+    let config = fixture.write_config(global_config(&agents, &claude, &codex));
+
+    fixture
+        .command(&config)
+        .args(["sync", "pull", "--scope", "global"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("dirty entries"));
+
+    assert!(!fixture.path("global/alpha/SKILL.md").exists());
+}
+
+#[test]
+fn allow_dirty_destination_bypasses_git_write_guard() {
+    let fixture = Fixture::new();
+    init_git_repo(fixture.root());
+    let agents = fixture.path("home/.agents/skills");
+    let claude = fixture.path("home/.claude/skills");
+    let codex = fixture.path("home/.codex/skills");
+    write_skill(&agents, "alpha", "a");
+    fs::create_dir_all(&claude).unwrap();
+    fs::create_dir_all(&codex).unwrap();
+    fs::write(fixture.path("untracked.txt"), "dirty").unwrap();
+    let config = fixture.write_config(global_config(&agents, &claude, &codex));
+
+    fixture
+        .command(&config)
+        .args([
+            "--allow-dirty-destination",
+            "sync",
+            "pull",
+            "--scope",
+            "global",
+        ])
+        .assert()
+        .success();
+
+    assert!(fixture.path("global/alpha/SKILL.md").is_file());
 }
 
 #[test]

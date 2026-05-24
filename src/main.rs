@@ -7,6 +7,7 @@ mod config;
 mod fs_ops;
 mod model;
 mod reconcile;
+mod vcs;
 
 fn main() -> anyhow::Result<()> {
     cli::run()

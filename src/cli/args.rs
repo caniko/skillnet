@@ -33,6 +33,10 @@ pub(super) struct Cli {
     #[arg(long, global = true)]
     pub(super) dry_run: bool,
 
+    /// Allow mutating the mirror destination even when its Git working tree is dirty.
+    #[arg(long, global = true)]
+    pub(super) allow_dirty_destination: bool,
+
     #[command(subcommand)]
     pub(super) command: Option<Command>,
 }
@@ -423,10 +427,7 @@ mod tests {
                         cli.catalog_config,
                         Some(Utf8PathBuf::from("/tmp/flag-catalog.toml"))
                     );
-                    assert_eq!(
-                        cli.mirror_root,
-                        Some(Utf8PathBuf::from("/tmp/flag-mirror"))
-                    );
+                    assert_eq!(cli.mirror_root, Some(Utf8PathBuf::from("/tmp/flag-mirror")));
                 });
             });
         });

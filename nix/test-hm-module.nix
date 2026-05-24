@@ -8,7 +8,6 @@
   dataDir = "${homeDirectory}/.local/share/skillnet";
   skillsRoot = "${homeDirectory}/ai-skills";
   postgresUrl = "postgres://skillnet-test@example.invalid/skillnet";
-  declarativeMirrorRoot = "${homeDirectory}/skills-mirror";
   declarativeSource = "${homeDirectory}/.claude/skills";
   urlFile = "/run/secrets/pg-url";
 
@@ -59,7 +58,7 @@
         stale_codex_skill_paths = [];
       };
     };
-    mirrorRoot = declarativeMirrorRoot;
+    mirrorRoot = skillsRoot;
     catalogSettings = {
       settings = {};
       rules = [];
@@ -86,7 +85,7 @@ in
     mkdir -p ${homeDirectory}
     mkdir -p ${homeDirectory}/.local/state/nix/profiles
     mkdir -p ${skillsRoot}
-    mkdir -p ${declarativeMirrorRoot}/global
+    mkdir -p ${skillsRoot}/global
     mkdir -p ${declarativeSource}
 
     export HOME=${homeDirectory}
@@ -155,7 +154,8 @@ in
     ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.catalog.toml ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
     test -f ${homeDirectory}/.config/skillnet/skillnet.toml
     test -f ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
-    grep -F "mirror_root = '${declarativeMirrorRoot}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F "mirror_root = '${skillsRoot}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F "skills_root = '${skillsRoot}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F "backend = 'sqlite'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
 
     export PATH="${declarativeConfig.activationPackage}/home-path/bin:$PATH"

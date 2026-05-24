@@ -42,6 +42,9 @@ pub fn project_add(ctx: &Context, name: &str, path: &Utf8Path, allow_missing: bo
 }
 
 pub fn project_remove(ctx: &Context, name: &str, prune_mirror: bool) -> Result<()> {
+    if prune_mirror {
+        ctx.ensure_destination_clean()?;
+    }
     let project = ctx
         .project(name)
         .with_context(|| format!("unknown project `{name}`"))?;

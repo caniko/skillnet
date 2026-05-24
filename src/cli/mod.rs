@@ -28,6 +28,7 @@ pub(crate) fn run() -> Result<()> {
         catalog_config,
         database_url,
         dry_run,
+        allow_dirty_destination,
         command,
     } = Cli::parse();
     let config = resolve_config_path(config)?;
@@ -49,7 +50,13 @@ pub(crate) fn run() -> Result<()> {
         );
     }
 
-    let ctx = Context::load(&config, mirror_root.as_ref(), &catalog_config, dry_run)?;
+    let ctx = Context::load(
+        &config,
+        mirror_root.as_ref(),
+        &catalog_config,
+        dry_run,
+        allow_dirty_destination,
+    )?;
 
     match command {
         Command::Status => commands::status::run(&ctx),
@@ -109,10 +116,13 @@ pub(crate) fn resolve_mirror_root(
         return Ok(path.to_path_buf());
     }
 
-    match config.mirror_root.as_deref() {
-        Some(raw) if !raw.trim().is_empty() => {
-            expand_path(raw).with_context(|| format!("failed to resolve mirror_root `{raw}`"))
-        }
+    match config
+        .skills_root
+        .as_deref()
+        .or(config.mirror_root.as_deref())
+    {
+        Some(raw) if !raw.trim().is_empty() => expand_path(raw)
+            .with_context(|| format!("failed to resolve configured destination root `{raw}`")),
         _ => Ok(Utf8PathBuf::from(".")),
     }
 }
