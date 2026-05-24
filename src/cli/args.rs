@@ -93,6 +93,38 @@ pub(crate) enum CalibrationCommand {
     Record { plan_dir: Utf8PathBuf },
     /// Read a plan sidecar verify section and record verification outcome.
     Verify { plan_dir: Utf8PathBuf },
+    /// Parse a plan directory and create its calibration sidecar.
+    Init {
+        plan_dir: Utf8PathBuf,
+        /// Print the generated sidecar to stdout instead of writing it.
+        #[arg(long)]
+        stdout: bool,
+        /// Overwrite an existing sidecar while preserving id, tags, and verify data.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Evaluate every catalog heuristic against a plan directory.
+    Eval {
+        plan_dir: Utf8PathBuf,
+        /// Output format.
+        #[arg(long, default_value = "json")]
+        format: EvalFormat,
+    },
+    /// Evaluate meta-heuristics against a plan directory.
+    MetaHeuristics {
+        plan_dir: Utf8PathBuf,
+        /// Optional sidecar path containing verify-time data.
+        #[arg(long)]
+        sidecar: Option<Utf8PathBuf>,
+    },
+    /// Print the deterministic shape hash for a plan directory.
+    ShapeHash { plan_dir: Utf8PathBuf },
+    /// Browse the heuristic catalog.
+    Heuristics {
+        #[command(subcommand)]
+        command: HeuristicsCommand,
+    },
+    // WALKTHROUGH command here
     // PHASE 03 commands here
     /// Add user tags to a recorded plan.
     Tag {
@@ -206,6 +238,42 @@ pub(crate) enum CalibrationCommand {
         since: Option<String>,
     },
     // PHASE 04 commands here
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum EvalFormat {
+    Json,
+    Table,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum HeuristicsFormat {
+    Json,
+    Table,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum HeuristicCategoryArg {
+    Coordination,
+    Risk,
+    PlanShape,
+    QualityLint,
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(crate) enum HeuristicsCommand {
+    /// List catalog heuristics.
+    List {
+        /// Output format.
+        #[arg(long, default_value = "table")]
+        format: HeuristicsFormat,
+        /// Restrict to a category.
+        #[arg(long)]
+        category: Option<HeuristicCategoryArg>,
+    },
+    /// Show one catalog heuristic.
+    Show { name: String },
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
