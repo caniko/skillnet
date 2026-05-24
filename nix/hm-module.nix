@@ -27,6 +27,12 @@ in {
       description = "Root data directory for skillnet; per-skill calibration databases live under <dataDir>/<skill>/.";
     };
 
+    mirrorRoot = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Optional root directory containing the global/ and projects/ skill mirror directories. Exported as SKILLNET_MIRROR_ROOT.";
+    };
+
     settings = lib.mkOption {
       type = lib.types.nullOr tomlFormat.type;
       default = null;
@@ -147,6 +153,10 @@ in {
           assertion = cfg.database.urlFile == null || lib.hasPrefix "/" cfg.database.urlFile;
           message = "programs.skillnet.database.urlFile must be an absolute path.";
         }
+        {
+          assertion = cfg.mirrorRoot == null || lib.hasPrefix "/" cfg.mirrorRoot;
+          message = "programs.skillnet.mirrorRoot must be an absolute path.";
+        }
       ];
 
       home.packages = [cfg.package];
@@ -172,6 +182,10 @@ in {
 
     (lib.mkIf (cfg.catalogConfigFile != null) {
       home.sessionVariables.SKILLNET_CATALOG_CONFIG = toString cfg.catalogConfigFile;
+    })
+
+    (lib.mkIf (cfg.mirrorRoot != null) {
+      home.sessionVariables.SKILLNET_MIRROR_ROOT = cfg.mirrorRoot;
     })
 
     (lib.mkIf (cfg.database.backend == "sqlite") {

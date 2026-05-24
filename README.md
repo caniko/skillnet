@@ -28,14 +28,19 @@ imports = [ inputs.skillnet.hmModules.default ];
 programs.skillnet = {
   enable = true;
   settings = {
-    mirror_root = "/home/alice/skills-mirror";
-    scopes = [
-      {
-        name = "global";
-        sources = [ "/home/alice/.claude/skills" ];
-      }
-    ];
+    global = {
+      sources = [
+        {
+          label = "claude";
+          path = "/home/alice/.claude/skills";
+          priority = 1;
+        }
+      ];
+      sync_paths = [];
+      stale_codex_skill_paths = [];
+    };
   };
+  mirrorRoot = "/home/alice/skills-mirror";
   database = {
     backend = "postgres";
     urlFile = config.age.secrets.skillnet-pg-url.path;
@@ -45,11 +50,13 @@ programs.skillnet = {
 
 The module is exported as both `hmModules.default` and `hmModules.skillnet`.
 It installs `skillnet` on `PATH`. When `settings` is declared, the module
-renders `skillnet.toml` and exports `SKILLNET_CONFIG`, `SKILLNET_CATALOG_CONFIG`,
-and `SKILLNET_MIRROR_ROOT` for the CLI. Without `settings`, you can still drop
-your own TOMLs and point `programs.skillnet.configFile` at them. When SQLite is
-selected, the module also creates the runtime data directory and exports
-`skillnet_DATA_DIR` and `SKILLNET_DATA_DIR`.
+renders `skillnet.toml` and exports `SKILLNET_CONFIG` for the CLI. When
+`catalogSettings` is declared, it renders `skillnet.catalog.toml` and exports
+`SKILLNET_CATALOG_CONFIG`. Set `mirrorRoot` to export `SKILLNET_MIRROR_ROOT`.
+Without `settings`, you can still drop your own TOMLs and point
+`programs.skillnet.configFile` at them. When SQLite is selected, the module also
+creates the runtime data directory and exports `skillnet_DATA_DIR` and
+`SKILLNET_DATA_DIR`.
 
 If you also want the module to define where the `ai-skills` checkout lives,
 set `skillsRoot`. On atlas, that path is:
@@ -88,6 +95,8 @@ Options:
 
 - `programs.skillnet.dataDir` defaults to `${config.xdg.dataHome}/skillnet`.
   This is skillnet's runtime database and cache location.
+- `programs.skillnet.mirrorRoot` optionally sets `SKILLNET_MIRROR_ROOT`, the
+  root containing the `global/` and `projects/` mirror directories.
 - `programs.skillnet.skillsRoot` optionally sets the `ai-skills` checkout root
   and exports it as `AI_SKILLS_REPO`; atlas uses
   `/data/nvme0/can/Projects/ai-skills`.

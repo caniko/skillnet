@@ -59,6 +59,7 @@
         stale_codex_skill_paths = [];
       };
     };
+    mirrorRoot = declarativeMirrorRoot;
     catalogSettings = {
       settings = {};
       rules = [];
@@ -148,6 +149,7 @@ in
     . ${declarativeConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
     test -n "''${SKILLNET_CONFIG:-}"
     test -n "''${SKILLNET_CATALOG_CONFIG:-}"
+    test "''${SKILLNET_MIRROR_ROOT:-}" = "${declarativeMirrorRoot}"
     mkdir -p "$(dirname "$SKILLNET_CONFIG")"
     ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml "$SKILLNET_CONFIG"
     ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.catalog.toml "$SKILLNET_CATALOG_CONFIG"
