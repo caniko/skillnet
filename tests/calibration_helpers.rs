@@ -39,6 +39,7 @@ impl Fixture {
         command.env("SKILLNET_CONFIG", self.repo.path().join("skillnet.toml"));
         command.env_remove("SKILLNET_DATABASE_URL");
         command.env_remove("SKILLNET_DB_URL");
+        command.env_remove("DATABASE_URL");
         command
     }
 }
@@ -290,6 +291,7 @@ fn fixture_command() -> Command {
     command.env("SKILLNET_CONFIG", temp.path().join("skillnet.toml"));
     command.env_remove("SKILLNET_DATABASE_URL");
     command.env_remove("SKILLNET_DB_URL");
+    command.env_remove("DATABASE_URL");
     command
 }
 

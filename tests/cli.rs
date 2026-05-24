@@ -391,11 +391,14 @@ fn install_codex_stub(
     fs::create_dir_all(&bin_dir).unwrap();
     let script = bin_dir.join("codex");
     let log = fixture.path(log_name);
-    fs::write(
-        &script,
-        script_body.replace("__LOG__", &log.display().to_string()),
-    )
-    .unwrap();
+    let bash = env::split_paths(&env::var_os("PATH").unwrap_or_default())
+        .map(|dir| dir.join("bash"))
+        .find(|candidate| candidate.is_file())
+        .expect("bash must be available on PATH to run codex stub");
+    let rewritten = script_body
+        .replace("#!/usr/bin/env bash", &format!("#!{}", bash.display()))
+        .replace("__LOG__", &log.display().to_string());
+    fs::write(&script, rewritten).unwrap();
     let mut perms = fs::metadata(&script).unwrap().permissions();
     #[cfg(unix)]
     {

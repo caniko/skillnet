@@ -16,6 +16,14 @@ For a source checkout:
 cargo install --path .
 ```
 
+## Hook ingestion
+
+`skillnet hook install` wires Claude Code to record skill invocations through
+`skillnet hook ingest`, storing rows in `skill_invocations`. Use
+`skillnet hook status` to confirm the managed hook entries are installed. See
+the mdBook chapter at [docs/src/hook-ingestion.md](docs/src/hook-ingestion.md)
+for Postgres, SQLite, and Home Manager setup.
+
 ### Nix Home Manager
 
 Add the flake input and import the module:
@@ -94,6 +102,25 @@ The `database.url` value is written into the Nix store. For production secrets,
 prefer `database.urlFile`, which reads the Postgres URL from a file at shell
 initialization time.
 
+Claude Code hook ingestion can also be installed declaratively:
+
+```nix
+programs.skillnet = {
+  enable = true;
+  hooks = {
+    enable = true;
+    events = [ "PostToolUse" ];
+    matchers = [ "Skill" ];
+    settingsFile = "${config.home.homeDirectory}/.claude/settings.json";
+  };
+};
+```
+
+When enabled, Home Manager runs `skillnet hook install` during activation after
+`writeBoundary`, so the change is idempotent and respects `home-manager switch
+--dry-run`. Setting `hooks.enable = false` later leaves the settings file
+untouched; run `skillnet hook uninstall` explicitly to remove managed entries.
+
 Options:
 
 - `programs.skillnet.dataDir` defaults to `${config.xdg.dataHome}/skillnet`.
@@ -118,6 +145,10 @@ Options:
   `skillnet.toml` and `skillnet.catalog.toml` from Nix.
 - `programs.skillnet.configFile` and `programs.skillnet.catalogConfigFile`
   point the CLI at user-managed TOML files.
+- `programs.skillnet.hooks.enable` installs skillnet-managed Claude Code hook
+  entries in `programs.skillnet.hooks.settingsFile`.
+- `programs.skillnet.hooks.events` and `programs.skillnet.hooks.matchers`
+  control the event/matcher pairs passed to `skillnet hook install`.
 - `programs.skillnet.package` overrides the package. If `pkgs.skillnet` is not
   available in your package set, use
   `inputs.skillnet.packages.${pkgs.system}.skillnet`.

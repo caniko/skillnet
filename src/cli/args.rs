@@ -90,6 +90,8 @@ pub(super) enum Command {
     },
     /// Record and verify multi-phase-plan calibration data.
     Calibration(CalibrationArgs),
+    /// Ingest shell hook payloads.
+    Hook(HookArgs),
 }
 
 #[derive(Debug, Args)]
@@ -275,6 +277,56 @@ pub(crate) enum CalibrationCommand {
         since: Option<String>,
     },
     // PHASE 04 commands here
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct HookArgs {
+    #[command(subcommand)]
+    pub command: HookCommand,
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(crate) enum HookCommand {
+    /// Read one Claude Code hook payload and record it.
+    Ingest {
+        /// Hook event name as Claude Code passes it, such as PostToolUse or SessionEnd.
+        #[arg(long, env = "CLAUDE_HOOK_EVENT")]
+        event: String,
+        /// Read payload from this path instead of stdin.
+        #[arg(long)]
+        payload_file: Option<Utf8PathBuf>,
+        /// Return a non-zero exit code on ingest errors.
+        #[arg(long)]
+        strict: bool,
+    },
+    /// Install skillnet-managed Claude Code hook entries.
+    Install {
+        /// Claude Code user settings file to update.
+        #[arg(long, default_value = "$HOME/.claude/settings.json")]
+        settings: Utf8PathBuf,
+        /// Hook event names to install entries for.
+        #[arg(long, value_delimiter = ',', default_value = "PostToolUse,SessionEnd")]
+        events: Vec<String>,
+        /// Claude Code hook matchers to install.
+        #[arg(long, value_delimiter = ',', default_value = "Skill")]
+        matchers: Vec<String>,
+        /// Print the intended change without writing the settings file.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Remove only skillnet-managed Claude Code hook entries.
+    Uninstall {
+        /// Claude Code user settings file to update.
+        #[arg(long, default_value = "$HOME/.claude/settings.json")]
+        settings: Utf8PathBuf,
+    },
+    /// Check whether any skillnet-managed Claude Code hook entry is installed.
+    Status {
+        /// Claude Code user settings file to inspect.
+        #[arg(long, default_value = "$HOME/.claude/settings.json")]
+        settings: Utf8PathBuf,
+    },
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]

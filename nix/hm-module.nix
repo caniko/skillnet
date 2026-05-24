@@ -151,6 +151,28 @@ in {
         '';
       };
     };
+
+    hooks = {
+      enable = lib.mkEnableOption "skillnet Claude Code hook installation";
+
+      settingsFile = lib.mkOption {
+        type = lib.types.path;
+        default = "${config.home.homeDirectory}/.claude/settings.json";
+        description = "Path to the Claude Code settings.json to manage.";
+      };
+
+      events = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = ["PostToolUse"];
+        description = "Claude Code hook events to install skillnet ingest handlers for.";
+      };
+
+      matchers = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = ["Skill"];
+        description = "Claude Code hook matchers to install. Multiple matchers produce multiple managed entries.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -264,6 +286,15 @@ in {
           echo "WARNING: skillnet: programs.skillnet.skillsRoot does not exist: ${cfg.skillsRoot}" >&2
           echo "WARNING: skillnet: clone or restore the ai-skills checkout at that path; skipping for now." >&2
         fi
+      '';
+    })
+
+    (lib.mkIf cfg.hooks.enable {
+      home.activation.skillnetInstallHook = lib.hm.dag.entryAfter ["writeBoundary"] ''
+        $DRY_RUN_CMD ${cfg.package}/bin/skillnet hook install \
+          --settings ${lib.escapeShellArg (toString cfg.hooks.settingsFile)} \
+          --events ${lib.escapeShellArg (lib.concatStringsSep "," cfg.hooks.events)} \
+          --matchers ${lib.escapeShellArg (lib.concatStringsSep "," cfg.hooks.matchers)}
       '';
     })
   ]);

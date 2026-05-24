@@ -1,6 +1,8 @@
 pub mod calibration;
 mod context;
 pub mod doctor;
+pub mod hook;
+pub mod hook_install;
 mod mirror;
 mod project;
 mod skill;

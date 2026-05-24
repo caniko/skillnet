@@ -32,6 +32,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "002-heuristic-thresholds.sql",
         include_str!("../../data/multi-phase-plan/schema/002-heuristic-thresholds.sql"),
     ),
+    (
+        3,
+        "003-skill-invocations.sql",
+        include_str!("../../data/multi-phase-plan/schema/003-skill-invocations.sql"),
+    ),
 ];
 #[cfg(feature = "postgres")]
 const POSTGRES_MIGRATIONS: &[(i64, &str, &str)] = &[
@@ -44,6 +49,11 @@ const POSTGRES_MIGRATIONS: &[(i64, &str, &str)] = &[
         2,
         "002-heuristic-thresholds.sql",
         include_str!("../../data/multi-phase-plan/schema-pg/002-heuristic-thresholds.sql"),
+    ),
+    (
+        3,
+        "003-skill-invocations.sql",
+        include_str!("../../data/multi-phase-plan/schema-pg/003-skill-invocations.sql"),
     ),
 ];
 

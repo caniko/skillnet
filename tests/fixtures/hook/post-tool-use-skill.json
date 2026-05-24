@@ -1,0 +1,14 @@
+{
+  "session_id": "ignored-session",
+  "tool_name": "Skill",
+  "tool_input": {
+    "skill": "simplify",
+    "args": {
+      "target": "src/lib.rs"
+    }
+  },
+  "tool_response": {
+    "is_error": false,
+    "content": "ok"
+  }
+}

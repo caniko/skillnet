@@ -100,6 +100,27 @@ fn opens_migrates_round_trips_and_enforces_cascades() {
 }
 
 #[test]
+fn migration_creates_skill_invocations_table_and_indexes() {
+    for (name, mut fx) in backends() {
+        assert_eq!(
+            schema_version_applied(fx.db_mut(), 3, name),
+            1,
+            "{name}: migration 003 was not recorded"
+        );
+        assert_eq!(
+            table_exists(fx.db_mut(), "skill_invocations", name),
+            1,
+            "{name}: skill_invocations table is missing"
+        );
+        assert_eq!(
+            skill_invocations_index_count(fx.db_mut(), name),
+            3,
+            "{name}: skill_invocations indexes are missing"
+        );
+    }
+}
+
+#[test]
 fn execute_returning_id_assigns_distinct_increasing_ids() {
     for (name, mut fx) in backends() {
         let plan_id = insert_plan(fx.db_mut(), name, "returning-id");
@@ -891,6 +912,54 @@ fn applied_migration_count(db: &mut Db, name: &str) -> i64 {
         row.get_i64(0)
     })
     .unwrap_or_else(|err| panic!("{name}: failed to count applied migrations: {err:#}"))
+}
+
+fn schema_version_applied(db: &mut Db, version: i64, name: &str) -> i64 {
+    db.query_one(
+        "SELECT COUNT(*) FROM schema_versions WHERE version = $1",
+        &[P::from(version)],
+        |row| row.get_i64(0),
+    )
+    .unwrap_or_else(|err| panic!("{name}: failed to inspect schema_versions: {err:#}"))
+}
+
+fn table_exists(db: &mut Db, table: &str, name: &str) -> i64 {
+    let sql = match name {
+        "postgres" => {
+            "SELECT COUNT(*) FROM information_schema.tables
+             WHERE table_schema = current_schema() AND table_name = $1"
+        }
+        _ => {
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'table' AND name = $1"
+        }
+    };
+    db.query_one(sql, &[P::from(table)], |row| row.get_i64(0))
+        .unwrap_or_else(|err| panic!("{name}: failed to inspect table {table}: {err:#}"))
+}
+
+fn skill_invocations_index_count(db: &mut Db, name: &str) -> i64 {
+    let indexes = [
+        P::from("skill_invocations_skill_name_idx"),
+        P::from("skill_invocations_session_idx"),
+        P::from("skill_invocations_started_at_idx"),
+    ];
+    let sql = match name {
+        "postgres" => {
+            "SELECT COUNT(*) FROM pg_indexes
+             WHERE schemaname = current_schema()
+               AND indexname IN ($1, $2, $3)"
+        }
+        _ => {
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'index'
+               AND name IN ($1, $2, $3)"
+        }
+    };
+    db.query_one(sql, &indexes, |row| row.get_i64(0))
+        .unwrap_or_else(|err| {
+            panic!("{name}: failed to inspect skill_invocations indexes: {err:#}")
+        })
 }
 
 #[cfg(feature = "postgres")]

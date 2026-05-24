@@ -70,6 +70,33 @@
       urlFile = urlFile;
     };
   };
+  hooksSettingsFile = "${homeDirectory}/.claude/settings.json";
+  hooksConfig = mkHmConfig {
+    database.backend = "sqlite";
+    hooks = {
+      enable = true;
+      settingsFile = hooksSettingsFile;
+      events = ["PostToolUse"];
+      matchers = ["Skill"];
+    };
+  };
+  hooksDisabledMasterConfig = home-manager.lib.homeManagerConfiguration {
+    inherit pkgs;
+    modules = [
+      module
+      {
+        home.username = "skillnet-test";
+        home.homeDirectory = homeDirectory;
+        home.stateVersion = "24.11";
+
+        programs.skillnet = {
+          enable = false;
+          package = package;
+          hooks.enable = true;
+        };
+      }
+    ];
+  };
 in
   pkgs.runCommand "skillnet-hm-module-test"
   {
@@ -140,6 +167,13 @@ in
     grep -R -F 'SKILLNET_DATABASE_URL' ${urlFileConfig.activationPackage}/home-files >/dev/null
     grep -R -F '${urlFile}' ${urlFileConfig.activationPackage}/home-files >/dev/null
 
+    grep -F 'Activating %s" "skillnetInstallHook"' ${hooksConfig.activationPackage}/activate >/dev/null
+    grep -F '$DRY_RUN_CMD ${package}/bin/skillnet hook install' ${hooksConfig.activationPackage}/activate >/dev/null
+    grep -F -- '--settings ${hooksSettingsFile}' ${hooksConfig.activationPackage}/activate >/dev/null
+    grep -F -- '--events PostToolUse' ${hooksConfig.activationPackage}/activate >/dev/null
+    grep -F -- '--matchers Skill' ${hooksConfig.activationPackage}/activate >/dev/null
+    ! grep -F 'skillnet hook install' ${hooksDisabledMasterConfig.activationPackage}/activate >/dev/null
+
     rm -rf ${skillsRoot}
     DRY_RUN=1 ${declarativeConfig.activationPackage}/activate --driver-version 1 2>activation-stderr.log
     grep -F 'skipping for now.' activation-stderr.log >/dev/null
@@ -164,7 +198,7 @@ in
     unset SKILLNET_CONFIG
     unset SKILLNET_CATALOG_CONFIG
     unset SKILLNET_MIRROR_ROOT
-    skillnet status >/dev/null
+    skillnet status --all >/dev/null
 
     touch $out
   ''

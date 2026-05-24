@@ -260,7 +260,7 @@ impl DatabaseConfig {
             let url = non_empty(self.url.as_deref()).ok_or_else(|| {
                 anyhow!(
                     "database.backend = \"postgres\" requires database.url, \
-                     SKILLNET_DATABASE_URL, SKILLNET_DB_URL, or --database-url"
+                     SKILLNET_DATABASE_URL, SKILLNET_DB_URL, DATABASE_URL, or --database-url"
                 )
             })?;
             warn_url_wins_over_data_dir();
@@ -276,7 +276,7 @@ impl DatabaseConfig {
 }
 
 fn env_database_url() -> Option<String> {
-    ["SKILLNET_DATABASE_URL", "SKILLNET_DB_URL"]
+    ["SKILLNET_DATABASE_URL", "SKILLNET_DB_URL", "DATABASE_URL"]
         .into_iter()
         .find_map(|var| env::var(var).ok().and_then(non_empty_owned))
 }
@@ -503,6 +503,13 @@ stale_codex_skill_paths = []
         );
 
         env::remove_var("SKILLNET_DB_URL");
+        env::set_var("DATABASE_URL", "postgres://database-url-env");
+        assert_eq!(
+            cfg.resolve_db().unwrap(),
+            DbTarget::Postgres("postgres://database-url-env".to_string())
+        );
+
+        env::remove_var("DATABASE_URL");
         assert_eq!(
             cfg.resolve_db().unwrap(),
             DbTarget::Postgres("postgres://config".to_string())
@@ -561,6 +568,7 @@ stale_codex_skill_paths = []
         for key in [
             "SKILLNET_DATABASE_URL",
             "SKILLNET_DB_URL",
+            "DATABASE_URL",
             "skillnet_DATA_DIR",
             "SKILLNET_DATA_DIR",
             "XDG_DATA_HOME",
@@ -579,6 +587,7 @@ stale_codex_skill_paths = []
                 values: [
                     "SKILLNET_DATABASE_URL",
                     "SKILLNET_DB_URL",
+                    "DATABASE_URL",
                     "skillnet_DATA_DIR",
                     "SKILLNET_DATA_DIR",
                     "XDG_DATA_HOME",

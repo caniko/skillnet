@@ -54,6 +54,16 @@ pub fn run() -> Result<()> {
         );
     }
 
+    if let Command::Hook(args) = command {
+        let target = if matches!(args.command, args::HookCommand::Ingest { .. }) {
+            let database = Config::load_database_or_default(&config)?;
+            Some(database.resolve_db_with_overrides(&DbOverrides { database_url })?)
+        } else {
+            None
+        };
+        return commands::hook::run(args, target);
+    }
+
     let ctx = Context::load(
         &config,
         mirror_root.as_ref(),
@@ -81,6 +91,7 @@ pub fn run() -> Result<()> {
         Command::Project { command } => run_project_command(&ctx, command),
         Command::Catalog { command } => run_catalog_command(&ctx, command),
         Command::Calibration(_) => unreachable!("handled before config loading"),
+        Command::Hook(_) => unreachable!("handled before config loading"),
         Command::Completions { .. } => unreachable!("handled before config loading"),
     }
 }
