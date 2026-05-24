@@ -134,8 +134,8 @@ fn pull_only(
             continue;
         }
 
-        let mirror_content_hash = mirror_content_hash(&target.mirror_path)?;
-        let live_source_max_mtime_nanos = live_source_max_mtime(&target.sources)?;
+        let mirror_content_hash = mirror_content_hash(&target.canonical_path)?;
+        let live_source_max_mtime_nanos = 0;
         cache.stamps.insert(
             target.name,
             ScopeStamp {
@@ -157,37 +157,32 @@ pub fn push(ctx: &Context, scopes: &[Scope], write_options: WriteOptions) -> Res
     for target in ctx.targets(scopes)? {
         if ctx.dry_run {
             println!("# sync {}", target.name);
-            println!("from: {}", target.mirror_path);
+            println!("from: {}", target.canonical_path);
             println!(
                 "to: {}",
                 target
-                    .sync_paths
+                    .views
                     .iter()
-                    .map(|p| p.as_str())
+                    .map(|view| view.path.as_str())
                     .collect::<Vec<_>>()
                     .join(", ")
             );
             continue;
         }
-        let mut summaries = Vec::with_capacity(target.sync_paths.len());
-        for sync_path in &target.sync_paths {
-            let before = mirror_files(sync_path)?;
+        let mut summaries = Vec::with_capacity(target.views.len());
+        for view in &target.views {
+            let before = mirror_files(&view.path)?;
             let summary = reconcile::write_flat_from_mirror_with_options(
-                &target.mirror_path,
-                sync_path,
+                &target.canonical_path,
+                &view.path,
                 write_options,
             )?;
-            let after = mirror_files(sync_path)?;
+            let after = mirror_files(&view.path)?;
             summaries.push((
-                sync_path.clone(),
+                view.path.clone(),
                 destination_delta(&before, &after),
                 summary,
             ));
-        }
-        if write_options.allow_delete {
-            for path in &target.stale_codex_skill_paths {
-                fs_ops::remove_codex_skills(path)?;
-            }
         }
         println!("{}", format_push_summary(&target.name, &summaries));
     }
@@ -240,15 +235,16 @@ fn roundtrip_check(ctx: &Context, scopes: &[Scope], write_options: WriteOptions)
     let mut changed = false;
 
     for mut target in ctx.targets(scopes)? {
-        let real_mirror_path = target.mirror_path.clone();
-        target.mirror_path = temp_root.join(&target.name);
+        let real_mirror_path = target.canonical_path.clone();
+        target.canonical_path = temp_root.join(&target.name);
         if real_mirror_path.exists() {
-            fs_ops::copy_dir(&real_mirror_path, &target.mirror_path)?;
+            fs_ops::copy_dir(&real_mirror_path, &target.canonical_path)?;
         }
         reconcile::reconcile_target_with_options(&target, false, false, write_options)
             .map_err(ExitError::pull)?;
 
-        for destination in &target.sync_paths {
+        for view in &target.views {
+            let destination = &view.path;
             let temp_destination = temp_root.join(format!(
                 "{}-{}",
                 target.name,
@@ -258,21 +254,13 @@ fn roundtrip_check(ctx: &Context, scopes: &[Scope], write_options: WriteOptions)
                 fs_ops::copy_dir(destination, &temp_destination)?;
             }
             reconcile::write_flat_from_mirror_with_options(
-                &target.mirror_path,
+                &target.canonical_path,
                 &temp_destination,
                 write_options,
             )?;
             let deltas = diff_mirror_to_destination(&temp_destination, destination)?;
             print_destination_check(destination, &deltas);
             changed |= !deltas.is_empty();
-        }
-
-        if write_options.allow_delete {
-            for destination in &target.stale_codex_skill_paths {
-                let deltas = diff_empty_to_destination(destination)?;
-                print_destination_check(destination, &deltas);
-                changed |= !deltas.is_empty();
-            }
         }
     }
 
@@ -373,7 +361,7 @@ pub(crate) fn status_summaries(ctx: &Context, scopes: &[Scope]) -> Result<Vec<Sc
 
     for (scope, target) in scopes.iter().zip(targets) {
         let stamp = cache.stamps.get(&scope.to_string());
-        let live_mtime = live_source_max_mtime(&target.sources)?;
+        let live_mtime = 0;
         let cache_state = match stamp {
             None => CacheState::Missing,
             Some(stamp) if cache::is_stale(stamp, live_mtime) => CacheState::Stale,
@@ -382,7 +370,7 @@ pub(crate) fn status_summaries(ctx: &Context, scopes: &[Scope]) -> Result<Vec<Sc
 
         let state = match (stamp, cache_state) {
             (Some(stamp), CacheState::Fresh)
-                if mirror_content_hash(&target.mirror_path)? == stamp.mirror_content_hash =>
+                if mirror_content_hash(&target.canonical_path)? == stamp.mirror_content_hash =>
             {
                 ScopeState::Clean
             }
@@ -540,7 +528,7 @@ fn civil_from_days(days_since_epoch: i64) -> (i64, u32, u32) {
 }
 
 fn diff_target(target: &crate::model::Target) -> Result<Vec<Delta>> {
-    let mirror_files = mirror_files(&target.mirror_path)?;
+    let mirror_files = mirror_files(&target.canonical_path)?;
     let live_files = live_files(target)?;
     let paths = mirror_files
         .keys()
@@ -578,15 +566,9 @@ fn allowed_dirty_prefixes(ctx: &Context, scopes: &[Scope]) -> Result<Vec<Utf8Pat
     let targets = ctx.targets(scopes)?;
     let mut prefixes = Vec::new();
     for target in targets {
-        prefixes.push(path_relative_to_mirror_root(ctx, &target.mirror_path)?);
-        for source in &target.sources {
-            push_if_relative_to_mirror_root(ctx, &source.path, &mut prefixes);
-        }
-        for sync_path in &target.sync_paths {
-            push_if_relative_to_mirror_root(ctx, sync_path, &mut prefixes);
-        }
-        for stale_path in &target.stale_codex_skill_paths {
-            push_if_relative_to_mirror_root(ctx, stale_path, &mut prefixes);
+        prefixes.push(path_relative_to_mirror_root(ctx, &target.canonical_path)?);
+        for view in &target.views {
+            push_if_relative_to_mirror_root(ctx, &view.path, &mut prefixes);
         }
     }
     push_if_relative_to_mirror_root(ctx, &ctx.config_path, &mut prefixes);
@@ -752,21 +734,8 @@ fn mirror_files(mirror_root: &Utf8Path) -> Result<BTreeMap<String, String>> {
 }
 
 fn live_files(target: &crate::model::Target) -> Result<BTreeMap<String, LiveHash>> {
-    let mut files = BTreeMap::new();
-    for candidate in reconcile::discover_candidates(&target.sources)? {
-        let mut candidate_files = BTreeMap::new();
-        collect_skill_files(&candidate.path, &candidate.skill, &mut candidate_files)?;
-        for (path, hash) in candidate_files {
-            files
-                .entry(path)
-                .and_modify(|existing| match existing {
-                    LiveHash::Single(existing_hash) if existing_hash == &hash => {}
-                    _ => *existing = LiveHash::Conflict,
-                })
-                .or_insert(LiveHash::Single(hash));
-        }
-    }
-    Ok(files)
+    let _ = target;
+    todo!("phase 03 owns Option B live view diffing")
 }
 
 fn collect_skill_files(
@@ -815,13 +784,4 @@ fn mirror_content_hash(mirror_path: &Utf8Path) -> Result<String> {
     } else {
         Ok(String::new())
     }
-}
-
-fn live_source_max_mtime(sources: &[crate::model::Source]) -> Result<u128> {
-    cache::live_source_max_mtime(
-        &sources
-            .iter()
-            .map(|source| source.path.clone())
-            .collect::<Vec<_>>(),
-    )
 }

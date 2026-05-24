@@ -10,7 +10,7 @@ use crate::{catalog, fs_ops};
 
 pub fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
     let target = ctx.target(&skill_path.scope)?;
-    let path = target.mirror_path.join(&skill_path.skill);
+    let path = target.canonical_path.join(&skill_path.skill);
     ensure_skill_exists(skill_path, &path)?;
 
     let skill_file = path.join("SKILL.md");
@@ -68,7 +68,7 @@ pub fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
 pub fn delete(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
     ctx.ensure_destination_clean()?;
     let target = ctx.target(&skill_path.scope)?;
-    let path = target.mirror_path.join(&skill_path.skill);
+    let path = target.canonical_path.join(&skill_path.skill);
     ensure_skill_exists(skill_path, &path)?;
     if ctx.dry_run {
         println!("delete {path}");
@@ -81,8 +81,8 @@ pub fn delete(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
 pub fn rename(ctx: &Context, skill_path: &SkillPath, new: &str, force: bool) -> Result<()> {
     ctx.ensure_destination_clean()?;
     let target = ctx.target(&skill_path.scope)?;
-    let src = target.mirror_path.join(&skill_path.skill);
-    let dest = target.mirror_path.join(new);
+    let src = target.canonical_path.join(&skill_path.skill);
+    let dest = target.canonical_path.join(new);
     ensure_skill_exists(skill_path, &src)?;
     prepare_dest(&src, &dest, force)?;
     if ctx.dry_run {
@@ -108,8 +108,8 @@ pub fn move_skill(
     ctx.ensure_destination_clean()?;
     let from = ctx.target(&from_path.scope)?;
     let to = ctx.target(to_scope)?;
-    let src = from.mirror_path.join(&from_path.skill);
-    let dest = to.mirror_path.join(as_name.unwrap_or(&from_path.skill));
+    let src = from.canonical_path.join(&from_path.skill);
+    let dest = to.canonical_path.join(as_name.unwrap_or(&from_path.skill));
     ensure_skill_exists(from_path, &src)?;
     prepare_dest(&src, &dest, force)?;
 

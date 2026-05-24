@@ -5,9 +5,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
 use crate::calibration::Db;
-use crate::model::{Source, Target};
+use crate::model::{Target, TargetScope, ViewTarget};
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     pub global: GlobalConfig,
     pub skills_root: Option<String>,
@@ -16,8 +17,6 @@ pub struct Config {
     pub sync: SyncConfig,
     #[serde(default)]
     pub database: DatabaseConfig,
-    #[serde(default)]
-    pub project_source_rules: Vec<ProjectSourceRule>,
     #[serde(default)]
     pub projects: Vec<ProjectConfig>,
 }
@@ -96,38 +95,139 @@ pub struct ResolvedSyncConfig {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct GlobalConfig {
-    pub sources: Vec<SourceConfig>,
-    pub sync_paths: Vec<String>,
-    pub stale_codex_skill_paths: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct SourceConfig {
+#[serde(deny_unknown_fields)]
+pub struct ViewConfig {
     pub label: String,
     pub path: String,
-    pub priority: i64,
+    #[serde(default)]
+    pub scope: ViewScope,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ViewScope {
+    #[default]
+    Global,
+    Project,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GlobalConfig {
+    /// Where the canonical mirror lives. Defaults to <mirror_root>/global.
+    #[serde(default)]
+    pub canonical_path: Option<String>,
+    /// View destinations populated by `skillnet view sync`.
+    pub views: Vec<ViewConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct ProjectSourceRule {
-    pub label: String,
-    pub rel: String,
-    pub priority: i64,
-}
-
-#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ProjectConfig {
     pub name: String,
     pub path: String,
+    /// Relative path inside the project repo holding canonical skills.
+    #[serde(default = "default_canonical_rel")]
+    pub canonical_rel: String,
+    /// In-repo views to materialise via `project sync`.
+    #[serde(default = "default_project_views")]
+    pub views: Vec<ProjectViewConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectViewConfig {
+    pub rel: String,
     #[serde(default)]
-    pub extra_sources: Vec<ProjectSourceRule>,
+    pub label: Option<String>,
+}
+
+fn default_canonical_rel() -> String {
+    ".skills".into()
+}
+
+fn default_project_views() -> Vec<ProjectViewConfig> {
+    vec![
+        ProjectViewConfig {
+            rel: ".claude/skills".into(),
+            label: Some("claude".into()),
+        },
+        ProjectViewConfig {
+            rel: ".agents/skills".into(),
+            label: Some("agents".into()),
+        },
+    ]
+}
+
+fn label_from_rel(rel: &str) -> String {
+    rel.trim_matches('/')
+        .rsplit('/')
+        .next()
+        .filter(|label| !label.is_empty())
+        .unwrap_or(rel)
+        .trim_start_matches('.')
+        .to_string()
+}
+
+fn reject_legacy_schema(text: &str, path: &Utf8Path) -> Result<()> {
+    const LEGACY_FIELDS: &[&str] = &[
+        "sources",
+        "sync_paths",
+        "stale_codex_skill_paths",
+        "project_source_rules",
+        "extra_sources",
+    ];
+
+    let value: toml::Value =
+        toml::from_str(text).with_context(|| format!("failed to parse config file {path}"))?;
+    let mut found = Vec::new();
+    collect_legacy_fields(&value, LEGACY_FIELDS, &mut found);
+    found.sort();
+    found.dedup();
+
+    if found.is_empty() {
+        return Ok(());
+    }
+
+    let primary = found.first().cloned().unwrap_or("unknown");
+    bail!(
+        "skillnet.toml uses the pre-Option-B schema (field `{primary}` found).\n\
+These fields were removed in skillnet 0.5.0. See the migration guide for the new `views` / `canonical_rel` schema:\n\
+  https://codeberg.org/caniko/skillnet/blob/main/docs/src/migration/option-b.md\n\
+Fields encountered: {}\n\
+File: {path}",
+        found.join(", ")
+    )
+}
+
+fn collect_legacy_fields(
+    value: &toml::Value,
+    legacy_fields: &'static [&'static str],
+    found: &mut Vec<&'static str>,
+) {
+    match value {
+        toml::Value::Table(table) => {
+            for (key, value) in table {
+                if let Some(field) = legacy_fields.iter().copied().find(|field| key == field) {
+                    found.push(field);
+                }
+                collect_legacy_fields(value, legacy_fields, found);
+            }
+        }
+        toml::Value::Array(values) => {
+            for value in values {
+                collect_legacy_fields(value, legacy_fields, found);
+            }
+        }
+        _ => {}
+    }
 }
 
 impl Config {
     pub fn load(path: &Utf8Path) -> Result<Self> {
         let text = fs::read_to_string(path)
             .with_context(|| format!("failed to read config file {path}"))?;
+        reject_legacy_schema(&text, path)?;
         toml::from_str(&text).with_context(|| format!("failed to parse config file {path}"))
     }
 
@@ -181,23 +281,27 @@ impl Config {
     }
 
     pub fn global_target(&self, mirror_root: &Utf8Path) -> Result<Target> {
+        let canonical_path = match self.global.canonical_path.as_deref() {
+            Some(path) => expand_path(path)?,
+            None => mirror_root.join("global"),
+        };
         Ok(Target {
             name: "global".to_string(),
-            mirror_path: mirror_root.join("global"),
-            sources: self
+            scope: TargetScope::Global,
+            canonical_path,
+            views: self
                 .global
-                .sources
+                .views
                 .iter()
-                .map(|s| {
-                    Ok(Source {
-                        label: s.label.clone(),
-                        path: expand_path(&s.path)?,
-                        priority: s.priority,
+                .filter(|view| view.scope == ViewScope::Global)
+                .map(|view| {
+                    Ok(ViewTarget {
+                        label: view.label.clone(),
+                        path: expand_path(&view.path)?,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?,
-            sync_paths: expand_paths(&self.global.sync_paths)?,
-            stale_codex_skill_paths: expand_paths(&self.global.stale_codex_skill_paths)?,
+            aggregator_path: None,
         })
     }
 
@@ -207,25 +311,26 @@ impl Config {
         project: &ProjectConfig,
     ) -> Result<Target> {
         let project_root = expand_path(&project.path)?;
-        let mut rules = self.project_source_rules.clone();
-        rules.extend(project.extra_sources.clone());
+        let canonical_path = project_root.join(&project.canonical_rel);
 
         Ok(Target {
             name: project.name.clone(),
-            mirror_path: mirror_root.join("projects").join(&project.name),
-            sources: rules
-                .into_iter()
-                .map(|rule| Source {
-                    label: rule.label,
-                    path: project_root.join(rule.rel),
-                    priority: rule.priority,
+            scope: TargetScope::Project,
+            canonical_path,
+            views: project
+                .views
+                .iter()
+                .map(|view| {
+                    Ok(ViewTarget {
+                        label: view
+                            .label
+                            .clone()
+                            .unwrap_or_else(|| label_from_rel(&view.rel)),
+                        path: project_root.join(&view.rel),
+                    })
                 })
-                .collect(),
-            sync_paths: vec![
-                project_root.join(".agents/skills"),
-                project_root.join(".claude/skills"),
-            ],
-            stale_codex_skill_paths: vec![project_root.join(".codex/skills")],
+                .collect::<Result<Vec<_>>>()?,
+            aggregator_path: Some(mirror_root.join("projects").join(&project.name)),
         })
     }
 }
@@ -320,13 +425,14 @@ fn non_empty_owned(value: String) -> Option<String> {
 }
 
 pub fn expand_path(raw: &str) -> Result<Utf8PathBuf> {
+    let raw = expand_env_vars(raw)?;
     if raw == "~" {
         return home_dir();
     }
     if let Some(rest) = raw.strip_prefix("~/") {
         return Ok(home_dir()?.join(rest));
     }
-    let path = Utf8PathBuf::from(raw);
+    let path = Utf8PathBuf::from(raw.as_str());
     if path.is_absolute() {
         Ok(path)
     } else {
@@ -335,6 +441,59 @@ pub fn expand_path(raw: &str) -> Result<Utf8PathBuf> {
             .and_then(|p| Utf8PathBuf::from_path_buf(p).map_err(|_| anyhow!("cwd is not UTF-8")))
             .map(|cwd| cwd.join(path))
     }
+}
+
+fn expand_env_vars(raw: &str) -> Result<String> {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch != '$' {
+            out.push(ch);
+            continue;
+        }
+
+        match chars.peek().copied() {
+            Some('{') => {
+                chars.next();
+                let mut name = String::new();
+                for next in chars.by_ref() {
+                    if next == '}' {
+                        break;
+                    }
+                    name.push(next);
+                }
+                if name.is_empty() {
+                    bail!("empty environment variable expansion in path `{raw}`");
+                }
+                out.push_str(&env::var(&name).with_context(|| {
+                    format!("environment variable `{name}` is not set for path `{raw}`")
+                })?);
+            }
+            Some(next) if is_env_name_start(next) => {
+                let mut name = String::new();
+                while let Some(next) = chars.peek().copied() {
+                    if !is_env_name_char(next) {
+                        break;
+                    }
+                    name.push(next);
+                    chars.next();
+                }
+                out.push_str(&env::var(&name).with_context(|| {
+                    format!("environment variable `{name}` is not set for path `{raw}`")
+                })?);
+            }
+            _ => out.push('$'),
+        }
+    }
+    Ok(out)
+}
+
+fn is_env_name_start(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphabetic()
+}
+
+fn is_env_name_char(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphanumeric()
 }
 
 pub fn default_config_path() -> Result<Utf8PathBuf> {
@@ -359,10 +518,6 @@ fn default_xdg_config_path(file_name: &str) -> Result<Utf8PathBuf> {
         None => home_dir()?.join(".config"),
     };
     Ok(config_home.join("skillnet").join(file_name))
-}
-
-fn expand_paths(raws: &[String]) -> Result<Vec<Utf8PathBuf>> {
-    raws.iter().map(|raw| expand_path(raw)).collect()
 }
 
 fn home_dir() -> Result<Utf8PathBuf> {
@@ -391,9 +546,7 @@ mod tests {
         let err = toml::from_str::<Config>(
             r#"
 [global]
-sources = []
-sync_paths = []
-stale_codex_skill_paths = []
+views = []
 
 [database]
 backend = "sqlite"
@@ -409,9 +562,7 @@ bogus = true
         let cfg = toml::from_str::<Config>(
             r#"
 [global]
-sources = []
-sync_paths = []
-stale_codex_skill_paths = []
+views = []
 
 [sync]
 auto_commit_dirty_destination = true
@@ -449,9 +600,7 @@ codex_reasoning_effort = "high"
         let cfg = toml::from_str::<Config>(
             r#"
 [global]
-sources = []
-sync_paths = []
-stale_codex_skill_paths = []
+views = []
 "#,
         )
         .unwrap();
@@ -464,6 +613,96 @@ stale_codex_skill_paths = []
                 codex_reasoning_effort: "medium".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn load_rejects_legacy_global_sources_schema() {
+        let err = load_config_from_text(
+            r#"
+[global]
+sources = []
+sync_paths = []
+stale_codex_skill_paths = []
+"#,
+        );
+
+        let message = err.to_string();
+        assert!(message.contains("pre-Option-B schema"));
+        assert!(message.contains("sources"));
+        assert!(message.contains("sync_paths"));
+        assert!(message.contains("stale_codex_skill_paths"));
+        assert!(message.contains("docs/src/migration/option-b.md"));
+        assert!(message.contains("File:"));
+    }
+
+    #[test]
+    fn load_rejects_legacy_root_project_source_rules_schema() {
+        let err = load_config_from_text(
+            r#"
+project_source_rules = []
+
+[global]
+views = []
+"#,
+        );
+
+        let message = err.to_string();
+        assert!(message.contains("pre-Option-B schema"));
+        assert!(message.contains("project_source_rules"));
+    }
+
+    #[test]
+    fn load_rejects_legacy_project_extra_sources_schema() {
+        let err = load_config_from_text(
+            r#"
+[global]
+views = []
+
+[[projects]]
+name = "demo"
+path = "/tmp/demo"
+extra_sources = []
+"#,
+        );
+
+        let message = err.to_string();
+        assert!(message.contains("pre-Option-B schema"));
+        assert!(message.contains("extra_sources"));
+    }
+
+    #[test]
+    fn project_target_defaults_to_canonical_rel_and_standard_views() {
+        let cfg = toml::from_str::<Config>(
+            r#"
+[global]
+views = []
+
+[[projects]]
+name = "demo"
+path = "/tmp/demo"
+"#,
+        )
+        .unwrap();
+
+        let target = cfg
+            .project_target(
+                Utf8Path::new("/tmp/mirror"),
+                cfg.projects.first().expect("project fixture"),
+            )
+            .unwrap();
+        assert_eq!(
+            target.canonical_path,
+            Utf8PathBuf::from("/tmp/demo/.skills")
+        );
+        assert_eq!(
+            target.aggregator_path,
+            Some(Utf8PathBuf::from("/tmp/mirror/projects/demo"))
+        );
+        assert_eq!(target.views.len(), 2);
+        assert!(target.views.iter().any(|view| view.label == "claude"
+            && view.path == Utf8PathBuf::from("/tmp/demo/.claude/skills")));
+        assert!(target.views.iter().any(|view| view.label == "agents"
+            && view.path == Utf8PathBuf::from("/tmp/demo/.agents/skills")));
     }
 
     #[test]
@@ -575,6 +814,13 @@ stale_codex_skill_paths = []
         ] {
             env::remove_var(key);
         }
+    }
+
+    fn load_config_from_text(text: &str) -> anyhow::Error {
+        let temp = tempdir().unwrap();
+        let path = Utf8PathBuf::from_path_buf(temp.path().join("skillnet.toml")).unwrap();
+        fs::write(&path, text).unwrap();
+        Config::load(&path).unwrap_err()
     }
 
     struct EnvSnapshot {
