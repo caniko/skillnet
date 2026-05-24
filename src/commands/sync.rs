@@ -15,21 +15,33 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    io::Read,
-    time::SystemTime,
+    io::{self, Read, Write},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context as AnyhowContext, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
 use super::Context;
 use crate::{
     cache::{self, Cache, ScopeStamp},
-    cli::Scope,
+    cli::{args::StatusFormat, Scope},
+    codex::{self, AutoCommitRequest},
+    config::SyncOverrides,
+    exit::ExitError,
     fs_ops, reconcile,
+    reconcile::WriteOptions,
 };
+
+#[derive(Debug, Clone, Default)]
+pub struct PullOptions {
+    pub then_push: bool,
+    pub sync_overrides: SyncOverrides,
+    pub write_options: WriteOptions,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct ScopeSummary {
@@ -65,18 +77,59 @@ struct Delta {
     path: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct DestinationDelta {
+    pub written: usize,
+    pub modified: usize,
+    pub removed: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum LiveHash {
     Single(String),
     Conflict,
 }
 
-pub fn pull(ctx: &Context, scopes: &[Scope], then_push: bool) -> Result<()> {
-    ctx.ensure_destination_clean()?;
+pub fn pull(ctx: &Context, scopes: &[Scope], options: PullOptions) -> Result<()> {
+    if options.then_push {
+        eprintln!("warning: `sync pull --then-push` is deprecated; use `sync roundtrip` instead");
+    }
+    pull_only(ctx, scopes, &options.sync_overrides, options.write_options)
+        .map_err(ExitError::pull)?;
+
+    if options.then_push {
+        push(ctx, scopes, options.write_options).map_err(ExitError::push)?;
+    }
+
+    Ok(())
+}
+
+pub fn roundtrip(
+    ctx: &Context,
+    scopes: &[Scope],
+    check: bool,
+    write_options: WriteOptions,
+) -> Result<()> {
+    if check {
+        return roundtrip_check(ctx, scopes, write_options);
+    }
+
+    pull_only(ctx, scopes, &SyncOverrides::default(), write_options).map_err(ExitError::pull)?;
+    push(ctx, scopes, write_options).map_err(ExitError::push)?;
+    Ok(())
+}
+
+fn pull_only(
+    ctx: &Context,
+    scopes: &[Scope],
+    sync_overrides: &SyncOverrides,
+    write_options: WriteOptions,
+) -> Result<()> {
+    ensure_destination_ready_for_pull(ctx, scopes, sync_overrides)?;
     let mut cache = cache::load(&ctx.mirror_root);
 
     for target in ctx.targets(scopes)? {
-        reconcile::reconcile_target(&target, false, ctx.dry_run)?;
+        reconcile::reconcile_target_with_options(&target, false, ctx.dry_run, write_options)?;
         if ctx.dry_run {
             continue;
         }
@@ -97,14 +150,10 @@ pub fn pull(ctx: &Context, scopes: &[Scope], then_push: bool) -> Result<()> {
         cache::save(&ctx.mirror_root, &cache)?;
     }
 
-    if then_push {
-        push(ctx, scopes)?;
-    }
-
     Ok(())
 }
 
-pub fn push(ctx: &Context, scopes: &[Scope]) -> Result<()> {
+pub fn push(ctx: &Context, scopes: &[Scope], write_options: WriteOptions) -> Result<()> {
     for target in ctx.targets(scopes)? {
         if ctx.dry_run {
             println!("# sync {}", target.name);
@@ -120,15 +169,45 @@ pub fn push(ctx: &Context, scopes: &[Scope]) -> Result<()> {
             );
             continue;
         }
-        reconcile::sync_target(&target)?;
-        println!("synced {}", target.name);
+        let mut summaries = Vec::with_capacity(target.sync_paths.len());
+        for sync_path in &target.sync_paths {
+            let before = mirror_files(sync_path)?;
+            let summary = reconcile::write_flat_from_mirror_with_options(
+                &target.mirror_path,
+                sync_path,
+                write_options,
+            )?;
+            let after = mirror_files(sync_path)?;
+            summaries.push((
+                sync_path.clone(),
+                destination_delta(&before, &after),
+                summary,
+            ));
+        }
+        if write_options.allow_delete {
+            for path in &target.stale_codex_skill_paths {
+                fs_ops::remove_codex_skills(path)?;
+            }
+        }
+        println!("{}", format_push_summary(&target.name, &summaries));
     }
     Ok(())
 }
 
-pub fn status(ctx: &Context, scopes: &[Scope]) -> Result<()> {
-    for summary in status_summaries(ctx, scopes)? {
-        print_summary(&summary);
+pub fn status(ctx: &Context, scopes: &[Scope], format: StatusFormat) -> Result<()> {
+    let summaries = status_summaries(ctx, scopes)?;
+    match format {
+        StatusFormat::Text => {
+            for summary in &summaries {
+                print_summary(summary);
+            }
+        }
+        StatusFormat::Json => {
+            let stdout = io::stdout();
+            let mut handle = stdout.lock();
+            print_summary_json(&summaries, &mut handle)?;
+            writeln!(handle)?;
+        }
     }
     Ok(())
 }
@@ -150,6 +229,140 @@ pub fn diff(ctx: &Context, scopes: &[Scope]) -> Result<()> {
             println!("{marker} {}", delta.path);
         }
     }
+    Ok(())
+}
+
+fn roundtrip_check(ctx: &Context, scopes: &[Scope], write_options: WriteOptions) -> Result<()> {
+    ctx.ensure_destination_clean()?;
+    let temp = tempfile::tempdir()?;
+    let temp_root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+        .map_err(|path| anyhow::anyhow!("non-UTF-8 temporary path: {}", path.display()))?;
+    let mut changed = false;
+
+    for mut target in ctx.targets(scopes)? {
+        let real_mirror_path = target.mirror_path.clone();
+        target.mirror_path = temp_root.join(&target.name);
+        if real_mirror_path.exists() {
+            fs_ops::copy_dir(&real_mirror_path, &target.mirror_path)?;
+        }
+        reconcile::reconcile_target_with_options(&target, false, false, write_options)
+            .map_err(ExitError::pull)?;
+
+        for destination in &target.sync_paths {
+            let temp_destination = temp_root.join(format!(
+                "{}-{}",
+                target.name,
+                destination.as_str().replace('/', "__")
+            ));
+            if destination.exists() {
+                fs_ops::copy_dir(destination, &temp_destination)?;
+            }
+            reconcile::write_flat_from_mirror_with_options(
+                &target.mirror_path,
+                &temp_destination,
+                write_options,
+            )?;
+            let deltas = diff_mirror_to_destination(&temp_destination, destination)?;
+            print_destination_check(destination, &deltas);
+            changed |= !deltas.is_empty();
+        }
+
+        if write_options.allow_delete {
+            for destination in &target.stale_codex_skill_paths {
+                let deltas = diff_empty_to_destination(destination)?;
+                print_destination_check(destination, &deltas);
+                changed |= !deltas.is_empty();
+            }
+        }
+    }
+
+    if changed {
+        return Err(ExitError::check_drift(
+            "`sync roundtrip --check` found destinations that would change",
+        )
+        .into());
+    }
+
+    Ok(())
+}
+
+fn ensure_destination_ready_for_pull(
+    ctx: &Context,
+    scopes: &[Scope],
+    sync_overrides: &SyncOverrides,
+) -> Result<()> {
+    if ctx.dry_run || ctx.allow_dirty_destination {
+        return Ok(());
+    }
+
+    let Some(status) = crate::vcs::status(&ctx.mirror_root)? else {
+        return Ok(());
+    };
+    if !status.is_dirty() {
+        return Ok(());
+    }
+
+    let sync_config = ctx.resolve_sync_config(sync_overrides);
+    if !sync_config.auto_commit_dirty_destination {
+        crate::vcs::ensure_clean(&ctx.mirror_root)?;
+        return Ok(());
+    }
+
+    let allowed_prefixes = allowed_dirty_prefixes(ctx, scopes)?;
+    let blocked = blocked_dirty_paths(&status.dirty, &allowed_prefixes);
+    if !blocked.is_empty() {
+        anyhow::bail!(
+            "destination repository `{}` has dirty entries outside the selected skillnet-managed paths:\n{}",
+            status.root,
+            blocked
+                .iter()
+                .map(|path| format!("- {path}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
+
+    let before_head = crate::vcs::head_commit(&ctx.mirror_root)?;
+    let dirty_paths = status
+        .dirty
+        .iter()
+        .flat_map(|entry| entry.paths.iter().cloned())
+        .collect::<Vec<_>>();
+
+    codex::auto_commit(
+        &ctx.mirror_root,
+        &AutoCommitRequest {
+            model: sync_config.codex_model,
+            reasoning_effort: sync_config.codex_reasoning_effort,
+            dirty_paths,
+        },
+    )?;
+
+    let after_head = crate::vcs::head_commit(&ctx.mirror_root)?;
+    if before_head == after_head {
+        anyhow::bail!(
+            "Codex auto-commit reported success but did not create a new commit in `{}`",
+            ctx.mirror_root
+        );
+    }
+
+    if let Some(status) = crate::vcs::status(&ctx.mirror_root)? {
+        if status.is_dirty() {
+            let remaining = status
+                .dirty
+                .iter()
+                .flat_map(|entry| entry.paths.iter())
+                .map(|path| format!("- {}", path))
+                .collect::<Vec<_>>()
+                .join("\n");
+            anyhow::bail!(
+                "Codex auto-commit completed but destination repository `{}` is still dirty:\n{}",
+                status.root,
+                remaining
+            );
+        }
+    }
+
     Ok(())
 }
 
@@ -244,6 +457,88 @@ fn print_summary(summary: &ScopeSummary) {
     );
 }
 
+pub(crate) fn print_summary_json(
+    summaries: &[ScopeSummary],
+    writer: &mut impl Write,
+) -> Result<()> {
+    serde_json::to_writer_pretty(
+        writer,
+        &StatusJson {
+            schema: "skillnet.status.v1",
+            scopes: summaries.iter().map(StatusScopeJson::from).collect(),
+        },
+    )
+    .context("failed to serialize status JSON")
+}
+
+#[derive(Serialize)]
+struct StatusJson<'a> {
+    schema: &'a str,
+    scopes: Vec<StatusScopeJson>,
+}
+
+#[derive(Serialize)]
+struct StatusScopeJson {
+    name: String,
+    state: &'static str,
+    diverged_files: usize,
+    last_pulled_at: Option<String>,
+    cache_state: &'static str,
+}
+
+impl From<&ScopeSummary> for StatusScopeJson {
+    fn from(summary: &ScopeSummary) -> Self {
+        let (state, diverged_files) = match summary.state {
+            ScopeState::Clean => ("clean", 0),
+            ScopeState::Diverged(count) => ("diverged", count),
+        };
+        let cache_state = match summary.cache_state {
+            CacheState::Fresh => "fresh",
+            CacheState::Stale => "stale",
+            CacheState::Missing => "missing",
+        };
+
+        Self {
+            name: summary.scope.to_string(),
+            state,
+            diverged_files,
+            last_pulled_at: summary.last_pulled_at.map(rfc3339_utc),
+            cache_state,
+        }
+    }
+}
+
+fn rfc3339_utc(time: SystemTime) -> String {
+    let duration = time
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_else(|_| std::time::Duration::from_secs(0));
+    let secs = duration.as_secs();
+    let days = (secs / 86_400) as i64;
+    let seconds_of_day = secs % 86_400;
+    let (year, month, day) = civil_from_days(days);
+    let hour = seconds_of_day / 3_600;
+    let minute = (seconds_of_day % 3_600) / 60;
+    let second = seconds_of_day % 60;
+
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
+}
+
+fn civil_from_days(days_since_epoch: i64) -> (i64, u32, u32) {
+    let days = days_since_epoch + 719_468;
+    let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let mut year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+
+    (year, month as u32, day as u32)
+}
+
 fn diff_target(target: &crate::model::Target) -> Result<Vec<Delta>> {
     let mirror_files = mirror_files(&target.mirror_path)?;
     let live_files = live_files(target)?;
@@ -277,6 +572,171 @@ fn diff_target(target: &crate::model::Target) -> Result<Vec<Delta>> {
     }
 
     Ok(deltas)
+}
+
+fn allowed_dirty_prefixes(ctx: &Context, scopes: &[Scope]) -> Result<Vec<Utf8PathBuf>> {
+    let targets = ctx.targets(scopes)?;
+    let mut prefixes = Vec::new();
+    for target in targets {
+        prefixes.push(path_relative_to_mirror_root(ctx, &target.mirror_path)?);
+        for source in &target.sources {
+            push_if_relative_to_mirror_root(ctx, &source.path, &mut prefixes);
+        }
+        for sync_path in &target.sync_paths {
+            push_if_relative_to_mirror_root(ctx, sync_path, &mut prefixes);
+        }
+        for stale_path in &target.stale_codex_skill_paths {
+            push_if_relative_to_mirror_root(ctx, stale_path, &mut prefixes);
+        }
+    }
+    push_if_relative_to_mirror_root(ctx, &ctx.config_path, &mut prefixes);
+    push_if_relative_to_mirror_root(ctx, &ctx.catalog_config_path, &mut prefixes);
+    prefixes.push(Utf8PathBuf::from(".skillnet/cache.toml"));
+    Ok(prefixes)
+}
+
+fn path_relative_to_mirror_root(ctx: &Context, path: &Utf8Path) -> Result<Utf8PathBuf> {
+    path.strip_prefix(&ctx.mirror_root)
+        .map(|path| path.to_path_buf())
+        .with_context(|| {
+            format!(
+                "target mirror path `{}` does not live under mirror root `{}`",
+                path, ctx.mirror_root
+            )
+        })
+}
+
+fn push_if_relative_to_mirror_root(
+    ctx: &Context,
+    path: &Utf8Path,
+    prefixes: &mut Vec<Utf8PathBuf>,
+) {
+    if let Ok(relative) = path.strip_prefix(&ctx.mirror_root) {
+        prefixes.push(relative.to_path_buf());
+    }
+}
+
+fn blocked_dirty_paths(
+    dirty_entries: &[crate::vcs::DirtyEntry],
+    allowed_prefixes: &[Utf8PathBuf],
+) -> Vec<String> {
+    dirty_entries
+        .iter()
+        .flat_map(|entry| {
+            entry
+                .paths
+                .iter()
+                .filter(|path| !dirty_path_allowed(entry.kind, path, allowed_prefixes))
+        })
+        .map(|path| path.as_str().to_string())
+        .collect()
+}
+
+fn dirty_path_allowed(
+    kind: crate::vcs::DirtyKind,
+    path: &Utf8Path,
+    allowed_prefixes: &[Utf8PathBuf],
+) -> bool {
+    allowed_prefixes.iter().any(|prefix| {
+        path.starts_with(prefix)
+            || (kind == crate::vcs::DirtyKind::Untracked && prefix.starts_with(path))
+    })
+}
+
+fn diff_mirror_to_destination(mirror: &Utf8Path, destination: &Utf8Path) -> Result<Vec<Delta>> {
+    let expected_files = mirror_files(mirror)?;
+    let destination_files = mirror_files(destination)?;
+    diff_file_maps(&expected_files, &destination_files)
+}
+
+fn diff_empty_to_destination(destination: &Utf8Path) -> Result<Vec<Delta>> {
+    let empty = BTreeMap::new();
+    let destination_files = mirror_files(destination)?;
+    diff_file_maps(&empty, &destination_files)
+}
+
+fn diff_file_maps(
+    mirror_files: &BTreeMap<String, String>,
+    destination_files: &BTreeMap<String, String>,
+) -> Result<Vec<Delta>> {
+    let paths = mirror_files
+        .keys()
+        .chain(destination_files.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    let mut deltas = Vec::new();
+    for path in paths {
+        match (mirror_files.get(&path), destination_files.get(&path)) {
+            (None, Some(_)) => deltas.push(Delta {
+                kind: DeltaKind::OnlyLive,
+                path,
+            }),
+            (Some(_), None) => deltas.push(Delta {
+                kind: DeltaKind::OnlyMirror,
+                path,
+            }),
+            (Some(mirror), Some(destination)) if mirror != destination => deltas.push(Delta {
+                kind: DeltaKind::Modified,
+                path,
+            }),
+            _ => {}
+        }
+    }
+
+    Ok(deltas)
+}
+
+fn destination_delta(
+    before: &BTreeMap<String, String>,
+    after: &BTreeMap<String, String>,
+) -> DestinationDelta {
+    let paths = before
+        .keys()
+        .chain(after.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let mut delta = DestinationDelta::default();
+
+    for path in paths {
+        match (before.get(&path), after.get(&path)) {
+            (None, Some(_)) => delta.written += 1,
+            (Some(_), None) => delta.removed += 1,
+            (Some(before), Some(after)) if before != after => delta.modified += 1,
+            _ => {}
+        }
+    }
+
+    delta
+}
+
+fn format_push_summary(
+    scope: &str,
+    destinations: &[(Utf8PathBuf, DestinationDelta, reconcile::WriteSummary)],
+) -> String {
+    let destinations = destinations
+        .iter()
+        .map(|(path, delta, summary)| {
+            format!(
+                "{} (+{} ~{} -{}){}",
+                path,
+                delta.written,
+                delta.modified,
+                delta.removed,
+                reconcile::format_write_summary(*summary)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("synced {scope} → {destinations}")
+}
+
+fn print_destination_check(destination: &Utf8Path, deltas: &[Delta]) {
+    if deltas.is_empty() {
+        println!("{}  clean", destination);
+    } else {
+        println!("{}  would change ({} files)", destination, deltas.len());
+    }
 }
 
 fn mirror_files(mirror_root: &Utf8Path) -> Result<BTreeMap<String, String>> {

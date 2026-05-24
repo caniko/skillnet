@@ -13,6 +13,8 @@ pub struct Config {
     pub skills_root: Option<String>,
     pub mirror_root: Option<String>,
     #[serde(default)]
+    pub sync: SyncConfig,
+    #[serde(default)]
     pub database: DatabaseConfig,
     #[serde(default)]
     pub project_source_rules: Vec<ProjectSourceRule>,
@@ -56,6 +58,41 @@ pub enum DbTarget {
 #[derive(Clone, Debug, Default)]
 pub struct DbOverrides {
     pub database_url: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SyncOverrides {
+    pub auto_commit_dirty_destination: Option<bool>,
+    pub codex_model: Option<String>,
+    pub codex_reasoning_effort: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SyncConfig {
+    #[serde(default)]
+    pub auto_commit_dirty_destination: bool,
+    #[serde(default = "default_codex_model")]
+    pub codex_model: String,
+    #[serde(default = "default_codex_reasoning_effort")]
+    pub codex_reasoning_effort: String,
+}
+
+impl Default for SyncConfig {
+    fn default() -> Self {
+        Self {
+            auto_commit_dirty_destination: false,
+            codex_model: default_codex_model(),
+            codex_reasoning_effort: default_codex_reasoning_effort(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedSyncConfig {
+    pub auto_commit_dirty_destination: bool,
+    pub codex_model: String,
+    pub codex_reasoning_effort: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,6 +146,29 @@ impl Config {
     #[allow(dead_code)]
     pub fn resolve_db_with_overrides(&self, overrides: &DbOverrides) -> Result<DbTarget> {
         self.database.resolve_db_with_overrides(overrides)
+    }
+
+    pub fn resolve_sync_with_overrides(&self, overrides: &SyncOverrides) -> ResolvedSyncConfig {
+        let codex_model = overrides
+            .codex_model
+            .as_deref()
+            .and_then(|value| non_empty(Some(value)))
+            .map(str::to_string)
+            .unwrap_or_else(|| self.sync.codex_model.clone());
+        let codex_reasoning_effort = overrides
+            .codex_reasoning_effort
+            .as_deref()
+            .and_then(|value| non_empty(Some(value)))
+            .map(str::to_string)
+            .unwrap_or_else(|| self.sync.codex_reasoning_effort.clone());
+
+        ResolvedSyncConfig {
+            auto_commit_dirty_destination: overrides
+                .auto_commit_dirty_destination
+                .unwrap_or(self.sync.auto_commit_dirty_destination),
+            codex_model,
+            codex_reasoning_effort,
+        }
     }
 
     pub fn targets(&self, mirror_root: &Utf8Path) -> Result<Vec<Target>> {
@@ -219,6 +279,14 @@ fn env_database_url() -> Option<String> {
     ["SKILLNET_DATABASE_URL", "SKILLNET_DB_URL"]
         .into_iter()
         .find_map(|var| env::var(var).ok().and_then(non_empty_owned))
+}
+
+fn default_codex_model() -> String {
+    "gpt-5.4-mini".to_string()
+}
+
+fn default_codex_reasoning_effort() -> String {
+    "medium".to_string()
 }
 
 fn env_data_dir_path() -> Option<PathBuf> {
@@ -334,6 +402,68 @@ bogus = true
         )
         .unwrap_err();
         assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn sync_defaults_and_overrides_resolve_in_order() {
+        let cfg = toml::from_str::<Config>(
+            r#"
+[global]
+sources = []
+sync_paths = []
+stale_codex_skill_paths = []
+
+[sync]
+auto_commit_dirty_destination = true
+codex_model = "gpt-5.3-codex"
+codex_reasoning_effort = "high"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            cfg.resolve_sync_with_overrides(&SyncOverrides::default()),
+            ResolvedSyncConfig {
+                auto_commit_dirty_destination: true,
+                codex_model: "gpt-5.3-codex".to_string(),
+                codex_reasoning_effort: "high".to_string(),
+            }
+        );
+
+        assert_eq!(
+            cfg.resolve_sync_with_overrides(&SyncOverrides {
+                auto_commit_dirty_destination: Some(false),
+                codex_model: Some("gpt-5.4-mini".to_string()),
+                codex_reasoning_effort: Some("medium".to_string()),
+            }),
+            ResolvedSyncConfig {
+                auto_commit_dirty_destination: false,
+                codex_model: "gpt-5.4-mini".to_string(),
+                codex_reasoning_effort: "medium".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn sync_defaults_apply_when_table_is_missing() {
+        let cfg = toml::from_str::<Config>(
+            r#"
+[global]
+sources = []
+sync_paths = []
+stale_codex_skill_paths = []
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            cfg.resolve_sync_with_overrides(&SyncOverrides::default()),
+            ResolvedSyncConfig {
+                auto_commit_dirty_destination: false,
+                codex_model: "gpt-5.4-mini".to_string(),
+                codex_reasoning_effort: "medium".to_string(),
+            }
+        );
     }
 
     #[test]

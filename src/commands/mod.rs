@@ -1,5 +1,6 @@
 pub mod calibration;
 mod context;
+pub mod doctor;
 mod mirror;
 mod project;
 mod skill;

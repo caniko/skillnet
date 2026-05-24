@@ -2,21 +2,21 @@ pub(crate) mod args;
 mod scope;
 
 #[allow(unused_imports)]
-pub use scope::{configured_scopes, scope_value_parser, Scope, SkillPath};
+pub use scope::{configured_scopes, detect_from_cwd, scope_value_parser, Scope, SkillPath};
 
 use anyhow::{Context as AnyhowContext, Result};
 use camino::Utf8PathBuf;
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 
-use crate::commands::Context;
 use crate::{
     catalog, commands,
     config::{
         default_catalog_config_path, default_config_path, expand_path, legacy_catalog_config_path,
-        legacy_config_path, Config, DbOverrides,
+        legacy_config_path, Config, DbOverrides, SyncOverrides,
     },
 };
+use crate::{commands::Context, exit::ExitError};
 
 use args::{CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, SyncCommand};
 use scope::{resolve_scope, resolve_scopes};
@@ -33,7 +33,11 @@ pub fn run() -> Result<()> {
     } = Cli::parse();
     let config = resolve_config_path(config)?;
     let catalog_config = resolve_catalog_config_path(catalog_config)?;
-    let command = command.unwrap_or(Command::Status);
+    let command = command.unwrap_or(Command::Status {
+        scope: Vec::new(),
+        all: false,
+        format: args::StatusFormat::Text,
+    });
 
     if let Command::Completions { shell } = &command {
         let mut command = Cli::command();
@@ -59,7 +63,18 @@ pub fn run() -> Result<()> {
     )?;
 
     match command {
-        Command::Status => commands::status::run(&ctx),
+        Command::Status { scope, all, format } => {
+            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
+            commands::status::run(&ctx, &scopes, format)
+        }
+        Command::Doctor => {
+            let findings = commands::doctor::run(&ctx)?;
+            if findings.is_empty() {
+                Ok(())
+            } else {
+                Err(ExitError::parity_lint("parity lint findings").into())
+            }
+        }
         Command::Sync { command } => run_sync_command(&ctx, command),
         Command::Skill { command } => run_skill_command(&ctx, command),
         Command::Scope { command } => run_scope_command(&ctx, command),
@@ -133,23 +148,95 @@ fn run_sync_command(ctx: &Context, command: SyncCommand) -> Result<()> {
             scope,
             all,
             then_push,
+            auto_commit_dirty_destination,
+            no_auto_commit_dirty_destination,
+            codex_model,
+            codex_reasoning_effort,
+            allow_older,
+            allow_delete,
         } => {
-            let scopes = resolve_scopes(&ctx.config, &scope, all)?;
-            commands::sync::pull(ctx, &scopes, then_push)
+            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
+            let auto_commit_dirty_destination = if auto_commit_dirty_destination {
+                Some(true)
+            } else if no_auto_commit_dirty_destination {
+                Some(false)
+            } else {
+                None
+            };
+            commands::sync::pull(
+                ctx,
+                &scopes,
+                commands::sync::PullOptions {
+                    then_push,
+                    sync_overrides: SyncOverrides {
+                        auto_commit_dirty_destination,
+                        codex_model,
+                        codex_reasoning_effort,
+                    },
+                    write_options: crate::reconcile::WriteOptions {
+                        allow_older,
+                        allow_delete,
+                    },
+                },
+            )
         }
-        SyncCommand::Push { scope, all } => {
-            let scopes = resolve_scopes(&ctx.config, &scope, all)?;
-            commands::sync::push(ctx, &scopes)
+        SyncCommand::Roundtrip {
+            scope,
+            all,
+            check,
+            allow_older,
+            allow_delete,
+        } => {
+            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
+            commands::sync::roundtrip(
+                ctx,
+                &scopes,
+                check,
+                crate::reconcile::WriteOptions {
+                    allow_older,
+                    allow_delete,
+                },
+            )
         }
-        SyncCommand::Status { scope } => {
-            let scopes = resolve_scopes(&ctx.config, &scope, false)?;
-            commands::sync::status(ctx, &scopes)
+        SyncCommand::Push {
+            scope,
+            all,
+            allow_older,
+            allow_delete,
+        } => {
+            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
+            commands::sync::push(
+                ctx,
+                &scopes,
+                crate::reconcile::WriteOptions {
+                    allow_older,
+                    allow_delete,
+                },
+            )
+            .map_err(|error| ExitError::push(error).into())
         }
-        SyncCommand::Diff { scope } => {
-            let scopes = resolve_scopes(&ctx.config, &scope, false)?;
+        SyncCommand::Status { scope, all, format } => {
+            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
+            commands::sync::status(ctx, &scopes, format)
+        }
+        SyncCommand::Diff { scope, all } => {
+            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
             commands::sync::diff(ctx, &scopes)
         }
     }
+}
+
+fn resolve_command_scopes(config: &Config, scope_args: &[String], all: bool) -> Result<Vec<Scope>> {
+    if all || !scope_args.is_empty() {
+        return resolve_scopes(config, scope_args, all);
+    }
+
+    if let Some(scope) = detect_from_cwd(config) {
+        eprintln!("note: defaulting to --scope {scope} --scope global (detected from cwd)");
+        return Ok(vec![scope, Scope::Global]);
+    }
+
+    anyhow::bail!("must pass --scope or --all");
 }
 
 fn run_skill_command(ctx: &Context, command: SkillCommand) -> Result<()> {

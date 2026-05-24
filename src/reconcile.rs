@@ -8,6 +8,21 @@ use crate::{
     model::{Candidate, Choice, Source, Target},
 };
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct WriteOptions {
+    pub allow_older: bool,
+    pub allow_delete: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct WriteSummary {
+    pub written: usize,
+    pub modified: usize,
+    pub removed: usize,
+    pub skipped_older: usize,
+    pub preserved_missing: usize,
+}
+
 pub fn discover_candidates(sources: &[Source]) -> Result<Vec<Candidate>> {
     let mut candidates = Vec::new();
     for source in sources {
@@ -68,47 +83,114 @@ pub fn choose_latest(candidates: &[Candidate]) -> Result<Vec<Choice>> {
     Ok(choices)
 }
 
+#[allow(dead_code)]
 pub fn reconcile_target(target: &Target, sync: bool, dry_run: bool) -> Result<Vec<Choice>> {
+    let (choices, _) = reconcile_target_with_options(
+        target,
+        sync,
+        dry_run,
+        WriteOptions {
+            allow_older: true,
+            allow_delete: true,
+        },
+    )?;
+    Ok(choices)
+}
+
+pub fn reconcile_target_with_options(
+    target: &Target,
+    sync: bool,
+    dry_run: bool,
+    options: WriteOptions,
+) -> Result<(Vec<Choice>, WriteSummary)> {
     let candidates = discover_candidates(&target.sources)?;
     let choices = choose_latest(&candidates)?;
 
     if dry_run {
         print_choices(target, &choices, sync);
-        return Ok(choices);
+        return Ok((choices, WriteSummary::default()));
     }
 
-    write_mirror(target, &choices)?;
+    let summary = write_mirror(target, &choices, options)?;
     if sync {
-        sync_target(target)?;
+        sync_target_with_options(target, options)?;
     }
     println!(
-        "reconciled {} skills into {}",
+        "reconciled {} skills into {}{}",
         choices.len(),
-        target.mirror_path
+        target.mirror_path,
+        format_write_summary(summary)
     );
-    Ok(choices)
+    Ok((choices, summary))
 }
 
+#[allow(dead_code)]
 pub fn sync_target(target: &Target) -> Result<()> {
+    sync_target_with_options(
+        target,
+        WriteOptions {
+            allow_older: true,
+            allow_delete: true,
+        },
+    )
+}
+
+pub fn sync_target_with_options(target: &Target, options: WriteOptions) -> Result<()> {
     for sync_path in &target.sync_paths {
-        write_flat_from_mirror(&target.mirror_path, sync_path)?;
+        write_flat_from_mirror_with_options(&target.mirror_path, sync_path, options)?;
     }
-    for path in &target.stale_codex_skill_paths {
-        fs_ops::remove_codex_skills(path)?;
+    if options.allow_delete {
+        for path in &target.stale_codex_skill_paths {
+            fs_ops::remove_codex_skills(path)?;
+        }
     }
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn write_flat_from_mirror(mirror: &Utf8Path, dest: &Utf8Path) -> Result<()> {
-    let staging = Utf8PathBuf::from(format!("{dest}.skillnet-tmp"));
-    if staging.exists() {
-        fs::remove_dir_all(&staging)?;
+    write_flat_from_mirror_with_options(
+        mirror,
+        dest,
+        WriteOptions {
+            allow_older: true,
+            allow_delete: true,
+        },
+    )?;
+    Ok(())
+}
+
+pub fn write_flat_from_mirror_with_options(
+    mirror: &Utf8Path,
+    dest: &Utf8Path,
+    options: WriteOptions,
+) -> Result<WriteSummary> {
+    let incoming = mirror_skill_dirs(mirror)?
+        .into_iter()
+        .map(|path| {
+            let skill = path
+                .file_name()
+                .context("mirror skill directory has no final component")?
+                .to_string();
+            Ok((skill, path))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    write_skill_set(&incoming, dest, options, None)
+}
+
+pub fn format_write_summary(summary: WriteSummary) -> String {
+    let mut parts = Vec::new();
+    if summary.skipped_older > 0 {
+        parts.push(format!("skipped {} older", summary.skipped_older));
     }
-    fs::create_dir_all(&staging)?;
-    for skill in mirror_skill_dirs(mirror)? {
-        fs_ops::copy_dir(&skill, &staging.join(skill.file_name().unwrap_or_default()))?;
+    if summary.preserved_missing > 0 {
+        parts.push(format!("preserved {} missing", summary.preserved_missing));
     }
-    fs_ops::replace_dir(&staging, dest)
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", parts.join(", "))
+    }
 }
 
 pub fn mirror_skill_dirs(mirror: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
@@ -128,17 +210,123 @@ pub fn mirror_skill_dirs(mirror: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
     Ok(dirs)
 }
 
-fn write_mirror(target: &Target, choices: &[Choice]) -> Result<()> {
-    let staging = Utf8PathBuf::from(format!("{}.skillnet-tmp", target.mirror_path));
+fn write_mirror(
+    target: &Target,
+    choices: &[Choice],
+    options: WriteOptions,
+) -> Result<WriteSummary> {
+    let incoming = choices
+        .iter()
+        .map(|choice| (choice.skill.clone(), choice.path.clone()))
+        .collect::<Vec<_>>();
+    write_skill_set(
+        &incoming,
+        &target.mirror_path,
+        options,
+        Some((target, choices)),
+    )
+}
+
+fn write_skill_set(
+    incoming: &[(String, Utf8PathBuf)],
+    dest: &Utf8Path,
+    options: WriteOptions,
+    manifest: Option<(&Target, &[Choice])>,
+) -> Result<WriteSummary> {
+    let staging = Utf8PathBuf::from(format!("{dest}.skillnet-tmp"));
     if staging.exists() {
         fs::remove_dir_all(&staging)?;
     }
     fs::create_dir_all(&staging)?;
-    for choice in choices {
-        fs_ops::copy_dir(&choice.path, &staging.join(&choice.skill))?;
+    let existing = mirror_skill_dirs(dest)?
+        .into_iter()
+        .map(|path| {
+            let skill = path
+                .file_name()
+                .context("skill directory has no final component")?
+                .to_string();
+            Ok((skill, path))
+        })
+        .collect::<Result<std::collections::BTreeMap<_, _>>>()?;
+    let incoming = incoming
+        .iter()
+        .cloned()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let mut summary = WriteSummary::default();
+
+    for (skill, path) in &incoming {
+        match existing.get(skill) {
+            None => {
+                fs_ops::copy_dir(path, &staging.join(skill))?;
+                summary.written += 1;
+            }
+            Some(existing_path) => {
+                let action = overwrite_action(path, existing_path, options.allow_older)?;
+                match action {
+                    OverwriteAction::Incoming => {
+                        fs_ops::copy_dir(path, &staging.join(skill))?;
+                        summary.modified += 1;
+                    }
+                    OverwriteAction::Existing => {
+                        fs_ops::copy_dir(existing_path, &staging.join(skill))?;
+                        if fs_ops::content_signature(path)?
+                            != fs_ops::content_signature(existing_path)?
+                        {
+                            summary.skipped_older += 1;
+                        }
+                    }
+                }
+            }
+        }
     }
-    write_manifest(target, choices, &staging)?;
-    fs_ops::replace_dir(&staging, &target.mirror_path)
+
+    for (skill, existing_path) in &existing {
+        if incoming.contains_key(skill) {
+            continue;
+        }
+        if options.allow_delete {
+            summary.removed += 1;
+        } else {
+            fs_ops::copy_dir(existing_path, &staging.join(skill))?;
+            summary.preserved_missing += 1;
+        }
+    }
+
+    if let Some((target, choices)) = manifest {
+        write_manifest(target, choices, &staging)?;
+    }
+    fs_ops::replace_dir(&staging, dest)?;
+    Ok(summary)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OverwriteAction {
+    Incoming,
+    Existing,
+}
+
+fn overwrite_action(
+    incoming: &Utf8Path,
+    existing: &Utf8Path,
+    allow_older: bool,
+) -> Result<OverwriteAction> {
+    if allow_older {
+        return Ok(OverwriteAction::Incoming);
+    }
+    let incoming_mtime = fs_ops::newest_mtime_nanos(incoming)?;
+    let existing_mtime = fs_ops::newest_mtime_nanos(existing)?;
+    if incoming_mtime > existing_mtime {
+        return Ok(OverwriteAction::Incoming);
+    }
+    if incoming_mtime < existing_mtime {
+        return Ok(OverwriteAction::Existing);
+    }
+    if fs_ops::content_signature(incoming)? == fs_ops::content_signature(existing)? {
+        return Ok(OverwriteAction::Existing);
+    }
+    bail!(
+        "equal-mtime conflicting skill content: incoming `{incoming}` and existing `{existing}` both have mtime {incoming_mtime}; pass --allow-older to overwrite"
+    )
 }
 
 fn write_manifest(target: &Target, choices: &[Choice], output: &Utf8Path) -> Result<()> {
@@ -254,9 +442,13 @@ fn print_choices(target: &Target, choices: &[Choice], sync: bool) {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, thread, time::Duration};
+    use std::{
+        collections::BTreeMap, fs, io::Read, os::unix::fs as unix_fs, thread, time::Duration,
+    };
 
+    use sha2::{Digest, Sha256};
     use tempfile::tempdir;
+    use walkdir::WalkDir;
 
     use super::*;
 
@@ -265,6 +457,63 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("SKILL.md"), body).unwrap();
         dir
+    }
+
+    fn tree_entries(root: &Utf8Path) -> BTreeMap<String, String> {
+        let mut entries = BTreeMap::new();
+        for entry in WalkDir::new(root).follow_links(false).min_depth(1) {
+            let entry = entry.unwrap();
+            let metadata = fs::symlink_metadata(entry.path()).unwrap();
+            if !(metadata.file_type().is_file() || metadata.file_type().is_symlink()) {
+                continue;
+            }
+            let path = Utf8PathBuf::from_path_buf(entry.path().to_path_buf()).unwrap();
+            let rel = path.strip_prefix(root).unwrap().to_string();
+            entries.insert(rel, entry_hash(&path));
+        }
+        entries
+    }
+
+    fn entry_hash(path: &Utf8Path) -> String {
+        let metadata = fs::symlink_metadata(path).unwrap();
+        let mut hasher = Sha256::new();
+        if metadata.file_type().is_symlink() {
+            hasher.update(b"symlink");
+            hasher.update(fs::read_link(path).unwrap().to_string_lossy().as_bytes());
+        } else {
+            hasher.update(b"file");
+            let mut file = fs::File::open(path).unwrap();
+            let mut buf = [0; 8192];
+            loop {
+                let n = file.read(&mut buf).unwrap();
+                if n == 0 {
+                    break;
+                }
+                hasher.update(&buf[..n]);
+            }
+        }
+        format!("{:x}", hasher.finalize())
+    }
+
+    #[test]
+    fn write_flat_from_mirror_writes_identical_trees_to_every_destination() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
+        let mirror = root.join("mirror");
+        let alpha = skill(&mirror, "alpha", "alpha");
+        fs::create_dir_all(alpha.join("examples")).unwrap();
+        fs::write(alpha.join("examples/example.md"), "example").unwrap();
+        unix_fs::symlink("SKILL.md", alpha.join("skill-link.md")).unwrap();
+        fs::write(mirror.join("RECONCILIATION.md"), "manifest").unwrap();
+        let first = root.join("first");
+        let second = root.join("second");
+
+        write_flat_from_mirror(&mirror, &first).unwrap();
+        write_flat_from_mirror(&mirror, &second).unwrap();
+
+        assert_eq!(tree_entries(&first), tree_entries(&second));
+        assert!(!first.join("RECONCILIATION.md").exists());
+        assert!(!second.join("RECONCILIATION.md").exists());
     }
 
     #[test]

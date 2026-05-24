@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use filetime::{set_file_times, set_symlink_file_times, FileTime};
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
@@ -93,6 +94,7 @@ pub fn copy_dir(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
                 fs::create_dir_all(parent)?;
             }
             unix_fs::symlink(fs::read_link(&path)?, &out)?;
+            preserve_symlink_times(&path, &out)?;
         } else if metadata.file_type().is_file() {
             if let Some(parent) = out.parent() {
                 fs::create_dir_all(parent)?;
@@ -102,7 +104,48 @@ pub fn copy_dir(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
                 &out,
                 fs::Permissions::from_mode(metadata.permissions().mode()),
             )?;
+            preserve_file_times(&metadata, &out)?;
         }
+    }
+    preserve_dir_times(src, dest)?;
+    Ok(())
+}
+
+fn preserve_file_times(metadata: &fs::Metadata, dest: &Utf8Path) -> Result<()> {
+    set_file_times(
+        dest,
+        FileTime::from_last_access_time(metadata),
+        FileTime::from_last_modification_time(metadata),
+    )
+    .with_context(|| format!("failed to preserve file times for {dest}"))
+}
+
+fn preserve_symlink_times(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(src)?;
+    set_symlink_file_times(
+        dest,
+        FileTime::from_last_access_time(&metadata),
+        FileTime::from_last_modification_time(&metadata),
+    )
+    .with_context(|| format!("failed to preserve symlink times for {dest}"))
+}
+
+fn preserve_dir_times(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
+    let mut dirs = WalkDir::new(src)
+        .follow_links(false)
+        .contents_first(true)
+        .into_iter()
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    dirs.sort_by_key(|entry| std::cmp::Reverse(entry.depth()));
+    for entry in dirs {
+        if !entry.file_type().is_dir() {
+            continue;
+        }
+        let path = Utf8PathBuf::from_path_buf(entry.path().to_path_buf())
+            .map_err(|p| anyhow::anyhow!("non-UTF-8 path in skill tree: {}", p.display()))?;
+        let rel = path.strip_prefix(src)?;
+        let out = dest.join(rel);
+        preserve_file_times(&fs::symlink_metadata(&path)?, &out)?;
     }
     Ok(())
 }

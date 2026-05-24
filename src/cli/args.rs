@@ -45,7 +45,19 @@ pub(super) struct Cli {
 #[command(disable_help_subcommand = true)]
 pub(super) enum Command {
     /// Show scope divergence and catalog health.
-    Status,
+    Status {
+        /// Mirror scope to inspect. May be repeated.
+        #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
+        scope: Vec<String>,
+        /// Inspect every configured scope.
+        #[arg(long)]
+        all: bool,
+        /// Output format.
+        #[arg(long, default_value = "text")]
+        format: StatusFormat,
+    },
+    /// Check configured scopes for invariant violations.
+    Doctor,
     /// Generate shell completion scripts.
     Completions {
         /// Shell to generate completions for.
@@ -318,6 +330,12 @@ pub(crate) enum ExportFormat {
     Jsonl,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum StatusFormat {
+    Text,
+    Json,
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub(crate) enum Decision {
     Accept,
@@ -363,6 +381,43 @@ pub(super) enum SyncCommand {
         /// Push selected mirror scopes after a successful pull.
         #[arg(long)]
         then_push: bool,
+        /// Auto-commit selected-scope dirty mirror paths with Codex before pulling.
+        #[arg(long, conflicts_with = "no_auto_commit_dirty_destination")]
+        auto_commit_dirty_destination: bool,
+        /// Disable Codex auto-commit for this run even if config enables it.
+        #[arg(long, conflicts_with = "auto_commit_dirty_destination")]
+        no_auto_commit_dirty_destination: bool,
+        /// Codex model to use when auto-committing a dirty destination.
+        #[arg(long, value_name = "MODEL")]
+        codex_model: Option<String>,
+        /// Codex reasoning effort to use when auto-committing a dirty destination.
+        #[arg(long, value_name = "EFFORT")]
+        codex_reasoning_effort: Option<String>,
+        /// Allow incoming older or equal-mtime skill content to overwrite existing skills.
+        #[arg(long)]
+        allow_older: bool,
+        /// Allow pruning skills that are missing from the incoming side.
+        #[arg(long)]
+        allow_delete: bool,
+    },
+    /// Pull selected scopes and then push them back to live destinations.
+    Roundtrip {
+        /// Mirror scope to roundtrip. May be repeated.
+        #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
+        scope: Vec<String>,
+        /// Roundtrip every configured scope.
+        #[arg(long)]
+        all: bool,
+        /// Compute would-push diffs without mutating any destination.
+        /// Exits non-zero if any destination would change.
+        #[arg(long)]
+        check: bool,
+        /// Allow incoming older or equal-mtime skill content to overwrite existing skills.
+        #[arg(long)]
+        allow_older: bool,
+        /// Allow pruning skills that are missing from the incoming side.
+        #[arg(long)]
+        allow_delete: bool,
     },
     /// Write selected mirror scopes back to live .agents and .claude directories.
     Push {
@@ -372,18 +427,33 @@ pub(super) enum SyncCommand {
         /// Push every configured scope.
         #[arg(long)]
         all: bool,
+        /// Allow incoming older or equal-mtime skill content to overwrite existing skills.
+        #[arg(long)]
+        allow_older: bool,
+        /// Allow pruning skills that are missing from the incoming side.
+        #[arg(long)]
+        allow_delete: bool,
     },
     /// Show read-only divergence for selected scopes.
     Status {
         /// Mirror scope to inspect. May be repeated.
         #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
         scope: Vec<String>,
+        /// Inspect every configured scope.
+        #[arg(long)]
+        all: bool,
+        /// Output format.
+        #[arg(long, default_value = "text")]
+        format: StatusFormat,
     },
     /// Show file-level mirror/live diffs for selected scopes.
     Diff {
         /// Mirror scope to diff. May be repeated.
         #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
         scope: Vec<String>,
+        /// Diff every configured scope.
+        #[arg(long)]
+        all: bool,
     },
 }
 

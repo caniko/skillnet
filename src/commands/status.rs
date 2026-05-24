@@ -1,10 +1,19 @@
 use anyhow::Result;
+use std::io::Write;
 
 use super::{sync, Context};
-use crate::cli::configured_scopes;
+use crate::{cli::args::StatusFormat, cli::Scope};
 
-pub fn run(ctx: &Context) -> Result<()> {
-    let scopes = configured_scopes(&ctx.config);
+pub fn run(ctx: &Context, scopes: &[Scope], format: StatusFormat) -> Result<()> {
+    if format == StatusFormat::Json {
+        let summaries = sync::status_summaries(ctx, scopes)?;
+        let stdout = std::io::stdout();
+        let mut handle = stdout.lock();
+        sync::print_summary_json(&summaries, &mut handle)?;
+        writeln!(handle)?;
+        return Ok(());
+    }
+
     let names = scopes
         .iter()
         .map(ToString::to_string)
@@ -15,7 +24,7 @@ pub fn run(ctx: &Context) -> Result<()> {
 
     println!();
     println!("sync:");
-    for summary in sync::status_summaries(ctx, &scopes)? {
+    for summary in sync::status_summaries(ctx, scopes)? {
         let state = match summary.state {
             sync::ScopeState::Clean => "clean".to_string(),
             sync::ScopeState::Diverged(count) => format!("diverged ({count} files)"),

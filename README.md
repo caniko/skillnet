@@ -194,6 +194,37 @@ skillnet skill list --scope global
 skillnet catalog generate
 ```
 
+If a selected mirror scope is already dirty inside the destination Git repo and
+you want `sync pull` to auto-commit that existing scope-local work before
+pulling, enable the sync setting:
+
+```toml
+[sync]
+auto_commit_dirty_destination = true
+codex_model = "gpt-5.4-mini"
+codex_reasoning_effort = "medium"
+```
+
+You can override it per run with:
+
+```sh
+skillnet sync pull --scope global --auto-commit-dirty-destination
+skillnet sync pull --scope global --no-auto-commit-dirty-destination
+skillnet sync pull --scope global --codex-model gpt-5.3-codex --codex-reasoning-effort high
+```
+
+Run the common pull-then-push workflow with `roundtrip`, or check it without
+mutating destinations:
+
+```sh
+skillnet sync roundtrip --scope global
+skillnet sync roundtrip --all --check
+```
+
+Sync is newer-only by default: older incoming skills are skipped and
+destination-only skills are preserved. Use `--allow-older` or `--allow-delete`
+only when you explicitly want those overwrites or removals.
+
 Calibration commands are available under the dedicated command group:
 
 ```sh

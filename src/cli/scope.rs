@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
-use std::{fmt, str::FromStr};
+use std::{env, fmt, path::PathBuf, str::FromStr};
 
 use anyhow::{anyhow, bail, Result};
 use clap::builder::PossibleValuesParser;
 
-use crate::config::Config;
+use crate::config::{expand_path, Config};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Scope {
@@ -95,6 +95,42 @@ pub fn resolve_scopes(config: &Config, scope_args: &[String], all: bool) -> Resu
         }
     }
     Ok(scopes)
+}
+
+pub fn detect_from_cwd(config: &Config) -> Option<Scope> {
+    let cwd = env::current_dir().ok()?.canonicalize().ok()?;
+    let mut match_candidate: Option<(&str, PathBuf)> = None;
+
+    for project in &config.projects {
+        let Ok(path) = expand_path(&project.path) else {
+            continue;
+        };
+        let Ok(path) = path.canonicalize() else {
+            continue;
+        };
+        if !cwd.starts_with(&path) {
+            continue;
+        }
+
+        match &match_candidate {
+            None => match_candidate = Some((&project.name, path)),
+            Some((_, current_path))
+                if path.components().count() > current_path.components().count() =>
+            {
+                match_candidate = Some((&project.name, path));
+            }
+            Some((_, current_path)) if path == *current_path => {
+                eprintln!(
+                    "warning: multiple projects share path {}; cannot auto-detect scope",
+                    path.display()
+                );
+                return None;
+            }
+            _ => {}
+        }
+    }
+
+    match_candidate.map(|(name, _)| Scope::Project(name.to_string()))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
