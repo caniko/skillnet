@@ -260,18 +260,20 @@ fn extract_routing_tier(raw: &str) -> Option<String> {
 
 fn extract_section<'a>(raw: &'a str, heading: &str) -> Option<&'a str> {
     let mut in_section = false;
-    let mut start = 0;
-    for (index, line) in raw.char_indices() {
+    let mut start = 0_usize;
+    let mut offset = 0_usize;
+    for line in raw.lines() {
         if line.starts_with("## ") {
             if in_section {
-                return Some(raw[start..index].trim());
+                return Some(raw[start..offset].trim());
             }
             let title = line.trim_start_matches('#').trim();
             if title.eq_ignore_ascii_case(heading) {
                 in_section = true;
-                start = index + line.len();
+                start = offset + line.len();
             }
         }
+        offset += line.len() + 1;
     }
     in_section.then(|| raw[start..].trim())
 }
@@ -339,11 +341,11 @@ fn max_chain_depth(phases: &[PhaseInputs]) -> anyhow::Result<u32> {
         .collect::<BTreeMap<_, _>>();
     let mut memo = BTreeMap::new();
     let mut visiting = BTreeSet::new();
-    phases
-        .iter()
-        .map(|phase| depth(phase.ordinal, &by_ordinal, &mut memo, &mut visiting))
-        .max()
-        .unwrap_or(Ok(0))
+    let mut max_depth = 0;
+    for phase in phases {
+        max_depth = max_depth.max(depth(phase.ordinal, &by_ordinal, &mut memo, &mut visiting)?);
+    }
+    Ok(max_depth)
 }
 
 fn depth(
@@ -361,12 +363,10 @@ fn depth(
     let phase = phases
         .get(&ordinal)
         .with_context(|| format!("phase {ordinal} referenced as dependency but is missing"))?;
-    let max_dep = phase
-        .depends_on
-        .iter()
-        .map(|dep| depth(*dep, phases, memo, visiting))
-        .max()
-        .unwrap_or(Ok(0))?;
+    let mut max_dep = 0;
+    for dep in &phase.depends_on {
+        max_dep = max_dep.max(depth(*dep, phases, memo, visiting)?);
+    }
     visiting.remove(&ordinal);
     let value = max_dep + 1;
     memo.insert(ordinal, value);

@@ -10,8 +10,7 @@ use uuid::Uuid;
 
 use super::{
     catalog::ThresholdStore,
-    eval, meta_cmd, plan_parser,
-    shape_hash,
+    eval, meta_cmd, plan_parser, shape_hash,
     sidecar::{PhaseRecord, PlanRecord, Sidecar, TriggerRecord},
     Db,
 };
@@ -73,11 +72,13 @@ pub fn build_sidecar(db: &Db, plan_dir: &Path, force: bool) -> anyhow::Result<Si
             name: plan.name.clone(),
             flavor: plan.flavor.clone(),
             worktype: plan.worktype.clone(),
-            created_at: previous
-                .as_ref()
-                .map(|sidecar| sidecar.plan.created_at)
-                .transpose()
-                .unwrap_or_else(unix_timestamp)?,
+            created_at: if let Some(created_at) =
+                previous.as_ref().map(|sidecar| sidecar.plan.created_at)
+            {
+                created_at
+            } else {
+                unix_timestamp()?
+            },
             phase_count: plan.phase_count,
             wave_count: plan.wave_count,
             max_chain_depth: plan.max_chain_depth,
@@ -97,10 +98,7 @@ pub fn build_sidecar(db: &Db, plan_dir: &Path, force: bool) -> anyhow::Result<Si
             })
             .collect(),
         meta_heuristics_fired: meta.fired,
-        tags: previous
-            .as_ref()
-            .map(|sidecar| sidecar.tags.clone())
-            .unwrap_or_else(|| auto_tags(&plan)),
+        tags: merged_tags(&plan, previous.as_ref()),
         verify: previous.and_then(|sidecar| sidecar.verify),
     };
     Ok(sidecar)
@@ -116,6 +114,17 @@ fn load_existing_sidecar(plan_dir: &Path) -> anyhow::Result<Option<Sidecar>> {
     serde_json::from_str(&raw)
         .map(Some)
         .with_context(|| format!("malformed existing sidecar {}", path.display()))
+}
+
+fn merged_tags(
+    plan: &super::catalog::PlanInputs,
+    previous: Option<&Sidecar>,
+) -> BTreeMap<String, String> {
+    let mut tags = auto_tags(plan);
+    if let Some(previous) = previous {
+        tags.extend(previous.tags.clone());
+    }
+    tags
 }
 
 fn auto_tags(plan: &super::catalog::PlanInputs) -> BTreeMap<String, String> {

@@ -42,11 +42,7 @@ pub struct HeuristicRow {
     pub section_added_template: Option<String>,
 }
 
-pub fn list(
-    db: &Db,
-    format: OutputFormat,
-    category: Option<CategoryFilter>,
-) -> anyhow::Result<()> {
+pub fn list(db: &Db, format: OutputFormat, category: Option<CategoryFilter>) -> anyhow::Result<()> {
     let store = ThresholdStore::load(db)?;
     let rows = rows(&store, category.map(CategoryFilter::category))?;
     match format {

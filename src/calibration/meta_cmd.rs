@@ -3,8 +3,7 @@ use serde::Serialize;
 
 use super::{
     catalog::{MetaHeuristicInputs, ThresholdStore, META_HEURISTICS},
-    eval,
-    plan_parser,
+    eval, plan_parser,
     sidecar::Sidecar,
     Db,
 };

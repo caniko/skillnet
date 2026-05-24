@@ -3,12 +3,17 @@ use anyhow::Result;
 use crate::{
     calibration::{self, Db},
     cli::args::{
-        AnalyzeFormat, CalibrationArgs, CalibrationCommand, Decision, ExportFormat, QueryFormat,
+        AnalyzeFormat, CalibrationArgs, CalibrationCommand, Decision, EvalFormat, ExportFormat,
+        HeuristicCategoryArg, HeuristicsCommand, HeuristicsFormat, QueryFormat,
     },
     config::DbTarget,
 };
 
 pub fn run(args: CalibrationArgs, target: DbTarget) -> Result<()> {
+    if let CalibrationCommand::ShapeHash { plan_dir } = &args.command {
+        return calibration::shape_hash::run(plan_dir.as_std_path());
+    }
+
     let mut db = open_db(target)?;
     match args.command {
         CalibrationCommand::Record { plan_dir } => {
@@ -17,6 +22,40 @@ pub fn run(args: CalibrationArgs, target: DbTarget) -> Result<()> {
         CalibrationCommand::Verify { plan_dir } => {
             calibration::record::run_verify(plan_dir.as_std_path(), &mut db)
         }
+        CalibrationCommand::Init {
+            plan_dir,
+            stdout,
+            force,
+        } => calibration::init::run(
+            &db,
+            plan_dir.as_std_path(),
+            calibration::init::InitOptions { stdout, force },
+        ),
+        CalibrationCommand::Eval { plan_dir, format } => calibration::eval::run(
+            &db,
+            plan_dir.as_std_path(),
+            match format {
+                EvalFormat::Json => calibration::eval::OutputFormat::Json,
+                EvalFormat::Table => calibration::eval::OutputFormat::Table,
+            },
+        ),
+        CalibrationCommand::MetaHeuristics { plan_dir, sidecar } => calibration::meta_cmd::run(
+            &db,
+            plan_dir.as_std_path(),
+            sidecar.as_deref().map(camino::Utf8Path::as_std_path),
+        ),
+        CalibrationCommand::ShapeHash { .. } => unreachable!("handled before db open"),
+        CalibrationCommand::Heuristics { command } => match command {
+            HeuristicsCommand::List { format, category } => calibration::heuristics_cmd::list(
+                &db,
+                match format {
+                    HeuristicsFormat::Json => calibration::heuristics_cmd::OutputFormat::Json,
+                    HeuristicsFormat::Table => calibration::heuristics_cmd::OutputFormat::Table,
+                },
+                category.map(category_filter),
+            ),
+            HeuristicsCommand::Show { name } => calibration::heuristics_cmd::show(&db, &name),
+        },
         // PHASE 03 commands here
         CalibrationCommand::Tag { plan_id, tags } => {
             calibration::tag::add_tags(&mut db, &plan_id, &tags)
@@ -112,6 +151,19 @@ pub fn run(args: CalibrationArgs, target: DbTarget) -> Result<()> {
         CalibrationCommand::ExportChangelog { since } => {
             calibration::changelog::run(&db, since.as_deref())
         } // PHASE 04 commands here
+    }
+}
+
+fn category_filter(category: HeuristicCategoryArg) -> calibration::heuristics_cmd::CategoryFilter {
+    match category {
+        HeuristicCategoryArg::Coordination => {
+            calibration::heuristics_cmd::CategoryFilter::Coordination
+        }
+        HeuristicCategoryArg::Risk => calibration::heuristics_cmd::CategoryFilter::Risk,
+        HeuristicCategoryArg::PlanShape => calibration::heuristics_cmd::CategoryFilter::PlanShape,
+        HeuristicCategoryArg::QualityLint => {
+            calibration::heuristics_cmd::CategoryFilter::QualityLint
+        }
     }
 }
 

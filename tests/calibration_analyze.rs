@@ -359,10 +359,7 @@ fn proposal_decision_and_changelog_flow() {
     let json: Value = serde_json::from_slice(&output).unwrap();
     assert_eq!(json["triggers"][0]["default_threshold"], 4.0);
     assert_eq!(json["triggers"][0]["current_threshold"], 7.0);
-    assert_eq!(
-        json["triggers"][0]["threshold_source"]["type"],
-        "override"
-    );
+    assert_eq!(json["triggers"][0]["threshold_source"]["type"], "override");
 
     fixture
         .command()

@@ -3,8 +3,7 @@ use serde::Serialize;
 
 use super::{
     catalog::{PlanInputs, ThresholdSource, ThresholdStore, TriggerOutcome, HEURISTICS},
-    plan_parser,
-    Db,
+    plan_parser, Db,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -46,7 +45,10 @@ pub fn run(db: &Db, plan_dir: &std::path::Path, format: OutputFormat) -> anyhow:
     Ok(())
 }
 
-pub fn evaluate_triggers(plan: &PlanInputs, store: &ThresholdStore<'_>) -> anyhow::Result<Vec<EvalRow>> {
+pub fn evaluate_triggers(
+    plan: &PlanInputs,
+    store: &ThresholdStore<'_>,
+) -> anyhow::Result<Vec<EvalRow>> {
     HEURISTICS
         .iter()
         .copied()
