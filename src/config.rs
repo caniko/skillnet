@@ -21,8 +21,8 @@ pub struct Config {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum DatabaseBackend {
-    #[default]
     Sqlite,
+    #[default]
     Postgres,
 }
 
@@ -38,7 +38,7 @@ pub struct DatabaseConfig {
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
-            backend: DatabaseBackend::Sqlite,
+            backend: DatabaseBackend::Postgres,
             path: None,
             url: None,
         }
@@ -185,6 +185,15 @@ impl DatabaseConfig {
             return Ok(DbTarget::Postgres(url));
         }
 
+        if let Some(url) = non_empty(self.url.as_deref()) {
+            warn_url_wins_over_data_dir();
+            return Ok(DbTarget::Postgres(url.to_string()));
+        }
+
+        if let Some(path) = env_data_dir_path() {
+            return Ok(DbTarget::Sqlite(path));
+        }
+
         if self.backend == DatabaseBackend::Postgres {
             let url = non_empty(self.url.as_deref()).ok_or_else(|| {
                 anyhow!(
@@ -194,15 +203,6 @@ impl DatabaseConfig {
             })?;
             warn_url_wins_over_data_dir();
             return Ok(DbTarget::Postgres(url.to_string()));
-        }
-
-        if let Some(url) = non_empty(self.url.as_deref()) {
-            warn_url_wins_over_data_dir();
-            return Ok(DbTarget::Postgres(url.to_string()));
-        }
-
-        if let Some(path) = env_data_dir_path() {
-            return Ok(DbTarget::Sqlite(path));
         }
 
         if let Some(path) = non_empty(self.path.as_deref()) {
@@ -373,9 +373,13 @@ bogus = true
             DbTarget::Sqlite(temp.path().join("config.sqlite"))
         );
 
-        let default_cfg = DatabaseConfig::default();
+        let default_sqlite_cfg = DatabaseConfig {
+            backend: DatabaseBackend::Sqlite,
+            path: None,
+            url: None,
+        };
         assert_eq!(
-            default_cfg.resolve_db().unwrap(),
+            default_sqlite_cfg.resolve_db().unwrap(),
             DbTarget::Sqlite(
                 temp.path()
                     .join("xdg")
@@ -384,6 +388,12 @@ bogus = true
                     .join("calibration.sqlite")
             )
         );
+
+        let default_cfg = DatabaseConfig::default();
+        let err = default_cfg.resolve_db().unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("database.backend = \"postgres\" requires database.url"));
     }
 
     fn env_lock() -> &'static Mutex<()> {

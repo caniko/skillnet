@@ -15,7 +15,7 @@ in {
         pkgs.skillnet
         or (throw "programs.skillnet.package not set and pkgs.skillnet unavailable; pass a package explicitly");
       defaultText = lib.literalExpression "pkgs.skillnet or (throw ...)";
-      description = "The skillnet package to install. The Postgres database backend requires a skillnet build with the postgres feature enabled.";
+      description = "The skillnet package to install. Custom no-default-features builds need the postgres feature when using the Postgres database backend.";
     };
 
     dataDir = lib.mkOption {
@@ -24,10 +24,16 @@ in {
       description = "Root data directory for skillnet; per-skill calibration databases live under <dataDir>/<skill>/.";
     };
 
+    skillsRoot = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Optional root of the ai-skills checkout containing the skill mirror and calibration artifacts.";
+    };
+
     database = {
       backend = lib.mkOption {
         type = lib.types.enum ["sqlite" "postgres"];
-        default = "sqlite";
+        default = "postgres";
         description = "Calibration storage backend.";
       };
 
@@ -76,6 +82,18 @@ in {
 
     (lib.mkIf (cfg.database.backend == "postgres") {
       home.sessionVariables.SKILLNET_DATABASE_URL = cfg.database.url;
+    })
+
+    (lib.mkIf (cfg.skillsRoot != null) {
+      home.sessionVariables.AI_SKILLS_REPO = cfg.skillsRoot;
+
+      home.activation.skillnet-skills-root = lib.hm.dag.entryAfter ["writeBoundary"] ''
+        if [ ! -d ${lib.escapeShellArg cfg.skillsRoot} ]; then
+          echo "skillnet: configured programs.skillnet.skillsRoot does not exist: ${cfg.skillsRoot}" >&2
+          echo "skillnet: clone or restore the ai-skills checkout at that path before activating Home Manager." >&2
+          exit 1
+        fi
+      '';
     })
   ]);
 }

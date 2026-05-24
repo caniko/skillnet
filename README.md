@@ -25,15 +25,30 @@ inputs.skillnet.url = "git+ssh://git@codeberg.org/caniko/skillnet.git";
 
 # In your Home Manager config:
 imports = [ inputs.skillnet.hmModules.default ];
-programs.skillnet.enable = true;
+programs.skillnet = {
+  enable = true;
+  database.url = "postgres://user:password@db.example.com/skillnet";
+};
 ```
 
 The module is exported as both `hmModules.default` and `hmModules.skillnet`.
-It installs `skillnet` on `PATH`, creates the runtime data directory, and
-exports `skillnet_DATA_DIR` and `SKILLNET_DATA_DIR` for the CLI.
+It installs `skillnet` on `PATH`. When SQLite is selected, it also creates the
+runtime data directory and exports `skillnet_DATA_DIR` and `SKILLNET_DATA_DIR`
+for the CLI.
 
-SQLite is the default calibration backend. To use Postgres, select the backend
-and provide a connection URL:
+If you also want the module to define where the `ai-skills` checkout lives,
+set `skillsRoot`. On atlas, that path is:
+
+```nix
+programs.skillnet.skillsRoot = "/data/nvme0/can/Projects/ai-skills";
+```
+
+When configured, the module exports `AI_SKILLS_REPO` and activation fails if
+the checkout directory is missing. `skillsRoot` points at the skills checkout;
+`dataDir` remains skillnet's runtime database and cache location.
+
+Postgres is the default calibration backend and requires a connection URL.
+SQLite is also supported by selecting it explicitly:
 
 ```nix
 programs.skillnet = {
@@ -41,15 +56,14 @@ programs.skillnet = {
   package = inputs.skillnet.packages.${pkgs.system}.skillnet;
 
   database = {
-    backend = "postgres";
-    url = "postgres://user:password@db.example.com/skillnet";
+    backend = "sqlite";
   };
 };
 ```
 
-The Postgres backend requires a `skillnet` package built with the `postgres`
-feature. The module does not rewrite `programs.skillnet.package`; choose a
-package that matches the backend you enable.
+The Postgres backend is included in default builds. If you override
+`programs.skillnet.package` with a custom `--no-default-features` build, choose
+a package that includes the `postgres` feature when using the Postgres backend.
 
 The `database.url` value is written into the Nix store. For production secrets,
 prefer setting `SKILLNET_DATABASE_URL` through your usual secret mechanism, such
@@ -58,8 +72,12 @@ as `sops-nix`, `agenix`, or a shell-sourced environment file.
 Options:
 
 - `programs.skillnet.dataDir` defaults to `${config.xdg.dataHome}/skillnet`.
+  This is skillnet's runtime database and cache location.
+- `programs.skillnet.skillsRoot` optionally sets the `ai-skills` checkout root
+  and exports it as `AI_SKILLS_REPO`; atlas uses
+  `/data/nvme0/can/Projects/ai-skills`.
 - `programs.skillnet.database.backend` selects `sqlite` or `postgres` and
-  defaults to `sqlite`.
+  defaults to `postgres`.
 - `programs.skillnet.database.path` optionally sets the SQLite database path;
   when unset, calibration data lives at
   `<dataDir>/multi-phase-plan/calibration.sqlite`.
@@ -72,7 +90,14 @@ Options:
 
 ## Storage backends
 
-SQLite is the default calibration backend and needs no configuration:
+Postgres is the default calibration backend:
+
+```toml
+[database]
+url = "postgres://skillnet@localhost/skillnet"
+```
+
+SQLite is available by selecting it explicitly:
 
 ```toml
 [database]
@@ -85,13 +110,6 @@ The `path` key is optional. Without it, `skillnet` uses
 `$SKILLNET_DATA_DIR/multi-phase-plan/calibration.sqlite`, or
 `$XDG_DATA_HOME/skillnet/multi-phase-plan/calibration.sqlite`.
 
-Postgres support is optional and requires a binary built with the `postgres`
-feature:
-
-```sh
-cargo install skillnet --features postgres
-```
-
 Select Postgres with an environment variable:
 
 ```sh
@@ -103,7 +121,6 @@ Or with `skillnet.toml`:
 
 ```toml
 [database]
-backend = "postgres"
 url = "postgres://skillnet@localhost/skillnet"
 ```
 
@@ -114,7 +131,6 @@ programs.skillnet = {
   enable = true;
   package = inputs.skillnet.packages.${pkgs.system}.skillnet;
   database = {
-    backend = "postgres";
     url = "postgres://skillnet@localhost/skillnet";
   };
 };
