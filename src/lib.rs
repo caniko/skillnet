@@ -5,3 +5,14 @@
 //!
 //! The supported interface in `0.1.1` is the `skillnet` binary. This crate
 //! does not commit to a stable embeddable Rust API yet.
+
+mod cache;
+pub mod calibration;
+mod catalog;
+pub mod cli;
+mod commands;
+mod config;
+mod fs_ops;
+mod model;
+mod reconcile;
+mod vcs;

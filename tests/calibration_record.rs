@@ -49,6 +49,9 @@ impl Fixture {
     fn command(&self) -> Command {
         let mut command = Command::cargo_bin("skillnet").unwrap();
         command.env("skillnet_DATA_DIR", self.repo.path().join("data"));
+        command.env("SKILLNET_CONFIG", self.repo.path().join("skillnet.toml"));
+        command.env_remove("SKILLNET_DATABASE_URL");
+        command.env_remove("SKILLNET_DB_URL");
         command
     }
 

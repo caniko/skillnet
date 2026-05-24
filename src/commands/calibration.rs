@@ -116,7 +116,7 @@ pub fn run(args: CalibrationArgs, target: DbTarget) -> Result<()> {
 }
 
 fn open_db(target: DbTarget) -> Result<Db> {
-    match target {
+    let db = match target {
         DbTarget::Sqlite(path) => Db::open(&path),
         DbTarget::Postgres(_url) => {
             #[cfg(feature = "postgres")]
@@ -132,5 +132,7 @@ fn open_db(target: DbTarget) -> Result<Db> {
                 )
             }
         }
-    }
+    }?;
+    calibration::catalog::ThresholdStore::load(&db)?;
+    Ok(db)
 }

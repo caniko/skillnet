@@ -1,12 +1,19 @@
 pub mod analyze;
+pub mod catalog;
 pub mod changelog;
 pub mod db;
 pub mod decide;
+pub mod eval;
 pub mod format;
+pub mod heuristics_cmd;
 pub mod housekeeping;
+pub mod init;
+pub mod meta_cmd;
+pub mod plan_parser;
 pub mod propose;
 pub mod query;
 pub mod record;
+pub mod shape_hash;
 pub mod sidecar;
 pub mod tag;
 

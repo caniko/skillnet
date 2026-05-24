@@ -35,6 +35,9 @@ impl Fixture {
     fn command(&self) -> Command {
         let mut command = Command::cargo_bin("skillnet").unwrap();
         command.env("skillnet_DATA_DIR", self.repo.path().join("data"));
+        command.env("SKILLNET_CONFIG", self.repo.path().join("skillnet.toml"));
+        command.env_remove("SKILLNET_DATABASE_URL");
+        command.env_remove("SKILLNET_DB_URL");
         command
     }
 
@@ -254,9 +257,9 @@ fn proposal_decision_and_changelog_flow() {
         &conn,
         SeedRow {
             plan_id: "support-1".to_string(),
-            trigger: "T5",
+            trigger: "long-serial-chain",
             fired: true,
-            threshold: 6.0,
+            threshold: 4.0,
             flavor: "codex",
             worktype: "refactor",
             outcome: "shipped",
@@ -272,7 +275,7 @@ fn proposal_decision_and_changelog_flow() {
             "calibration",
             "propose",
             "--trigger",
-            "T5",
+            "long-serial-chain",
             "--new-threshold",
             "7",
             "--rationale",
@@ -300,7 +303,7 @@ fn proposal_decision_and_changelog_flow() {
         .args(["calibration", "proposals", "--pending"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("T5"))
+        .stdout(predicate::str::contains("long-serial-chain"))
         .stdout(predicate::str::contains("pending"));
 
     fixture
@@ -322,8 +325,44 @@ fn proposal_decision_and_changelog_flow() {
         .args(["calibration", "proposals", "--accepted"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("T5"))
+        .stdout(predicate::str::contains("long-serial-chain"))
         .stdout(predicate::str::contains("accepted"));
+
+    let conn = fixture.conn();
+    let threshold_row: (f64, String) = conn
+        .query_row(
+            "SELECT threshold, updated_by
+             FROM heuristic_thresholds
+             WHERE name = 'long-serial-chain'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(threshold_row, (7.0, "proposal:1".to_string()));
+    drop(conn);
+
+    let output = fixture
+        .command()
+        .args([
+            "calibration",
+            "analyze",
+            "--trigger",
+            "long-serial-chain",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let json: Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(json["triggers"][0]["default_threshold"], 4.0);
+    assert_eq!(json["triggers"][0]["current_threshold"], 7.0);
+    assert_eq!(
+        json["triggers"][0]["threshold_source"]["source"],
+        "override"
+    );
 
     fixture
         .command()
@@ -345,7 +384,7 @@ fn proposal_decision_and_changelog_flow() {
         .assert()
         .success()
         .stdout(predicate::str::contains("### "))
-        .stdout(predicate::str::contains("T5: 6 → 7"))
+        .stdout(predicate::str::contains("long-serial-chain: 4 → 7"))
         .stdout(predicate::str::contains(
             "- **Rationale**: accepted after review",
         ))

@@ -21,17 +21,31 @@ mod db_postgres;
 
 const DB_FILE: &str = "calibration.sqlite";
 const SKILL_NAME: &str = "multi-phase-plan";
-const MIGRATIONS: &[(i64, &str, &str)] = &[(
-    1,
-    "001-initial.sql",
-    include_str!("../../data/multi-phase-plan/schema/001-initial.sql"),
-)];
+const MIGRATIONS: &[(i64, &str, &str)] = &[
+    (
+        1,
+        "001-initial.sql",
+        include_str!("../../data/multi-phase-plan/schema/001-initial.sql"),
+    ),
+    (
+        2,
+        "002-heuristic-thresholds.sql",
+        include_str!("../../data/multi-phase-plan/schema/002-heuristic-thresholds.sql"),
+    ),
+];
 #[cfg(feature = "postgres")]
-const POSTGRES_MIGRATIONS: &[(i64, &str, &str)] = &[(
-    1,
-    "001-initial.sql",
-    include_str!("../../data/multi-phase-plan/schema-pg/001-initial.sql"),
-)];
+const POSTGRES_MIGRATIONS: &[(i64, &str, &str)] = &[
+    (
+        1,
+        "001-initial.sql",
+        include_str!("../../data/multi-phase-plan/schema-pg/001-initial.sql"),
+    ),
+    (
+        2,
+        "002-heuristic-thresholds.sql",
+        include_str!("../../data/multi-phase-plan/schema-pg/002-heuristic-thresholds.sql"),
+    ),
+];
 
 pub struct Db {
     backend: Backend,
@@ -129,20 +143,16 @@ impl Db {
             .join(DB_FILE)
     }
 
-    pub fn execute(&mut self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<usize> {
-        match &mut self.backend {
+    pub fn execute(&self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<usize> {
+        match &self.backend {
             Backend::Sqlite(conn) => sqlite_execute(conn, sql, params),
             #[cfg(feature = "postgres")]
             Backend::Postgres(backend) => backend.execute(sql, params),
         }
     }
 
-    pub fn execute_returning_id(
-        &mut self,
-        sql: &str,
-        params: &[DbParam<'_>],
-    ) -> anyhow::Result<i64> {
-        match &mut self.backend {
+    pub fn execute_returning_id(&self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<i64> {
+        match &self.backend {
             Backend::Sqlite(conn) => {
                 sqlite_execute(conn, sql, params)?;
                 Ok(conn.last_insert_rowid())

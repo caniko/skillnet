@@ -1,5 +1,39 @@
 //! Analyze verified calibration rows and generate threshold recommendations.
 //!
+//! Calibration analysis output schema (SemVer-stable since 0.4.0):
+//!
+//! ```json
+//! {
+//!   "schema_version": 1,
+//!   "analyzed_at": "YYYY-MM-DD HH:MM:SS",
+//!   "min_n": 10,
+//!   "dataset_size": 0,
+//!   "filter_tags": [{"key": "flavor", "value": "codex"}],
+//!   "filter_tags_applied": [{"key": "flavor", "value": "codex"}],
+//!   "triggers": [{
+//!     "trigger": "long-serial-chain",
+//!     "fires": 2,
+//!     "misses": 1,
+//!     "fire_rate": 0.6666666666666666,
+//!     "signal_rate": 0.5,
+//!     "verdict": "hold",
+//!     "default_threshold": 4.0,
+//!     "current_threshold": 4.0,
+//!     "threshold_source": {"type": "default"},
+//!     "true_positives": 2,
+//!     "false_positives": 0,
+//!     "false_negatives": 1,
+//!     "true_negatives": 0,
+//!     "supporting_plan_ids": []
+//!   }],
+//!   "proposals": [],
+//!   "skew_warnings": []
+//! }
+//! ```
+//!
+//! See `docs/src/calibration/json-schema.md` for the canonical field
+//! reference and SemVer commitment.
+//!
 //! The analyzer scores only plans that have a verification row. For each
 //! trigger `T`:
 //!
@@ -39,7 +73,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::Context;
 use serde::Serialize;
 
-use super::{db::DbParam as P, Db};
+use super::{
+    catalog::{ThresholdSource, ThresholdStore},
+    db::DbParam as P,
+    Db,
+};
+
+const ANALYZE_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug)]
 pub struct AnalyzeOptions {
@@ -56,8 +96,12 @@ pub enum OutputFormat {
 
 #[derive(Debug, Serialize)]
 pub struct AnalyzeReport {
+    pub schema_version: u32,
+    pub analyzed_at: String,
     pub min_n: u32,
+    pub dataset_size: u32,
     pub filter_tags: Vec<TagFilter>,
+    pub filter_tags_applied: Vec<TagFilter>,
     pub triggers: Vec<TriggerAnalysis>,
     pub proposals: Vec<ThresholdProposal>,
     pub skew_warnings: Vec<SkewWarning>,
@@ -77,7 +121,9 @@ pub struct TriggerAnalysis {
     pub fire_rate: f64,
     pub signal_rate: Option<f64>,
     pub verdict: String,
+    pub default_threshold: Option<f64>,
     pub current_threshold: Option<f64>,
+    pub threshold_source: Option<ThresholdSource>,
     pub true_positives: u32,
     pub false_positives: u32,
     pub false_negatives: u32,
@@ -134,7 +180,9 @@ struct RawStats {
     misses: u32,
     fire_rate: f64,
     signal_rate: f64,
+    default_threshold: Option<f64>,
     current_threshold: Option<f64>,
+    threshold_source: Option<ThresholdSource>,
     true_positives: u32,
     false_positives: u32,
     false_negatives: u32,
@@ -155,6 +203,7 @@ pub fn run(db: &Db, options: AnalyzeOptions, format: OutputFormat) -> anyhow::Re
 }
 
 pub fn analyze(db: &Db, options: &AnalyzeOptions) -> anyhow::Result<AnalyzeReport> {
+    let thresholds = ThresholdStore::load(db)?;
     let tags = load_tags(db)?;
     let rows = load_rows(db, options, &tags)?;
     let mut by_trigger: BTreeMap<String, Vec<TriggerRow>> = BTreeMap::new();
@@ -165,7 +214,12 @@ pub fn analyze(db: &Db, options: &AnalyzeOptions) -> anyhow::Result<AnalyzeRepor
     let mut triggers = Vec::new();
     let mut proposals = Vec::new();
     for (trigger, rows) in by_trigger {
-        let raw = compute_raw_stats(&trigger, &rows);
+        let mut raw = compute_raw_stats(&trigger, &rows);
+        if let Some(active_threshold) = thresholds.get_optional(&trigger) {
+            raw.default_threshold = thresholds.default_threshold(&trigger);
+            raw.current_threshold = Some(active_threshold);
+            raw.threshold_source = thresholds.source(&trigger);
+        }
         let (analysis, proposal) = finalize_stats(raw, options.min_n);
         if let Some(proposal) = proposal {
             proposals.push(proposal);
@@ -179,20 +233,35 @@ pub fn analyze(db: &Db, options: &AnalyzeOptions) -> anyhow::Result<AnalyzeRepor
         Vec::new()
     };
 
+    let filter_tags = options
+        .filter_tags
+        .iter()
+        .map(|(key, value)| TagFilter {
+            key: key.clone(),
+            value: value.clone(),
+        })
+        .collect::<Vec<_>>();
+    let dataset_size = triggers
+        .iter()
+        .map(|trigger| trigger.fires + trigger.misses)
+        .sum();
+
     Ok(AnalyzeReport {
+        schema_version: ANALYZE_SCHEMA_VERSION,
+        analyzed_at: analyzed_at(db)?,
         min_n: options.min_n,
-        filter_tags: options
-            .filter_tags
-            .iter()
-            .map(|(key, value)| TagFilter {
-                key: key.clone(),
-                value: value.clone(),
-            })
-            .collect(),
+        dataset_size,
+        filter_tags: filter_tags.clone(),
+        filter_tags_applied: filter_tags,
         triggers,
         proposals,
         skew_warnings,
     })
+}
+
+fn analyzed_at(db: &Db) -> anyhow::Result<String> {
+    db.query_one("SELECT CURRENT_TIMESTAMP", &[], |row| row.get_string(0))
+        .context("failed to compute analysis timestamp")
 }
 
 pub fn latest_threshold(
@@ -200,6 +269,11 @@ pub fn latest_threshold(
     trigger: &str,
     filter_tags: &[(String, String)],
 ) -> anyhow::Result<Option<f64>> {
+    let thresholds = ThresholdStore::load(db)?;
+    if let Some(threshold) = thresholds.get_optional(trigger) {
+        return Ok(Some(threshold));
+    }
+
     let tags = load_tags(db)?;
     let rows = load_rows(
         db,
@@ -357,6 +431,8 @@ fn compute_raw_stats(trigger: &str, rows: &[TriggerRow]) -> RawStats {
             .iter()
             .max_by_key(|row| row.created_at)
             .map(|row| row.threshold),
+        default_threshold: None,
+        threshold_source: None,
         true_positives,
         false_positives,
         false_negatives,
@@ -377,6 +453,8 @@ fn finalize_stats(raw: RawStats, min_n: u32) -> (TriggerAnalysis, Option<Thresho
             misses: raw.misses,
             fire_rate: raw.fire_rate,
             current_threshold: raw.current_threshold,
+            default_threshold: raw.default_threshold,
+            threshold_source: raw.threshold_source,
             true_positives: raw.true_positives,
             false_positives: raw.false_positives,
             false_negatives: raw.false_negatives,
@@ -429,6 +507,8 @@ fn finalize_stats(raw: RawStats, min_n: u32) -> (TriggerAnalysis, Option<Thresho
         signal_rate: Some(raw.signal_rate),
         verdict,
         current_threshold: raw.current_threshold,
+        default_threshold: raw.default_threshold,
+        threshold_source: raw.threshold_source,
         true_positives: raw.true_positives,
         false_positives: raw.false_positives,
         false_negatives: raw.false_negatives,

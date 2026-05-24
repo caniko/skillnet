@@ -4,6 +4,8 @@
 - [Quick Start](quickstart.md)
 - [Command Surface](commands.md)
 - [Calibration](calibration.md)
+  - [Calibration JSON schema](calibration/json-schema.md)
+  - [Verifier surprises convention](calibration/surprises.md)
 - [Release And Maintenance](release.md)
 - [Plan — Postgres + HM module](planning/postgres-and-hm-module/README.md)
   - [01 — DB backend abstraction](planning/postgres-and-hm-module/01-db-backend-abstraction.md)

@@ -21,7 +21,7 @@ use crate::{
 use args::{CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, SyncCommand};
 use scope::{resolve_scope, resolve_scopes};
 
-pub(crate) fn run() -> Result<()> {
+pub fn run() -> Result<()> {
     let Cli {
         config,
         mirror_root,
