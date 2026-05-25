@@ -6,8 +6,8 @@ use clap_complete::Shell;
 #[command(
     name = "skillnet",
     version,
-    about = "Reconcile and manage AI skills",
-    long_about = "Reconcile AI skill directories from live agent sources into a mirror, edit mirrored skills, and materialise configured skill view symlinks.",
+    about = "Manage canonical AI skill stores and derived views",
+    long_about = "Manage canonical AI skill stores, materialise configured skill view symlinks, and record calibration data for multi-phase-plan.",
     subcommand_required = false,
     arg_required_else_help = false,
     disable_help_subcommand = true
@@ -63,11 +63,6 @@ pub(super) enum Command {
         /// Shell to generate completions for.
         shell: Shell,
     },
-    /// Pull from live sources and run legacy roundtrip checks.
-    Sync {
-        #[command(subcommand)]
-        command: SyncCommand,
-    },
     /// Materialise and inspect global view symlinks.
     View {
         #[command(subcommand)]
@@ -78,7 +73,7 @@ pub(super) enum Command {
         #[command(subcommand)]
         command: SkillCommand,
     },
-    /// Inspect configured mirror scopes and their live sources.
+    /// Inspect configured canonical scopes.
     Scope {
         #[command(subcommand)]
         command: ScopeCommand,
@@ -426,60 +421,6 @@ fn valid_tag_key(key: &str) -> bool {
 
 #[derive(Debug, Subcommand)]
 #[command(disable_help_subcommand = true)]
-pub(super) enum SyncCommand {
-    /// Read live sources and rebuild selected mirror scopes.
-    Pull {
-        /// Mirror scope to pull. May be repeated.
-        #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
-        scope: Vec<String>,
-        /// Pull every configured scope.
-        #[arg(long)]
-        all: bool,
-        /// Push selected mirror scopes after a successful pull.
-        #[arg(long)]
-        then_push: bool,
-        /// Auto-commit selected-scope dirty mirror paths with Codex before pulling.
-        #[arg(long, conflicts_with = "no_auto_commit_dirty_destination")]
-        auto_commit_dirty_destination: bool,
-        /// Disable Codex auto-commit for this run even if config enables it.
-        #[arg(long, conflicts_with = "auto_commit_dirty_destination")]
-        no_auto_commit_dirty_destination: bool,
-        /// Codex model to use when auto-committing a dirty destination.
-        #[arg(long, value_name = "MODEL")]
-        codex_model: Option<String>,
-        /// Codex reasoning effort to use when auto-committing a dirty destination.
-        #[arg(long, value_name = "EFFORT")]
-        codex_reasoning_effort: Option<String>,
-        /// Allow incoming older or equal-mtime skill content to overwrite existing skills.
-        #[arg(long)]
-        allow_older: bool,
-        /// Allow pruning skills that are missing from the incoming side.
-        #[arg(long)]
-        allow_delete: bool,
-    },
-    /// Pull selected scopes and then run the legacy roundtrip flow.
-    Roundtrip {
-        /// Mirror scope to roundtrip. May be repeated.
-        #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
-        scope: Vec<String>,
-        /// Roundtrip every configured scope.
-        #[arg(long)]
-        all: bool,
-        /// Compute would-push diffs without mutating any destination.
-        /// Exits non-zero if any destination would change.
-        #[arg(long)]
-        check: bool,
-        /// Allow incoming older or equal-mtime skill content to overwrite existing skills.
-        #[arg(long)]
-        allow_older: bool,
-        /// Allow pruning skills that are missing from the incoming side.
-        #[arg(long)]
-        allow_delete: bool,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-#[command(disable_help_subcommand = true)]
 pub(super) enum ViewCommand {
     /// Materialise configured global view symlinks.
     Sync {
@@ -564,7 +505,7 @@ pub(super) enum SkillCommand {
     },
     /// Move one mirrored skill to another scope or scope/name destination.
     Move {
-        /// Source skill path as <scope>/<skill>.
+        /// Original skill path as <scope>/<skill>.
         from: String,
         /// Destination scope, optionally with a new name as <scope>/<name>.
         to: String,
@@ -579,12 +520,6 @@ pub(super) enum SkillCommand {
 pub(super) enum ScopeCommand {
     /// List configured mirror scopes.
     List,
-    /// Print configured live source directories for one scope or all scopes.
-    Sources {
-        /// Mirror scope to inspect.
-        #[arg(long, value_name = "SCOPE")]
-        scope: Option<String>,
-    },
 }
 
 #[derive(Debug, Subcommand)]

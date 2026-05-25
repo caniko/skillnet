@@ -1,15 +1,20 @@
 use anyhow::Result;
+use serde::Serialize;
 use std::io::Write;
 
-use super::{sync, Context};
-use crate::{cli::args::StatusFormat, cli::Scope};
+use super::Context;
+use crate::{
+    cli::{args::StatusFormat, Scope},
+    model::{Target, TargetScope},
+};
 
 pub fn run(ctx: &Context, scopes: &[Scope], format: StatusFormat) -> Result<()> {
+    let rows = status_rows(ctx, scopes)?;
+
     if format == StatusFormat::Json {
-        let summaries = sync::status_summaries(ctx, scopes)?;
         let stdout = std::io::stdout();
         let mut handle = stdout.lock();
-        sync::print_summary_json(&summaries, &mut handle)?;
+        serde_json::to_writer_pretty(&mut handle, &rows)?;
         writeln!(handle)?;
         return Ok(());
     }
@@ -23,17 +28,16 @@ pub fn run(ctx: &Context, scopes: &[Scope], format: StatusFormat) -> Result<()> 
     println!("scopes: {} ({names})", scopes.len());
 
     println!();
-    println!("sync:");
-    for summary in sync::status_summaries(ctx, scopes)? {
-        let state = match summary.state {
-            sync::ScopeState::Clean => "clean".to_string(),
-            sync::ScopeState::Diverged(count) => format!("diverged ({count} files)"),
+    println!("views:");
+    for row in &rows {
+        let state = if row.drift_entries == 0 {
+            "clean".to_string()
+        } else {
+            format!("drift ({} entries)", row.drift_entries)
         };
         println!(
-            "{}  {}  last-pulled {}",
-            summary.scope,
-            state,
-            sync::relative_time(summary.last_pulled_at)
+            "{}  {}  canonical {}  skills {}",
+            row.scope, state, row.canonical_path, row.skill_count
         );
     }
 
@@ -43,10 +47,38 @@ pub fn run(ctx: &Context, scopes: &[Scope], format: StatusFormat) -> Result<()> 
     println!();
     print_catalog_health(ctx);
 
-    println!();
-    print_cache_health(ctx);
-
     Ok(())
+}
+
+fn status_rows(ctx: &Context, scopes: &[Scope]) -> Result<Vec<StatusRow>> {
+    ctx.targets(scopes)?
+        .into_iter()
+        .map(status_row)
+        .collect::<Result<Vec<_>>>()
+}
+
+fn status_row(target: Target) -> Result<StatusRow> {
+    let skill_count = crate::mirror::mirror_skill_dirs(&target.canonical_path)
+        .map(|skills| skills.len())
+        .unwrap_or(0);
+    let drift_entries = match target.scope {
+        TargetScope::Global => target
+            .views
+            .iter()
+            .map(|view| crate::view::view_status(&target.canonical_path, view).map(|d| d.len()))
+            .sum::<Result<usize>>()?,
+        TargetScope::Project => crate::view::project_status(&target)?.len(),
+    };
+    Ok(StatusRow {
+        scope: target.name,
+        kind: match target.scope {
+            TargetScope::Global => "global",
+            TargetScope::Project => "project",
+        },
+        canonical_path: target.canonical_path.to_string(),
+        skill_count,
+        drift_entries,
+    })
 }
 
 fn print_destination_health(ctx: &Context) {
@@ -98,15 +130,11 @@ fn print_catalog_health(ctx: &Context) {
     }
 }
 
-fn print_cache_health(ctx: &Context) {
-    let (path, cache, modified) = sync::cache_metadata(ctx);
-    if cache.stamps.is_empty() {
-        println!("cache: {path} no cache yet (run `skillnet sync pull`)");
-    } else {
-        println!(
-            "cache: {} last updated {}",
-            path,
-            sync::relative_time(modified)
-        );
-    }
+#[derive(Serialize)]
+struct StatusRow {
+    scope: String,
+    kind: &'static str,
+    canonical_path: String,
+    skill_count: usize,
+    drift_entries: usize,
 }

@@ -13,15 +13,12 @@ use crate::{
     catalog, commands,
     config::{
         default_catalog_config_path, default_config_path, expand_path, legacy_catalog_config_path,
-        legacy_config_path, Config, DbOverrides, SyncOverrides,
+        legacy_config_path, Config, DbOverrides,
     },
 };
 use crate::{commands::Context, exit::ExitError};
 
-use args::{
-    CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, SyncCommand,
-    ViewCommand,
-};
+use args::{CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, ViewCommand};
 use scope::{resolve_scope, resolve_scopes};
 
 pub fn run() -> Result<()> {
@@ -88,7 +85,6 @@ pub fn run() -> Result<()> {
                 Err(ExitError::parity_lint("parity lint findings").into())
             }
         }
-        Command::Sync { command } => run_sync_command(&ctx, command),
         Command::View { command } => run_view_command(&ctx, command),
         Command::Skill { command } => run_skill_command(&ctx, command),
         Command::Scope { command } => run_scope_command(&ctx, command),
@@ -154,65 +150,6 @@ pub(crate) fn resolve_mirror_root(
         Some(raw) if !raw.trim().is_empty() => expand_path(raw)
             .with_context(|| format!("failed to resolve configured destination root `{raw}`")),
         _ => Ok(Utf8PathBuf::from(".")),
-    }
-}
-
-fn run_sync_command(ctx: &Context, command: SyncCommand) -> Result<()> {
-    match command {
-        SyncCommand::Pull {
-            scope,
-            all,
-            then_push,
-            auto_commit_dirty_destination,
-            no_auto_commit_dirty_destination,
-            codex_model,
-            codex_reasoning_effort,
-            allow_older,
-            allow_delete,
-        } => {
-            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
-            let auto_commit_dirty_destination = if auto_commit_dirty_destination {
-                Some(true)
-            } else if no_auto_commit_dirty_destination {
-                Some(false)
-            } else {
-                None
-            };
-            commands::sync::pull(
-                ctx,
-                &scopes,
-                commands::sync::PullOptions {
-                    then_push,
-                    sync_overrides: SyncOverrides {
-                        auto_commit_dirty_destination,
-                        codex_model,
-                        codex_reasoning_effort,
-                    },
-                    write_options: crate::reconcile::WriteOptions {
-                        allow_older,
-                        allow_delete,
-                    },
-                },
-            )
-        }
-        SyncCommand::Roundtrip {
-            scope,
-            all,
-            check,
-            allow_older,
-            allow_delete,
-        } => {
-            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
-            commands::sync::roundtrip(
-                ctx,
-                &scopes,
-                check,
-                crate::reconcile::WriteOptions {
-                    allow_older,
-                    allow_delete,
-                },
-            )
-        }
     }
 }
 
@@ -313,13 +250,6 @@ fn run_skill_command(ctx: &Context, command: SkillCommand) -> Result<()> {
 fn run_scope_command(ctx: &Context, command: ScopeCommand) -> Result<()> {
     match command {
         ScopeCommand::List => commands::targets(ctx),
-        ScopeCommand::Sources { scope } => {
-            let scopes = match scope {
-                Some(scope) => vec![resolve_scope(&ctx.config, &scope)?],
-                None => configured_scopes(&ctx.config),
-            };
-            commands::sources(ctx, &scopes)
-        }
     }
 }
 

@@ -1,75 +1,56 @@
-# Migration: skillnet CLI rebuild
+# Migration: Option B canonical stores
 
-## TL;DR
+`skillnet 0.5.0` removes reconcile source arbitration and the `skillnet sync`
+command group. Each scope has one canonical store. Agent directories are
+derived views materialised from that store.
 
-The CLI tree was reorganized around what you're acting on: `sync`, `skill`, `scope`, `project`, `catalog`. Every old verb maps to one new verb. No hidden aliases - old invocations error.
+## Removed legacy config fields
 
-## 0.2.x storage backends
+These fields are rejected when loading `skillnet.toml`:
 
-`0.2.x` adds optional Postgres support behind the `postgres` Cargo feature.
-SQLite remains the default calibration backend, so existing users do not need
-to migrate data or change configuration.
+- `[global].sources`
+- `[global].sync_paths`
+- `[global].stale_codex_skill_paths`
+- `project_source_rules`
+- `extra_sources`
+- `[sync]` auto-commit settings for removed pull workflows
 
-## Removed top-level shortcuts
+## Replacement schema
 
-| Old | New |
-|---|---|
-| `skillnet reconcile` | `skillnet sync pull` |
-| `skillnet reconcile --sync` | `skillnet sync pull --then-push` |
-| `skillnet sync` | `skillnet sync push` |
-| `skillnet delete <s> <k>` | `skillnet skill delete <s>/<k>` |
-| `skillnet rename <s> <o> <n>` | `skillnet skill rename <s>/<o> <n>` |
-| `skillnet move <fs> <k> <ts>` | `skillnet skill move <fs>/<k> <ts>` |
-| `skillnet globalize <p> <k>` | `skillnet skill move <p>/<k> global` |
-| `skillnet deglobalize <k> <p>` | `skillnet skill move global/<k> <p>` |
-| `skillnet list` | `skillnet skill list` |
-| `skillnet targets` | `skillnet scope list` |
-| `skillnet sources --target X` | `skillnet scope sources --scope X` |
-| `skillnet project ...` | unchanged |
+Global skills live in `global/` under `mirror_root` by default, or in
+`[global].canonical_path` when set. Configure every generated global view under
+`[global].views`:
 
-## Removed namespaces
-
-- `skillnet mirror <verb>` - every verb moved under `sync`, `skill`, or `scope` as above.
-- `skillnet toml project <verb>` - moved to top-level `skillnet project <verb>`.
-- `skillnet catalog show <skill>` - folded into `skillnet skill show <scope>/<skill>`.
-
-## Flag changes
-
-- `--sync` on edit verbs: **removed**. Run `skillnet sync push --scope <scope>` afterward.
-- `--target <all|global|project|<name>>`: **removed**. Use `--scope` (repeatable) and `--all`.
-- Per-command `--dry-run`: **removed**. Use the global `--dry-run` flag: `skillnet --dry-run sync push`.
-
-## New commands
-
-- `skillnet` (no args): runs `status`.
-- `skillnet status`: scopes + divergence + catalog health.
-- `skillnet sync status`: read-only divergence per scope.
-- `skillnet sync diff`: file-level diff mirror<->live.
-- `skillnet sync pull --then-push`: composed pull then push.
-
-## Caching
-
-`mirror_root/.skillnet/cache.toml` stores per-scope pull timestamps and content hashes. `status` and `sync status` use it to skip redundant walks. The cache is best-effort; deleting or corrupting it falls back to a full walk on the next command.
-
-## Common workflows
-
-Edit and push:
-
-```sh
-skillnet skill move global/foo myproj
-skillnet sync push --scope global --scope myproj
+```toml
+[global]
+views = [
+  { label = "claude", path = "/home/alice/.claude/skills", scope = "global" },
+  { label = "agents", path = "/home/alice/.agents/skills", scope = "global" },
+]
 ```
 
-Refresh from live and immediately re-mirror:
+Project skills live under each project root. `canonical_rel` defaults to
+`.skills`; project views default to `.claude/skills` and `.agents/skills`:
 
-```sh
-skillnet sync pull --then-push
+```toml
+[[projects]]
+name = "demo"
+path = "/home/alice/Projects/demo"
+canonical_rel = ".skills"
+views = [
+  { rel = ".claude/skills", label = "claude" },
+  { rel = ".agents/skills", label = "agents" },
+]
 ```
 
-Check what would change without writing:
+## Workflow changes
 
-```sh
-skillnet sync status
-skillnet sync diff
-skillnet --dry-run sync push
-```
+- Use `skillnet view sync --all` to materialise global views.
+- Use `skillnet project sync --all` to materialise project views and project
+  aggregators.
+- Use `skillnet skill new|delete|rename|move` to mutate canonical stores.
+  These commands sync affected views by default.
+- `mirror_root/.skillnet/cache.toml` is obsolete. Delete it if present.
+
+The full migration guide will land at `docs/src/migration/option-b.md` in the
+doctor phase.

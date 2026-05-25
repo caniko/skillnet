@@ -7,11 +7,10 @@ mod mirror;
 mod project;
 mod skill;
 pub mod status;
-pub mod sync;
 pub(crate) mod view;
 
 pub use context::Context;
-pub use mirror::{list, sources, targets};
+pub use mirror::{list, targets};
 pub use project::{
     project_add, project_diff_command, project_list, project_remove, project_status_command,
     project_sync,

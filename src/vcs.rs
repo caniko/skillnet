@@ -21,7 +21,6 @@ pub(crate) struct GitStatus {
     pub branch: Option<String>,
     pub remote: Option<String>,
     pub dirty_entries: usize,
-    pub dirty: Vec<DirtyEntry>,
 }
 
 impl GitStatus {
@@ -46,7 +45,6 @@ pub(crate) fn status(root: &Utf8Path) -> Result<Option<GitStatus>> {
         branch: non_empty(branch),
         remote: remote.and_then(non_empty),
         dirty_entries,
-        dirty,
     }))
 }
 
@@ -63,14 +61,6 @@ pub(crate) fn ensure_clean(root: &Utf8Path) -> Result<()> {
         );
     }
     Ok(())
-}
-
-pub(crate) fn head_commit(root: &Utf8Path) -> Result<Option<String>> {
-    match git_output(root, ["rev-parse", "--verify", "HEAD"]) {
-        Ok(head) => Ok(non_empty(head)),
-        Err(error) if is_missing_head_error(&error) => Ok(None),
-        Err(error) => Err(error),
-    }
 }
 
 fn git_output<const N: usize>(root: &Utf8Path, args: [&str; N]) -> Result<String> {
@@ -132,9 +122,4 @@ fn parse_porcelain_line(line: &str) -> Result<DirtyEntry> {
 fn parse_dirty_path(raw: &str) -> Result<Utf8PathBuf> {
     Utf8PathBuf::from_path_buf(std::path::PathBuf::from(raw))
         .map_err(|path| anyhow::anyhow!("non-UTF-8 git status path: {}", path.display()))
-}
-
-fn is_missing_head_error(error: &anyhow::Error) -> bool {
-    let text = error.to_string();
-    text.contains("Needed a single revision") || text.contains("unknown revision or path")
 }

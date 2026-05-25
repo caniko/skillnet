@@ -1,9 +1,9 @@
 [package]
 name = "skillnet"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.88"
-description = "Reconcile and manage local AI skill mirrors; calibration data for the multi-phase-plan skill."
+description = "Manage canonical AI skill stores, derived views, and calibration data for multi-phase-plan."
 license = "MIT OR Apache-2.0"
 repository = "https://codeberg.org/caniko/skillnet"
 homepage = "https://codeberg.org/caniko/skillnet"

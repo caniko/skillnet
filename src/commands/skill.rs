@@ -169,9 +169,7 @@ pub fn move_skill(
     }
     if view_sync {
         sync_after_mutation(ctx, &from_path.scope, true)?;
-        if &from_path.scope != to_scope {
-            sync_after_mutation(ctx, to_scope, false)?;
-        } else if copy {
+        if &from_path.scope != to_scope || copy {
             sync_after_mutation(ctx, to_scope, false)?;
         }
     }

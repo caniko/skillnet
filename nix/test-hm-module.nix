@@ -9,6 +9,8 @@
   skillsRoot = "${homeDirectory}/ai-skills";
   postgresUrl = "postgres://skillnet-test@example.invalid/skillnet";
   declarativeSource = "${homeDirectory}/.claude/skills";
+  declarativeAgentsView = "${homeDirectory}/.agents/skills";
+  declarativeProject = "${homeDirectory}/Projects/myproject";
   urlFile = "/run/secrets/pg-url";
 
   mkHmConfig = extraSkillnetConfig:
@@ -47,16 +49,25 @@
     settings = {
       database.backend = "sqlite";
       global = {
-        sources = [
+        views = [
           {
             label = "claude";
             path = declarativeSource;
-            priority = 1;
+            scope = "global";
+          }
+          {
+            label = "agents";
+            path = declarativeAgentsView;
+            scope = "global";
           }
         ];
-        sync_paths = [];
-        stale_codex_skill_paths = [];
       };
+      projects = [
+        {
+          name = "myproject";
+          path = declarativeProject;
+        }
+      ];
     };
     mirrorRoot = skillsRoot;
     catalogSettings = {
@@ -114,6 +125,8 @@ in
     mkdir -p ${skillsRoot}
     mkdir -p ${skillsRoot}/global
     mkdir -p ${declarativeSource}
+    mkdir -p ${declarativeAgentsView}
+    mkdir -p ${declarativeProject}/.skills
 
     export HOME=${homeDirectory}
     export USER=skillnet-test
@@ -122,7 +135,11 @@ in
     grep -F 'Activating %s" "skillnet-data-dir"' ${sqliteConfig.activationPackage}/activate >/dev/null
     grep -F 'mkdir -p ${dataDir}' ${sqliteConfig.activationPackage}/activate >/dev/null
     grep -F 'Activating %s" "skillnet-skills-root"' ${sqliteConfig.activationPackage}/activate >/dev/null
+    grep -F 'Activating %s" "skillnet-views"' ${sqliteConfig.activationPackage}/activate >/dev/null
+    grep -F '${package}/bin/skillnet view sync --all --allow-delete' ${sqliteConfig.activationPackage}/activate >/dev/null
+    grep -F '${package}/bin/skillnet project sync --all --allow-delete || true' ${sqliteConfig.activationPackage}/activate >/dev/null
     grep -F 'skipping for now.' ${sqliteConfig.activationPackage}/activate >/dev/null
+    grep -F 'mirror not found at' ${sqliteConfig.activationPackage}/activate >/dev/null
     mkdir -p ${dataDir}
     test -d ${dataDir}
 
@@ -177,12 +194,13 @@ in
     rm -rf ${skillsRoot}
     DRY_RUN=1 ${declarativeConfig.activationPackage}/activate --driver-version 1 2>activation-stderr.log
     grep -F 'skipping for now.' activation-stderr.log >/dev/null
+    grep -F 'mirror not found at ${skillsRoot}; skipping view materialisation' activation-stderr.log >/dev/null
 
     unset __HM_SESS_VARS_SOURCED
     . ${declarativeConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
     test -z "''${SKILLNET_CONFIG:-}"
     test -z "''${SKILLNET_CATALOG_CONFIG:-}"
-    test -z "''${SKILLNET_MIRROR_ROOT:-}"
+    test "''${SKILLNET_MIRROR_ROOT:-}" = "${skillsRoot}"
     mkdir -p ${homeDirectory}/.config/skillnet
     ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml ${homeDirectory}/.config/skillnet/skillnet.toml
     ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.catalog.toml ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
@@ -191,8 +209,18 @@ in
     grep -F "mirror_root = '${skillsRoot}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F "skills_root = '${skillsRoot}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F "backend = 'sqlite'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F "label = 'claude'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F "label = 'agents'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F "name = 'myproject'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F "path = '${declarativeProject}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    ! grep -F "sync_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    ! grep -F "stale_codex_skill_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
 
     export PATH="${declarativeConfig.activationPackage}/home-path/bin:$PATH"
+    mkdir -p ${skillsRoot}/global
+    mkdir -p ${declarativeSource}
+    mkdir -p ${declarativeAgentsView}
+    mkdir -p ${declarativeProject}/.skills
     cd /tmp
     test ! -e skillnet.toml
     unset SKILLNET_CONFIG

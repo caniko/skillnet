@@ -32,7 +32,20 @@
     };
 in {
   options.programs.skillnet = {
-    enable = lib.mkEnableOption "skillnet, the AI skill mirror and calibration CLI";
+    enable =
+      lib.mkEnableOption "skillnet, the AI skill mirror and calibration CLI"
+      // {
+        description = ''
+          Enable skillnet, the AI skill mirror and calibration CLI.
+
+          During Home Manager activation, skillnet materialises configured
+          global views and per-project aggregator symlinks. As described in
+          the mirror canonical store dossier's "Fresh-host bootstrap order"
+          section, hosts without every configured project cloned should see
+          stderr warnings from `skillnet project sync --all` for missing
+          projects instead of a failed activation.
+        '';
+      };
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -52,7 +65,7 @@ in {
     mirrorRoot = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Optional root directory containing the global/ and projects/ skill mirror directories. Written as mirror_root when settings is declared; otherwise exported as SKILLNET_MIRROR_ROOT.";
+      description = "Optional root directory containing the global/ and projects/ skill mirror directories. Written as mirror_root when settings is declared and exported as SKILLNET_MIRROR_ROOT for activation-time commands.";
     };
 
     settings = lib.mkOption {
@@ -61,16 +74,14 @@ in {
       example = lib.literalExpression ''
         {
           global = {
-            sources = [
-              {
-                label = "claude";
-                path = "/home/alice/.claude/skills";
-                priority = 2;
-              }
+            views = [
+              { label = "claude"; path = "/home/alice/.claude/skills"; scope = "global"; }
+              { label = "agents"; path = "/home/alice/.agents/skills"; scope = "global"; }
             ];
-            sync_paths = [ "/home/alice/.agents/skills" ];
-            stale_codex_skill_paths = [ "/home/alice/.codex/skills" ];
           };
+          projects = [
+            { name = "myproject"; path = "/home/alice/Projects/myproject"; }
+          ];
         }
       '';
       description = ''
@@ -78,9 +89,16 @@ in {
         $XDG_CONFIG_HOME/skillnet/skillnet.toml. The CLI discovers this
         XDG path by default. The module also folds in programs.skillnet.database
         and mirrorRoot so shell-specific env import is not required for normal
-        declarative installs. Pass-through: skillnet validates the schema at
-        runtime. Leave null, and leave configFile null, to use a user-managed
-        config file.
+        declarative installs.
+
+        This is a TOML pass-through value. skillnet validates the schema at
+        runtime; the removed pre-0.5.0 fields [global].sources, sync_paths,
+        stale_codex_skill_paths, and project_source_rules are rejected by the
+        CLI with a migration error. Project entries may omit canonical_rel;
+        skillnet defaults it to ".skills".
+
+        Leave null, and leave configFile null, to use a user-managed config
+        file.
       '';
     };
 
@@ -235,7 +253,7 @@ in {
       home.sessionVariables.SKILLNET_CATALOG_CONFIG = toString cfg.catalogConfigFile;
     })
 
-    (lib.mkIf (cfg.mirrorRoot != null && cfg.settings == null) {
+    (lib.mkIf (cfg.mirrorRoot != null) {
       home.sessionVariables.SKILLNET_MIRROR_ROOT = cfg.mirrorRoot;
     })
 
@@ -288,6 +306,26 @@ in {
         fi
       '';
     })
+
+    {
+      home.activation.skillnet-views = lib.hm.dag.entryAfter ["writeBoundary" "skillnet-skills-root"] ''
+        if [ -z "''${SKILLNET_MIRROR_ROOT-}" ]; then
+          mirror=${lib.escapeShellArg (
+          if cfg.mirrorRoot != null
+          then cfg.mirrorRoot
+          else ""
+        )}
+        else
+          mirror="$SKILLNET_MIRROR_ROOT"
+        fi
+        if [ -z "$mirror" ] || [ ! -d "$mirror/global" ]; then
+          echo "WARNING: skillnet: mirror not found at $mirror; skipping view materialisation" >&2
+        else
+          $DRY_RUN_CMD ${cfg.package}/bin/skillnet view sync --all --allow-delete
+          $DRY_RUN_CMD ${cfg.package}/bin/skillnet project sync --all --allow-delete || true
+        fi
+      '';
+    }
 
     (lib.mkIf cfg.hooks.enable {
       home.activation.skillnetInstallHook = lib.hm.dag.entryAfter ["writeBoundary"] ''

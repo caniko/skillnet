@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-25
+
+`0.5.0` removes the pre-Option-B reconcile model. There is now one
+canonical store per scope, and configured global/project views are derived
+from that store.
+
+### Changed
+
+- Option B is now the only supported skill layout: `[global].views` define
+  global view symlinks, projects use `canonical_rel` plus project `views`, and
+  project aggregators point at each project's canonical store.
+- `skillnet status` reports canonical store and view health instead of
+  live-source divergence.
+- The long-term plan keeps the "Updated Work That Should Survive Into The
+  Long-Term Plan" items from the mirror canonical store dossier: canonical
+  upstream stores, generated views, Home Manager activation materialisation,
+  and downstream canix migration.
+
+### Removed
+
+- Removed reconcile source arbitration and deleted `src/reconcile.rs`.
+- Removed the `skillnet sync` command group, including `sync pull` and
+  `sync roundtrip`.
+- Removed `.skillnet/cache.toml` writes; view sync status is derived directly
+  from configured symlinks.
+- Removed support for legacy config fields `sources`, `sync_paths`,
+  `stale_codex_skill_paths`, `project_source_rules`, and `extra_sources`.
+
+### Migration
+
+- See `MIGRATION.md` for the planted Option B migration notes. P9 expands
+  that into `docs/src/migration/option-b.md`.
+
 ## [0.4.0] - 2026-05-24
 
 `0.4.0` adds the first-class heuristics catalog, helper commands,
@@ -95,6 +128,7 @@ Initial release.
 
 No stable Rust library API is committed in `0.1.0`; the supported surface is the `skillnet` binary.
 
-[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.4.0...HEAD
+[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.5.0...HEAD
+[0.5.0]: https://codeberg.org/caniko/skillnet/compare/0.4.0...0.5.0
 [0.4.0]: https://codeberg.org/caniko/skillnet/compare/0.3.0...0.4.0
 [0.3.0]: https://codeberg.org/caniko/skillnet/compare/0.2.0...0.3.0

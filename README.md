@@ -1,8 +1,8 @@
 # skillnet
 
-`skillnet` is a CLI for reconciling local AI skill directories into a checked-in mirror, editing mirrored skills, syncing selected mirror state back to live agent directories, and recording calibration data for `multi-phase-plan`.
+`skillnet` is a CLI for managing canonical AI skill stores, materialising derived agent views, and recording calibration data for `multi-phase-plan`.
 
-The supported interface in `0.2.0` is the `skillnet` binary. This crate does not commit to a stable embeddable Rust API yet.
+The supported interface in `0.5.0` is the `skillnet` binary. This crate does not commit to a stable embeddable Rust API yet.
 
 ## Install
 
@@ -37,15 +37,10 @@ programs.skillnet = {
   enable = true;
   settings = {
     global = {
-      sources = [
-        {
-          label = "claude";
-          path = "/home/alice/.claude/skills";
-          priority = 1;
-        }
+      views = [
+        { label = "claude"; path = "/home/alice/.claude/skills"; scope = "global"; }
+        { label = "agents"; path = "/home/alice/.agents/skills"; scope = "global"; }
       ];
-      sync_paths = [];
-      stale_codex_skill_paths = [];
     };
   };
   mirrorRoot = "/home/alice/skills-mirror";
@@ -78,7 +73,7 @@ programs.skillnet.skillsRoot = "/data/nvme0/can/Projects/ai-skills";
 When configured, the module writes `skills_root` into `skillnet.toml`, exports
 `AI_SKILLS_REPO` for compatibility, and warns if the checkout directory is
 missing. `skillsRoot` points at the skills checkout and VCS working tree;
-`dataDir` remains skillnet's runtime database and cache location.
+`dataDir` remains skillnet's runtime database location.
 
 Postgres is the default calibration backend and requires a connection URL.
 SQLite is also supported by selecting it explicitly:
@@ -124,7 +119,7 @@ untouched; run `skillnet hook uninstall` explicitly to remove managed entries.
 Options:
 
 - `programs.skillnet.dataDir` defaults to `${config.xdg.dataHome}/skillnet`.
-  This is skillnet's runtime database and cache location.
+  This is skillnet's runtime database location.
 - `programs.skillnet.skillsRoot` sets `skills_root` in generated
   `skillnet.toml`, exports `AI_SKILLS_REPO` for compatibility, and is the
   canonical mirror destination/VCS working tree; atlas uses
@@ -209,52 +204,25 @@ secret-backed file for production credentials.
 
 ## Quick Start
 
-Inspect the configured scopes and current divergence:
+Inspect configured scopes and current view drift:
 
 ```sh
 skillnet status
 skillnet scope list
-skillnet scope sources
 ```
 
-Pull live skills into the mirror and then inspect or regenerate catalog output:
+Materialise derived views and then inspect or regenerate catalog output:
 
 ```sh
-skillnet sync pull --scope global
+skillnet view sync --all
+skillnet project sync --all
 skillnet skill list --scope global
 skillnet catalog generate
 ```
 
-If a selected mirror scope is already dirty inside the destination Git repo and
-you want `sync pull` to auto-commit that existing scope-local work before
-pulling, enable the sync setting:
-
-```toml
-[sync]
-auto_commit_dirty_destination = true
-codex_model = "gpt-5.4-mini"
-codex_reasoning_effort = "medium"
-```
-
-You can override it per run with:
-
-```sh
-skillnet sync pull --scope global --auto-commit-dirty-destination
-skillnet sync pull --scope global --no-auto-commit-dirty-destination
-skillnet sync pull --scope global --codex-model gpt-5.3-codex --codex-reasoning-effort high
-```
-
-Run the common pull-then-push workflow with `roundtrip`, or check it without
-mutating destinations:
-
-```sh
-skillnet sync roundtrip --scope global
-skillnet sync roundtrip --all --check
-```
-
-Sync is newer-only by default: older incoming skills are skipped and
-destination-only skills are preserved. Use `--allow-older` or `--allow-delete`
-only when you explicitly want those overwrites or removals.
+`skillnet sync` was removed in `0.5.0`. Mutate canonical stores with
+`skillnet skill ...`; regenerate derived views with `view sync` and
+`project sync`.
 
 Calibration commands are available under the dedicated command group:
 
@@ -280,12 +248,11 @@ cargo test-pg
 
 ## Configuration Model
 
-`skillnet` keeps the mirror separate from live agent directories:
+`skillnet` keeps canonical skill stores separate from generated agent views:
 
-- `global/` stores the reconciled global skill mirror.
-- `projects/<name>/` stores reconciled per-project mirrors.
-- Live global sources typically come from `~/.agents/skills`, `~/.claude/skills`, and `~/.codex/skills`.
-- Project scopes can add `.agents/skills`, `.claude/skills`, `.codex/skills`, root `skills`, plugin skill directories, and other configured paths.
+- `global/` stores the canonical global skills by default.
+- Project canonical stores live at each project's `canonical_rel`, defaulting to `.skills`.
+- Global and project views such as `.agents/skills` and `.claude/skills` are symlinks generated from canonical stores.
 
 Configuration lives in `$XDG_CONFIG_HOME/skillnet/skillnet.toml`, falling back
 to `./skillnet.toml` for legacy cwd-based usage. Catalog metadata uses
@@ -298,7 +265,7 @@ The current top-level commands are:
 
 - `status`
 - `completions`
-- `sync`
+- `view`
 - `skill`
 - `scope`
 - `project`

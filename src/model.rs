@@ -20,35 +20,3 @@ pub enum TargetScope {
     Global,
     Project,
 }
-
-#[allow(dead_code)]
-#[deprecated(note = "P4 deletes reconcile.rs and removes pre-Option-B source arbitration")]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Source {
-    pub label: String,
-    pub path: Utf8PathBuf,
-    pub priority: i64,
-}
-
-#[allow(dead_code)]
-#[deprecated(note = "P4 deletes reconcile.rs and removes pre-Option-B source arbitration")]
-#[derive(Debug, Clone)]
-pub struct Candidate {
-    pub skill: String,
-    pub source: String,
-    pub priority: i64,
-    pub path: Utf8PathBuf,
-    pub newest_mtime_nanos: u128,
-    pub content_signature: String,
-}
-
-#[allow(dead_code)]
-#[deprecated(note = "P4 deletes reconcile.rs and removes pre-Option-B source arbitration")]
-#[derive(Debug, Clone)]
-pub struct Choice {
-    pub skill: String,
-    pub source: String,
-    pub path: Utf8PathBuf,
-    pub newest_mtime_nanos: u128,
-    pub candidate_count: usize,
-}

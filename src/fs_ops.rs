@@ -150,16 +150,7 @@ fn preserve_dir_times(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-pub fn replace_dir(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    if dest.exists() {
-        fs::remove_dir_all(dest).with_context(|| format!("failed to remove {dest}"))?;
-    }
-    fs::rename(src, dest).with_context(|| format!("failed to move {src} to {dest}"))
-}
-
+#[cfg(test)]
 pub fn remove_codex_skills(skills_path: &Utf8Path) -> Result<()> {
     if skills_path.exists() {
         fs::remove_dir_all(skills_path)?;

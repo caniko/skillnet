@@ -52,6 +52,7 @@ fn backends() -> Vec<(&'static str, BackendFixture)> {
         db: Db::open(&db_path).unwrap(),
         _temp: temp,
     };
+    #[cfg_attr(not(feature = "postgres"), allow(unused_mut))]
     let mut backends = vec![("sqlite", sqlite)];
 
     #[cfg(feature = "postgres")]

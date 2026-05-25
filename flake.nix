@@ -53,7 +53,8 @@
         src = ./.;
         filter = path: type:
           (craneLib.filterCargoSources path type)
-          || pkgs.lib.hasSuffix ".sql" path;
+          || pkgs.lib.hasSuffix ".sql" path
+          || pkgs.lib.hasSuffix ".json" path;
       };
 
       commonArgs = {

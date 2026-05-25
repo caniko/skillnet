@@ -20,14 +20,3 @@ pub fn targets(ctx: &Context) -> Result<()> {
     }
     Ok(())
 }
-
-pub fn sources(ctx: &Context, scopes: &[Scope]) -> Result<()> {
-    for target in ctx.targets(scopes)? {
-        println!("# {}", target.name);
-        println!("canonical\t{}", target.canonical_path);
-        for view in target.views {
-            println!("view\t{}\t{}", view.label, view.path);
-        }
-    }
-    Ok(())
-}

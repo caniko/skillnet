@@ -1,26 +1,9 @@
-use std::{collections::BTreeSet, fmt, fs};
+use std::{fmt, fs};
 
 use anyhow::Result;
 use camino::Utf8Path;
 
 use super::Context;
-
-const KNOWN_AGENTS: &[KnownAgent] = &[
-    KnownAgent {
-        label: "agents",
-        sync_suffix: ".agents/skills",
-    },
-    KnownAgent {
-        label: "claude",
-        sync_suffix: ".claude/skills",
-    },
-];
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct KnownAgent {
-    label: &'static str,
-    sync_suffix: &'static str,
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Finding {
@@ -31,17 +14,13 @@ pub struct Finding {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FindingKind {
-    AsymmetricFanout,
     MissingSyncPath,
-    SingletonGlobalScope,
 }
 
 impl FindingKind {
     fn label(&self) -> &'static str {
         match self {
-            Self::AsymmetricFanout => "asymmetric fan-out",
             Self::MissingSyncPath => "missing sync path",
-            Self::SingletonGlobalScope => "singleton global scope",
         }
     }
 }
@@ -85,10 +64,6 @@ pub fn lint(ctx: &Context) -> Result<Vec<Finding>> {
     Ok(findings)
 }
 
-fn has_sync_suffix(path: &Utf8Path, suffix: &str) -> bool {
-    path.as_str() == suffix || path.as_str().ends_with(&format!("/{suffix}"))
-}
-
 fn invalid_sync_path_detail(path: &Utf8Path) -> Option<String> {
     match fs::metadata(path) {
         Ok(metadata) if metadata.is_dir() => None,
@@ -104,20 +79,12 @@ fn invalid_sync_path_detail(path: &Utf8Path) -> Option<String> {
     }
 }
 
-fn quoted_labels(labels: &BTreeSet<&str>) -> String {
-    labels
-        .iter()
-        .map(|label| format!("\"{label}\""))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         commands::Context,
-        config::{Config, DatabaseConfig, GlobalConfig, SyncConfig, ViewConfig, ViewScope},
+        config::{Config, DatabaseConfig, GlobalConfig, ViewConfig, ViewScope},
     };
     use camino::Utf8PathBuf;
     use tempfile::tempdir;
@@ -142,7 +109,6 @@ mod tests {
                 },
                 skills_root: None,
                 mirror_root: None,
-                sync: SyncConfig::default(),
                 database: DatabaseConfig::default(),
                 projects: Vec::new(),
             },
@@ -163,25 +129,6 @@ mod tests {
         let findings = lint(&ctx).unwrap();
 
         assert!(findings.is_empty());
-    }
-
-    #[test]
-    #[ignore = "P9 rewrites doctor invariants for Option B views"]
-    fn lint_reports_asymmetric_fanout() {
-        let tmp = tempdir().unwrap();
-        let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
-        let agents = root.join(".agents/skills");
-        let claude = root.join(".claude/skills");
-        fs::create_dir_all(&agents).unwrap();
-        fs::create_dir_all(&claude).unwrap();
-        let ctx = context_with_global(vec![claude]);
-
-        let findings = lint(&ctx).unwrap();
-
-        assert!(findings
-            .iter()
-            .any(|finding| finding.kind == FindingKind::AsymmetricFanout
-                && finding.detail.contains(".agents/skills")));
     }
 
     #[test]

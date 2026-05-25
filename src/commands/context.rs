@@ -3,7 +3,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::{
     cli::Scope,
-    config::{Config, ProjectConfig, ResolvedSyncConfig, SyncOverrides},
+    config::{Config, ProjectConfig},
     model::Target,
 };
 
@@ -69,9 +69,5 @@ impl Context {
             .projects
             .iter()
             .find(|project| project.name == name)
-    }
-
-    pub(crate) fn resolve_sync_config(&self, overrides: &SyncOverrides) -> ResolvedSyncConfig {
-        self.config.resolve_sync_with_overrides(overrides)
     }
 }

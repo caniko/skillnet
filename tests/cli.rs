@@ -248,7 +248,7 @@ fn parity_difference(
 }
 
 fn minimal_config() -> &'static str {
-    "[global]\nsources = []\nsync_paths = []\nstale_codex_skill_paths = []\n"
+    "[global]\nviews = []\n"
 }
 
 fn minimal_config_with_skills_root(root: &Path) -> String {
@@ -256,9 +256,7 @@ fn minimal_config_with_skills_root(root: &Path) -> String {
         r#"skills_root = "{}"
 
 [global]
-sources = []
-sync_paths = []
-stale_codex_skill_paths = []
+views = []
 "#,
         root.display()
     )
@@ -268,9 +266,7 @@ fn project_config(project_name: &str, project_root: &Path) -> String {
     format!(
         r#"
 [global]
-sources = []
-sync_paths = []
-stale_codex_skill_paths = []
+views = []
 
 [[projects]]
 name = "{project_name}"
