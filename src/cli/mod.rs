@@ -18,7 +18,10 @@ use crate::{
 };
 use crate::{commands::Context, exit::ExitError};
 
-use args::{CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, SyncCommand};
+use args::{
+    CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, SyncCommand,
+    ViewCommand,
+};
 use scope::{resolve_scope, resolve_scopes};
 
 pub fn run() -> Result<()> {
@@ -86,6 +89,7 @@ pub fn run() -> Result<()> {
             }
         }
         Command::Sync { command } => run_sync_command(&ctx, command),
+        Command::View { command } => run_view_command(&ctx, command),
         Command::Skill { command } => run_skill_command(&ctx, command),
         Command::Scope { command } => run_scope_command(&ctx, command),
         Command::Project { command } => run_project_command(&ctx, command),
@@ -209,32 +213,42 @@ fn run_sync_command(ctx: &Context, command: SyncCommand) -> Result<()> {
                 },
             )
         }
-        SyncCommand::Push {
+    }
+}
+
+fn run_view_command(ctx: &Context, command: ViewCommand) -> Result<()> {
+    match command {
+        ViewCommand::Sync {
             scope,
             all,
-            allow_older,
             allow_delete,
+            force,
         } => {
-            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
-            commands::sync::push(
-                ctx,
-                &scopes,
-                crate::reconcile::WriteOptions {
-                    allow_older,
-                    allow_delete,
-                },
-            )
-            .map_err(|error| ExitError::push(error).into())
+            resolve_view_scope(&scope, all)?;
+            commands::view::sync(ctx, allow_delete, force)
         }
-        SyncCommand::Status { scope, all, format } => {
-            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
-            commands::sync::status(ctx, &scopes, format)
+        ViewCommand::Status { scope, all, format } => {
+            resolve_view_scope(&scope, all)?;
+            commands::view::status(ctx, format)
         }
-        SyncCommand::Diff { scope, all } => {
-            let scopes = resolve_command_scopes(&ctx.config, &scope, all)?;
-            commands::sync::diff(ctx, &scopes)
+        ViewCommand::Diff { scope, all } => {
+            resolve_view_scope(&scope, all)?;
+            commands::view::diff(ctx)
         }
     }
+}
+
+fn resolve_view_scope(scope_args: &[String], all: bool) -> Result<()> {
+    if all && !scope_args.is_empty() {
+        anyhow::bail!("use either --all or --scope, not both");
+    }
+    if !all && scope_args.is_empty() {
+        anyhow::bail!("must pass --scope global or --all");
+    }
+    if scope_args.iter().any(|scope| scope != "global") {
+        anyhow::bail!("`skillnet view` currently manages only the `global` scope");
+    }
+    Ok(())
 }
 
 fn resolve_command_scopes(config: &Config, scope_args: &[String], all: bool) -> Result<Vec<Scope>> {
@@ -252,6 +266,10 @@ fn resolve_command_scopes(config: &Config, scope_args: &[String], all: bool) -> 
 
 fn run_skill_command(ctx: &Context, command: SkillCommand) -> Result<()> {
     match command {
+        SkillCommand::New { path, no_view_sync } => {
+            let skill_path = parse_skill_path(ctx, &path)?;
+            commands::new(ctx, &skill_path, !no_view_sync)
+        }
         SkillCommand::List { scope, all } => {
             let scopes = resolve_scopes(&ctx.config, &scope, all)?;
             commands::list(ctx, &scopes)
@@ -260,18 +278,34 @@ fn run_skill_command(ctx: &Context, command: SkillCommand) -> Result<()> {
             let skill_path = parse_skill_path(ctx, &path)?;
             commands::show(ctx, &skill_path)
         }
-        SkillCommand::Delete { path } => {
+        SkillCommand::Delete { path, no_view_sync } => {
             let skill_path = parse_skill_path(ctx, &path)?;
-            commands::delete(ctx, &skill_path)
+            commands::delete(ctx, &skill_path, !no_view_sync)
         }
-        SkillCommand::Rename { path, new } => {
+        SkillCommand::Rename {
+            path,
+            new,
+            no_view_sync,
+        } => {
             let skill_path = parse_skill_path(ctx, &path)?;
-            commands::rename(ctx, &skill_path, &new, false)
+            commands::rename(ctx, &skill_path, &new, false, !no_view_sync)
         }
-        SkillCommand::Move { from, to } => {
+        SkillCommand::Move {
+            from,
+            to,
+            no_view_sync,
+        } => {
             let from_path = parse_skill_path(ctx, &from)?;
             let (to_scope, as_name) = parse_move_destination(ctx, &to)?;
-            commands::move_skill(ctx, &from_path, &to_scope, as_name.as_deref(), false, false)
+            commands::move_skill(
+                ctx,
+                &from_path,
+                &to_scope,
+                as_name.as_deref(),
+                false,
+                false,
+                !no_view_sync,
+            )
         }
     }
 }
@@ -303,6 +337,16 @@ fn run_project_command(ctx: &Context, command: ProjectCommand) -> Result<()> {
         ProjectCommand::Remove { name, prune_mirror } => {
             commands::project_remove(ctx, &name, prune_mirror)
         }
+        ProjectCommand::Sync {
+            name,
+            all,
+            allow_delete,
+            force,
+        } => commands::project_sync(ctx, &name, all, allow_delete, force),
+        ProjectCommand::Status { name, all, format } => {
+            commands::project_status_command(ctx, &name, all, format)
+        }
+        ProjectCommand::Diff { name, all } => commands::project_diff_command(ctx, &name, all),
     }
 }
 

@@ -78,9 +78,7 @@ fn print_catalog_health(ctx: &Context) {
         .map(|targets| {
             targets
                 .iter()
-                .filter_map(|target| {
-                    crate::reconcile::mirror_skill_dirs(&target.canonical_path).ok()
-                })
+                .filter_map(|target| crate::mirror::mirror_skill_dirs(&target.canonical_path).ok())
                 .map(|skills| skills.len())
                 .sum::<usize>()
         })

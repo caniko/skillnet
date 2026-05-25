@@ -6,7 +6,13 @@ use walkdir::WalkDir;
 
 use super::Context;
 use crate::cli::{Scope, SkillPath};
-use crate::{catalog, fs_ops};
+use crate::{
+    catalog, fs_ops,
+    view::{
+        materialize_project_with_options, materialize_view_with_options, ProjectSyncOptions,
+        ViewSyncOptions,
+    },
+};
 
 pub fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
     let target = ctx.target(&skill_path.scope)?;
@@ -65,7 +71,28 @@ pub fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
     Ok(())
 }
 
-pub fn delete(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
+pub fn new(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()> {
+    ctx.ensure_destination_clean()?;
+    let target = ctx.target(&skill_path.scope)?;
+    let path = target.canonical_path.join(&skill_path.skill);
+    if path.exists() {
+        bail!("skill `{}` already exists at {path}", skill_path.skill);
+    }
+
+    if ctx.dry_run {
+        println!("create {path}");
+    } else {
+        fs::create_dir_all(&path)?;
+        fs::write(path.join("SKILL.md"), skill_template(&skill_path.skill))?;
+    }
+
+    if view_sync {
+        sync_after_mutation(ctx, &skill_path.scope, false)?;
+    }
+    Ok(())
+}
+
+pub fn delete(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()> {
     ctx.ensure_destination_clean()?;
     let target = ctx.target(&skill_path.scope)?;
     let path = target.canonical_path.join(&skill_path.skill);
@@ -75,10 +102,19 @@ pub fn delete(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
     } else {
         fs::remove_dir_all(&path)?;
     }
+    if view_sync {
+        sync_after_mutation(ctx, &skill_path.scope, true)?;
+    }
     Ok(())
 }
 
-pub fn rename(ctx: &Context, skill_path: &SkillPath, new: &str, force: bool) -> Result<()> {
+pub fn rename(
+    ctx: &Context,
+    skill_path: &SkillPath,
+    new: &str,
+    force: bool,
+    view_sync: bool,
+) -> Result<()> {
     ctx.ensure_destination_clean()?;
     let target = ctx.target(&skill_path.scope)?;
     let src = target.canonical_path.join(&skill_path.skill);
@@ -93,6 +129,9 @@ pub fn rename(ctx: &Context, skill_path: &SkillPath, new: &str, force: bool) -> 
         }
         fs::rename(&src, &dest)?;
     }
+    if view_sync {
+        sync_after_mutation(ctx, &skill_path.scope, true)?;
+    }
     Ok(())
 }
 
@@ -104,6 +143,7 @@ pub fn move_skill(
     as_name: Option<&str>,
     copy: bool,
     force: bool,
+    view_sync: bool,
 ) -> Result<()> {
     ctx.ensure_destination_clean()?;
     let from = ctx.target(&from_path.scope)?;
@@ -127,7 +167,60 @@ pub fn move_skill(
             fs::rename(&src, &dest)?;
         }
     }
+    if view_sync {
+        sync_after_mutation(ctx, &from_path.scope, true)?;
+        if &from_path.scope != to_scope {
+            sync_after_mutation(ctx, to_scope, false)?;
+        } else if copy {
+            sync_after_mutation(ctx, to_scope, false)?;
+        }
+    }
     Ok(())
+}
+
+fn sync_after_mutation(ctx: &Context, scope: &Scope, allow_delete: bool) -> Result<()> {
+    if ctx.dry_run {
+        println!("sync views for {scope} (allow_delete: {allow_delete})");
+        return Ok(());
+    }
+
+    let target = ctx.target(scope)?;
+    match scope {
+        Scope::Global => {
+            for view in &target.views {
+                materialize_view_with_options(
+                    &target.canonical_path,
+                    view,
+                    ViewSyncOptions {
+                        allow_delete,
+                        ..ViewSyncOptions::default()
+                    },
+                )?;
+            }
+        }
+        Scope::Project(_) => {
+            materialize_project_with_options(
+                &target,
+                ProjectSyncOptions {
+                    allow_delete,
+                    force: false,
+                },
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn skill_template(name: &str) -> String {
+    format!(
+        r#"---
+name: {name}
+description: TODO
+---
+
+# {name}
+"#
+    )
 }
 
 fn prepare_dest(src: &Utf8Path, dest: &Utf8Path, force: bool) -> Result<()> {

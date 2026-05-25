@@ -723,7 +723,7 @@ fn print_destination_check(destination: &Utf8Path, deltas: &[Delta]) {
 
 fn mirror_files(mirror_root: &Utf8Path) -> Result<BTreeMap<String, String>> {
     let mut files = BTreeMap::new();
-    for skill_dir in reconcile::mirror_skill_dirs(mirror_root)? {
+    for skill_dir in crate::mirror::mirror_skill_dirs(mirror_root)? {
         let skill = skill_dir
             .file_name()
             .context("mirror skill directory has no final component")?

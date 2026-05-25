@@ -2,10 +2,16 @@ use std::fs;
 
 use anyhow::{bail, Context as AnyhowContext, Result};
 use camino::Utf8Path;
+use serde::Serialize;
 use toml_edit::{value, ArrayOfTables, DocumentMut, Item, Table};
 
-use super::Context;
+use super::{view::format_view_summary, Context};
+use crate::cli::args::StatusFormat;
 use crate::config::expand_path;
+use crate::view::{
+    materialize_project_with_options, project_diff, project_status, AggregatorStatus, DriftEntry,
+    DriftKind, FileDeltaKind, ProjectSyncOptions,
+};
 
 pub fn project_list(ctx: &Context) {
     for project in &ctx.config.projects {
@@ -68,6 +74,159 @@ pub fn project_remove(ctx: &Context, name: &str, prune_mirror: bool) -> Result<(
 
     println!("removed project {name}");
     Ok(())
+}
+
+pub fn project_sync(
+    ctx: &Context,
+    names: &[String],
+    all: bool,
+    allow_delete: bool,
+    force: bool,
+) -> Result<()> {
+    for target in project_targets(ctx, names, all)? {
+        if ctx.dry_run {
+            println!("# project sync {}", target.name);
+            println!("from: {}", target.canonical_path);
+            println!("allow_delete: {allow_delete}");
+            println!("force: {force}");
+            for view in &target.views {
+                println!("to: {}\t{}", view.label, view.path);
+            }
+            if let Some(aggregator) = &target.aggregator_path {
+                println!("aggregator: {aggregator}");
+            }
+            continue;
+        }
+
+        let summary = materialize_project_with_options(
+            &target,
+            ProjectSyncOptions {
+                allow_delete,
+                force,
+            },
+        )?;
+        println!("# {}", target.name);
+        for view in &summary.views {
+            println!(
+                "{}  {}",
+                view.label,
+                format_view_summary(&view.path, &view.summary)
+            );
+        }
+        if let Some(status) = summary.aggregator {
+            println!("aggregator  {}", format_aggregator_status(status));
+        }
+    }
+    Ok(())
+}
+
+pub fn project_status_command(
+    ctx: &Context,
+    names: &[String],
+    all: bool,
+    format: StatusFormat,
+) -> Result<()> {
+    let mut rows = Vec::new();
+    for target in project_targets(ctx, names, all)? {
+        rows.push(ProjectStatusRow {
+            name: target.name.clone(),
+            drift: project_status(&target)?,
+        });
+    }
+
+    match format {
+        StatusFormat::Text => {
+            for row in &rows {
+                if row.drift.is_empty() {
+                    println!("{}  clean", row.name);
+                } else {
+                    println!("{}  drift ({} entries)", row.name, row.drift.len());
+                    for entry in &row.drift {
+                        println!("{} {}", drift_marker(entry.kind), entry.skill);
+                    }
+                }
+            }
+        }
+        StatusFormat::Json => {
+            serde_json::to_writer_pretty(std::io::stdout(), &rows)?;
+            println!();
+        }
+    }
+    Ok(())
+}
+
+pub fn project_diff_command(ctx: &Context, names: &[String], all: bool) -> Result<()> {
+    for target in project_targets(ctx, names, all)? {
+        println!("# {}", target.name);
+        let deltas = project_diff(&target)?;
+        if deltas.is_empty() {
+            println!("clean");
+            continue;
+        }
+        for delta in deltas {
+            let marker = match delta.kind {
+                FileDeltaKind::Missing => '-',
+                FileDeltaKind::Extra => '+',
+                FileDeltaKind::Modified => '~',
+            };
+            println!("{marker} {}", delta.skill);
+        }
+    }
+    Ok(())
+}
+
+fn project_targets(
+    ctx: &Context,
+    names: &[String],
+    all: bool,
+) -> Result<Vec<crate::model::Target>> {
+    if all && !names.is_empty() {
+        bail!("use either --all or --name, not both");
+    }
+    if !all && names.is_empty() {
+        bail!("must pass --name or --all");
+    }
+
+    let projects = if all {
+        ctx.config
+            .projects
+            .iter()
+            .map(|project| project.name.clone())
+            .collect::<Vec<_>>()
+    } else {
+        names.to_vec()
+    };
+
+    let mut targets = Vec::with_capacity(projects.len());
+    for name in projects {
+        let project = ctx
+            .project(&name)
+            .with_context(|| format!("unknown project `{name}`"))?;
+        targets.push(ctx.config.project_target(&ctx.mirror_root, project)?);
+    }
+    Ok(targets)
+}
+
+fn format_aggregator_status(status: AggregatorStatus) -> &'static str {
+    match status {
+        AggregatorStatus::Created => "created",
+        AggregatorStatus::Updated => "updated",
+        AggregatorStatus::Unchanged => "unchanged",
+    }
+}
+
+fn drift_marker(kind: DriftKind) -> char {
+    match kind {
+        DriftKind::Missing => '-',
+        DriftKind::WrongTarget | DriftKind::NonSymlink => '~',
+        DriftKind::Stale => '+',
+    }
+}
+
+#[derive(Serialize)]
+struct ProjectStatusRow {
+    name: String,
+    drift: Vec<DriftEntry>,
 }
 
 fn load_config_doc(path: &Utf8Path) -> Result<DocumentMut> {

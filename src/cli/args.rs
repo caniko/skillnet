@@ -7,7 +7,7 @@ use clap_complete::Shell;
     name = "skillnet",
     version,
     about = "Reconcile and manage AI skills",
-    long_about = "Reconcile AI skill directories from live agent sources into a mirror, edit mirrored skills, and sync selected mirror state back to live .agents/skills and .claude/skills directories.",
+    long_about = "Reconcile AI skill directories from live agent sources into a mirror, edit mirrored skills, and materialise configured skill view symlinks.",
     subcommand_required = false,
     arg_required_else_help = false,
     disable_help_subcommand = true
@@ -63,10 +63,15 @@ pub(super) enum Command {
         /// Shell to generate completions for.
         shell: Shell,
     },
-    /// Pull from live sources, push to live targets, and inspect divergence.
+    /// Pull from live sources and run legacy roundtrip checks.
     Sync {
         #[command(subcommand)]
         command: SyncCommand,
+    },
+    /// Materialise and inspect global view symlinks.
+    View {
+        #[command(subcommand)]
+        command: ViewCommand,
     },
     /// List, inspect, and edit mirrored skill directories.
     Skill {
@@ -452,7 +457,7 @@ pub(super) enum SyncCommand {
         #[arg(long)]
         allow_delete: bool,
     },
-    /// Pull selected scopes and then push them back to live destinations.
+    /// Pull selected scopes and then run the legacy roundtrip flow.
     Roundtrip {
         /// Mirror scope to roundtrip. May be repeated.
         #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
@@ -471,39 +476,44 @@ pub(super) enum SyncCommand {
         #[arg(long)]
         allow_delete: bool,
     },
-    /// Write selected mirror scopes back to live .agents and .claude directories.
-    Push {
-        /// Mirror scope to push. May be repeated.
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum ViewCommand {
+    /// Materialise configured global view symlinks.
+    Sync {
+        /// Global scope to sync. Only `global` is currently valid.
         #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
         scope: Vec<String>,
-        /// Push every configured scope.
+        /// Sync every configured global view.
         #[arg(long)]
         all: bool,
-        /// Allow incoming older or equal-mtime skill content to overwrite existing skills.
-        #[arg(long)]
-        allow_older: bool,
-        /// Allow pruning skills that are missing from the incoming side.
+        /// Remove view entries that no longer correspond to canonical skills.
         #[arg(long)]
         allow_delete: bool,
+        /// Replace existing non-symlink entries in the view.
+        #[arg(long)]
+        force: bool,
     },
-    /// Show read-only divergence for selected scopes.
+    /// Show read-only global view drift.
     Status {
-        /// Mirror scope to inspect. May be repeated.
+        /// Global scope to inspect. Only `global` is currently valid.
         #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
         scope: Vec<String>,
-        /// Inspect every configured scope.
+        /// Inspect every configured global view.
         #[arg(long)]
         all: bool,
         /// Output format.
         #[arg(long, default_value = "text")]
         format: StatusFormat,
     },
-    /// Show file-level mirror/live diffs for selected scopes.
+    /// Show global view symlink deltas.
     Diff {
-        /// Mirror scope to diff. May be repeated.
+        /// Global scope to diff. Only `global` is currently valid.
         #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
         scope: Vec<String>,
-        /// Diff every configured scope.
+        /// Diff every configured global view.
         #[arg(long)]
         all: bool,
     },
@@ -512,6 +522,14 @@ pub(super) enum SyncCommand {
 #[derive(Debug, Subcommand)]
 #[command(disable_help_subcommand = true)]
 pub(super) enum SkillCommand {
+    /// Create one mirrored skill.
+    New {
+        /// Skill path as <scope>/<skill>.
+        path: String,
+        /// Do not materialise affected view symlinks after creation.
+        #[arg(long)]
+        no_view_sync: bool,
+    },
     /// List mirrored skills for selected scopes.
     List {
         /// Mirror scope to list. May be repeated.
@@ -530,6 +548,9 @@ pub(super) enum SkillCommand {
     Delete {
         /// Skill path as <scope>/<skill>.
         path: String,
+        /// Do not materialise affected view symlinks after deletion.
+        #[arg(long)]
+        no_view_sync: bool,
     },
     /// Rename one mirrored skill within its current scope.
     Rename {
@@ -537,6 +558,9 @@ pub(super) enum SkillCommand {
         path: String,
         /// New skill directory name.
         new: String,
+        /// Do not materialise affected view symlinks after renaming.
+        #[arg(long)]
+        no_view_sync: bool,
     },
     /// Move one mirrored skill to another scope or scope/name destination.
     Move {
@@ -544,6 +568,9 @@ pub(super) enum SkillCommand {
         from: String,
         /// Destination scope, optionally with a new name as <scope>/<name>.
         to: String,
+        /// Do not materialise affected view symlinks after moving.
+        #[arg(long)]
+        no_view_sync: bool,
     },
 }
 
@@ -582,6 +609,42 @@ pub(super) enum ProjectCommand {
         /// Also delete projects/<name> from the mirror if it exists.
         #[arg(long)]
         prune_mirror: bool,
+    },
+    /// Materialise configured project view and aggregator symlinks.
+    Sync {
+        /// Project name to sync. May be repeated.
+        #[arg(long, value_name = "NAME", action = ArgAction::Append)]
+        name: Vec<String>,
+        /// Sync every configured project.
+        #[arg(long)]
+        all: bool,
+        /// Remove view entries that no longer correspond to canonical skills.
+        #[arg(long)]
+        allow_delete: bool,
+        /// Replace existing non-symlink entries in project views.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Show read-only project view and aggregator drift.
+    Status {
+        /// Project name to inspect. May be repeated.
+        #[arg(long, value_name = "NAME", action = ArgAction::Append)]
+        name: Vec<String>,
+        /// Inspect every configured project.
+        #[arg(long)]
+        all: bool,
+        /// Output format.
+        #[arg(long, default_value = "text")]
+        format: StatusFormat,
+    },
+    /// Show project view and aggregator symlink deltas.
+    Diff {
+        /// Project name to diff. May be repeated.
+        #[arg(long, value_name = "NAME", action = ArgAction::Append)]
+        name: Vec<String>,
+        /// Diff every configured project.
+        #[arg(long)]
+        all: bool,
     },
 }
 

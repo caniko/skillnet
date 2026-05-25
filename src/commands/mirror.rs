@@ -2,12 +2,12 @@ use anyhow::Result;
 
 use super::Context;
 use crate::cli::Scope;
-use crate::reconcile as reconcile_ops;
+use crate::mirror::mirror_skill_dirs;
 
 pub fn list(ctx: &Context, scopes: &[Scope]) -> Result<()> {
     for target in ctx.targets(scopes)? {
         println!("# {}", target.name);
-        for skill in reconcile_ops::mirror_skill_dirs(&target.canonical_path)? {
+        for skill in mirror_skill_dirs(&target.canonical_path)? {
             println!("{}", skill.file_name().unwrap_or_default());
         }
     }

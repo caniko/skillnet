@@ -7,6 +7,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::{
     fs_ops,
+    mirror::mirror_skill_dirs,
     model::{Candidate, Choice, Source, Target},
 };
 
@@ -171,23 +172,6 @@ pub fn format_write_summary(summary: WriteSummary) -> String {
     } else {
         format!(" ({})", parts.join(", "))
     }
-}
-
-pub fn mirror_skill_dirs(mirror: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
-    if !mirror.exists() {
-        return Ok(Vec::new());
-    }
-    let mut dirs = Vec::new();
-    for entry in fs::read_dir(mirror)? {
-        let entry = entry?;
-        let path = Utf8PathBuf::from_path_buf(entry.path())
-            .map_err(|p| anyhow::anyhow!("non-UTF-8 path in mirror: {}", p.display()))?;
-        if path.is_dir() && path.join("SKILL.md").is_file() {
-            dirs.push(path);
-        }
-    }
-    dirs.sort();
-    Ok(dirs)
 }
 
 fn write_mirror(
