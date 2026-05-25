@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, process::Command as StdCommand};
 
 use anyhow::{bail, Context as AnyhowContext, Result};
 use camino::Utf8Path;
@@ -84,6 +84,15 @@ pub fn project_sync(
     force: bool,
 ) -> Result<()> {
     for target in project_targets(ctx, names, all)? {
+        if let Some(project_root) = &target.project_root {
+            if !project_root.is_dir() {
+                eprintln!(
+                    "warn: [{}] project repository path {} does not exist; skipping",
+                    target.name, project_root
+                );
+                continue;
+            }
+        }
         if ctx.dry_run {
             println!("# project sync {}", target.name);
             println!("from: {}", target.canonical_path);
@@ -117,6 +126,67 @@ pub fn project_sync(
             println!("aggregator  {}", format_aggregator_status(status));
         }
     }
+    Ok(())
+}
+
+pub fn project_clone_all(ctx: &Context, all: bool, dry_run: bool, ssh_strict: bool) -> Result<()> {
+    if !all {
+        bail!("must pass --all");
+    }
+
+    let dry_run = dry_run || ctx.dry_run;
+    let mut cloned_or_planned = false;
+    for project in &ctx.config.projects {
+        let path = expand_path(&project.path)
+            .with_context(|| format!("failed to resolve project path for `{}`", project.name))?;
+        if path.exists() {
+            continue;
+        }
+        let Some(origin) = project
+            .origin
+            .as_deref()
+            .filter(|origin| !origin.is_empty())
+        else {
+            eprintln!(
+                "warn: [{}] no origin configured; skipping clone to {}",
+                project.name, path
+            );
+            continue;
+        };
+        if ssh_strict && is_https_origin(origin) {
+            bail!(
+                "project `{}` origin `{origin}` uses HTTPS; pass --ssh-strict=false to allow it",
+                project.name
+            );
+        }
+
+        cloned_or_planned = true;
+        if dry_run {
+            println!("clone {}\t{}\t{}", project.name, origin, path);
+            continue;
+        }
+
+        create_parent_dir(&path)?;
+        let status = StdCommand::new("git")
+            .args(["clone", origin, path.as_str()])
+            .status()
+            .with_context(|| format!("failed to run git clone for project `{}`", project.name))?;
+        if !status.success() {
+            bail!(
+                "git clone failed for project `{}` with status {status}",
+                project.name
+            );
+        }
+    }
+
+    if cloned_or_planned {
+        if dry_run {
+            println!("project sync --all");
+        } else {
+            project_sync(ctx, &[], true, false, false)?;
+        }
+    }
+
     Ok(())
 }
 
@@ -254,6 +324,18 @@ fn project_table(name: &str, path: &Utf8Path) -> Table {
     table["name"] = value(name);
     table["path"] = value(path.as_str());
     table
+}
+
+fn create_parent_dir(path: &Utf8Path) -> Result<()> {
+    let parent = path
+        .parent()
+        .with_context(|| format!("project path {path} has no parent directory"))?;
+    fs::create_dir_all(parent)
+        .with_context(|| format!("failed to create parent directory {parent}"))
+}
+
+fn is_https_origin(origin: &str) -> bool {
+    origin.starts_with("https://") || origin.starts_with("http://")
 }
 
 fn remove_project_from_doc(doc: &mut DocumentMut, name: &str) -> Result<()> {

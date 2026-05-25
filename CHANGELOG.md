@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-25
+
+### Added
+
+- `skillnet project clone --all` clones configured missing project repositories
+  from optional `[[projects]].origin` values, supports `--dry-run`, refuses
+  HTTPS origins by default, and runs `project sync --all` after live clones.
+- `docs/src/migration/option-b.md` documents the legacy schema removal, new
+  canonical/view layout, and fresh-host bootstrap workflow.
+
+### Changed
+
+- `skillnet doctor` now validates Option B invariants across global and
+  project scopes: canonical store existence, view symlink shape, orphan view
+  entries, missing canonical view entries, and project aggregator symlink
+  freshness.
+- Missing configured project repositories are reported as doctor warnings so
+  partially bootstrapped hosts get actionable output without being labeled as
+  corrupted state.
+
 ## [0.5.0] - 2026-05-25
 
 `0.5.0` removes the pre-Option-B reconcile model. There is now one

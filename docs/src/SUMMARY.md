@@ -7,4 +7,5 @@
   - [Calibration JSON schema](calibration/json-schema.md)
   - [Verifier surprises convention](calibration/surprises.md)
 - [Hook ingestion](hook-ingestion.md)
+- [Migration](migration/option-b.md)
 - [Release And Maintenance](release.md)

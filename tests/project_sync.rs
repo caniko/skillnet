@@ -38,6 +38,9 @@ fn materialize_project_creates_relative_views_and_absolute_aggregator() {
             },
         ],
         aggregator_path: Some(root.join("mirror/projects/demo")),
+        project_root: Some(project.clone()),
+        canonical_rel: Some(".skills".into()),
+        origin: None,
     };
 
     let summary = materialize_project(&target).unwrap();

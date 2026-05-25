@@ -12,7 +12,7 @@ pub(crate) mod view;
 pub use context::Context;
 pub use mirror::{list, targets};
 pub use project::{
-    project_add, project_diff_command, project_list, project_remove, project_status_command,
-    project_sync,
+    project_add, project_clone_all, project_diff_command, project_list, project_remove,
+    project_status_command, project_sync,
 };
 pub use skill::{delete, move_skill, new, rename, show};

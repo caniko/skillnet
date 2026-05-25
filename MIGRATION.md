@@ -52,5 +52,4 @@ views = [
   These commands sync affected views by default.
 - `mirror_root/.skillnet/cache.toml` is obsolete. Delete it if present.
 
-The full migration guide will land at `docs/src/migration/option-b.md` in the
-doctor phase.
+The full migration guide lives at `docs/src/migration/option-b.md`.

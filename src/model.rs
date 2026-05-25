@@ -7,6 +7,9 @@ pub struct Target {
     pub canonical_path: Utf8PathBuf,
     pub views: Vec<ViewTarget>,
     pub aggregator_path: Option<Utf8PathBuf>,
+    pub project_root: Option<Utf8PathBuf>,
+    pub canonical_rel: Option<String>,
+    pub origin: Option<String>,
 }
 
 #[derive(Debug, Clone)]

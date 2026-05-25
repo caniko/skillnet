@@ -581,6 +581,18 @@ pub(super) enum ProjectCommand {
         #[arg(long)]
         all: bool,
     },
+    /// Clone every missing configured project repository.
+    Clone {
+        /// Clone every configured project whose path does not exist.
+        #[arg(long)]
+        all: bool,
+        /// Print planned clones without invoking git or syncing views.
+        #[arg(long)]
+        dry_run: bool,
+        /// Refuse HTTP(S) origins. Use --ssh-strict=false to allow them.
+        #[arg(long, default_value_t = true, num_args = 0..=1, default_missing_value = "true")]
+        ssh_strict: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

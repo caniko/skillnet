@@ -1,149 +1,513 @@
-use std::{fmt, fs};
+use std::{
+    collections::BTreeSet,
+    fmt, fs,
+    path::{Component, Path, PathBuf},
+};
 
-use anyhow::Result;
-use camino::Utf8Path;
+use anyhow::{Context as AnyhowContext, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 
 use super::Context;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Finding {
-    pub scope: String,
-    pub kind: FindingKind,
-    pub detail: String,
-}
+use crate::model::{Target, TargetScope, ViewTarget};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum FindingKind {
-    MissingSyncPath,
+pub enum Severity {
+    Warn,
+    Error,
 }
 
-impl FindingKind {
-    fn label(&self) -> &'static str {
+impl fmt::Display for Severity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingSyncPath => "missing sync path",
+            Self::Warn => f.write_str("warn"),
+            Self::Error => f.write_str("error"),
         }
     }
 }
 
-impl fmt::Display for FindingKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.label())
-    }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Issue {
+    pub severity: Severity,
+    pub message: String,
+    pub scope: String,
 }
 
-pub fn run(ctx: &Context) -> Result<Vec<Finding>> {
-    let findings = lint(ctx)?;
-    for finding in &findings {
-        println!(
-            "warn  {}  {}: {}",
-            finding.scope, finding.kind, finding.detail
+pub fn run(ctx: &Context) -> Result<()> {
+    let issues = lint(ctx)?;
+    if issues.is_empty() {
+        println!("doctor: no issues");
+        return Ok(());
+    }
+
+    for issue in &issues {
+        eprintln!("{}: [{}] {}", issue.severity, issue.scope, issue.message);
+    }
+    std::process::exit(1);
+}
+
+pub fn lint(ctx: &Context) -> Result<Vec<Issue>> {
+    let mut issues = Vec::new();
+    for target in ctx.all_targets()? {
+        match target.scope {
+            TargetScope::Global => check_global(&target, &mut issues)?,
+            TargetScope::Project => check_project(&target, &mut issues)?,
+        }
+    }
+    issues.sort_by(|left, right| {
+        left.severity
+            .cmp(&right.severity)
+            .then(left.scope.cmp(&right.scope))
+            .then(left.message.cmp(&right.message))
+    });
+    Ok(issues)
+}
+
+fn check_global(target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
+    if !target.canonical_path.is_dir() {
+        issue(
+            issues,
+            target,
+            Severity::Error,
+            format!(
+                "canonical store {} is missing or not a directory",
+                target.canonical_path
+            ),
+        );
+        return Ok(());
+    }
+
+    let canonical_real = canonicalize_utf8(&target.canonical_path)?;
+    let canonical_skills = canonical_skill_names(&target.canonical_path)?;
+    for view in &target.views {
+        check_global_view(target, view, &canonical_real, &canonical_skills, issues)?;
+    }
+    Ok(())
+}
+
+fn check_global_view(
+    target: &Target,
+    view: &ViewTarget,
+    canonical_real: &Utf8Path,
+    canonical_skills: &BTreeSet<String>,
+    issues: &mut Vec<Issue>,
+) -> Result<()> {
+    if !view.path.is_dir() {
+        issue(
+            issues,
+            target,
+            Severity::Error,
+            format!(
+                "view `{}` at {} is missing or not a directory",
+                view.label, view.path
+            ),
+        );
+        return Ok(());
+    }
+
+    let mut view_entries = BTreeSet::new();
+    for entry in read_dir_utf8(&view.path)? {
+        let name = entry_name(&entry)?;
+        view_entries.insert(name.clone());
+        let metadata = fs::symlink_metadata(&entry)
+            .with_context(|| format!("failed to inspect view entry {entry}"))?;
+        if !metadata.file_type().is_symlink() {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "view `{}` entry `{name}` is not a symlink: {entry}",
+                    view.label
+                ),
+            );
+            continue;
+        }
+
+        match canonicalize_utf8(&entry) {
+            Ok(resolved) => {
+                if resolved.parent() != Some(canonical_real) {
+                    issue(
+                        issues,
+                        target,
+                        Severity::Error,
+                        format!(
+                            "view `{}` entry `{name}` resolves outside canonical store: {entry} -> {resolved}",
+                            view.label
+                        ),
+                    );
+                }
+            }
+            Err(err) => issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "view `{}` entry `{name}` is a broken symlink: {entry}: {err}",
+                    view.label
+                ),
+            ),
+        }
+
+        if !canonical_skills.contains(&name) {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "view `{}` entry `{name}` is not managed by skillnet; either register it or move it out of {}",
+                    view.label, view.path
+                ),
+            );
+        }
+    }
+
+    for skill in canonical_skills.difference(&view_entries) {
+        issue(
+            issues,
+            target,
+            Severity::Error,
+            format!(
+                "canonical skill `{skill}` is missing from view `{}` at {}",
+                view.label, view.path
+            ),
         );
     }
-    Ok(findings)
+    Ok(())
 }
 
-pub fn lint(ctx: &Context) -> Result<Vec<Finding>> {
-    let target = ctx.config.global_target(&ctx.mirror_root)?;
-    let mut findings = Vec::new();
+fn check_project(target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
+    let Some(project_root) = &target.project_root else {
+        issue(
+            issues,
+            target,
+            Severity::Error,
+            "project target is missing its project root metadata".to_string(),
+        );
+        return Ok(());
+    };
+    let canonical_rel = target
+        .canonical_rel
+        .as_deref()
+        .unwrap_or(".skills")
+        .trim_matches('/');
+
+    if !project_root.exists() {
+        issue(
+            issues,
+            target,
+            Severity::Warn,
+            format!(
+                "project repository path {project_root} does not exist; skipping project checks"
+            ),
+        );
+        return Ok(());
+    }
+    if !project_root.is_dir() {
+        issue(
+            issues,
+            target,
+            Severity::Error,
+            format!("project repository path {project_root} exists but is not a directory"),
+        );
+        return Ok(());
+    }
+    if !target.canonical_path.is_dir() {
+        issue(
+            issues,
+            target,
+            Severity::Error,
+            format!(
+                "project canonical store {} is missing or not a directory",
+                target.canonical_path
+            ),
+        );
+        return Ok(());
+    }
+
+    let canonical_skills = canonical_skill_names(&target.canonical_path)?;
     for view in &target.views {
-        if let Some(detail) = invalid_sync_path_detail(&view.path) {
-            findings.push(Finding {
-                scope: target.name.clone(),
-                kind: FindingKind::MissingSyncPath,
-                detail,
-            });
+        check_project_view(
+            target,
+            view,
+            project_root,
+            canonical_rel,
+            &canonical_skills,
+            issues,
+        )?;
+    }
+    check_project_aggregator(target, issues)?;
+    Ok(())
+}
+
+fn check_project_view(
+    target: &Target,
+    view: &ViewTarget,
+    project_root: &Utf8Path,
+    canonical_rel: &str,
+    canonical_skills: &BTreeSet<String>,
+    issues: &mut Vec<Issue>,
+) -> Result<()> {
+    if !view.path.is_dir() {
+        issue(
+            issues,
+            target,
+            Severity::Error,
+            format!(
+                "project view `{}` at {} is missing or not a directory",
+                view.label, view.path
+            ),
+        );
+        return Ok(());
+    }
+
+    let mut view_entries = BTreeSet::new();
+    for entry in read_dir_utf8(&view.path)? {
+        let name = entry_name(&entry)?;
+        view_entries.insert(name.clone());
+        let metadata = fs::symlink_metadata(&entry)
+            .with_context(|| format!("failed to inspect project view entry {entry}"))?;
+        if !metadata.file_type().is_symlink() {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "project view `{}` entry `{name}` is not a symlink: {entry}",
+                    view.label
+                ),
+            );
+            continue;
+        }
+
+        let actual = read_link_utf8(&entry)?;
+        if actual.is_absolute() {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "project view `{}` entry `{name}` uses an absolute target: {entry} -> {actual}",
+                    view.label
+                ),
+            );
+        }
+        let expected = relative_path(&view.path, &project_root.join(canonical_rel).join(&name))?;
+        if actual != expected {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "project view `{}` entry `{name}` has target {actual}; expected {expected}",
+                    view.label
+                ),
+            );
+        }
+        if !canonical_skills.contains(&name) {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "project view `{}` entry `{name}` has no canonical skill under {}",
+                    view.label, target.canonical_path
+                ),
+            );
+            continue;
+        }
+        let resolved = resolve_link_target(&view.path, &actual);
+        if resolved != target.canonical_path.join(&name) {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "project view `{}` entry `{name}` resolves to {resolved}; expected {}",
+                    view.label,
+                    target.canonical_path.join(&name)
+                ),
+            );
         }
     }
 
-    findings.sort_by(|left, right| {
-        left.scope
-            .cmp(&right.scope)
-            .then(left.kind.cmp(&right.kind))
-            .then(left.detail.cmp(&right.detail))
-    });
-    Ok(findings)
+    for skill in canonical_skills.difference(&view_entries) {
+        issue(
+            issues,
+            target,
+            Severity::Error,
+            format!(
+                "canonical skill `{skill}` is missing from project view `{}` at {}",
+                view.label, view.path
+            ),
+        );
+    }
+    Ok(())
 }
 
-fn invalid_sync_path_detail(path: &Utf8Path) -> Option<String> {
-    match fs::metadata(path) {
-        Ok(metadata) if metadata.is_dir() => None,
-        Ok(_) => Some(format!("{path} (exists but is not a directory)")),
-        Err(_) => {
-            let parent = path.parent()?;
-            if parent.is_dir() {
-                None
-            } else {
-                Some(format!("{path} (parent does not exist)"))
+fn check_project_aggregator(target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
+    let Some(path) = &target.aggregator_path else {
+        return Ok(());
+    };
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            let actual = read_link_utf8(path)?;
+            if actual != target.canonical_path {
+                issue(
+                    issues,
+                    target,
+                    Severity::Error,
+                    format!(
+                        "aggregator symlink {path} points to {actual}; expected {}",
+                        target.canonical_path
+                    ),
+                );
+                return Ok(());
+            }
+            match canonicalize_utf8(path) {
+                Ok(resolved) if resolved == canonicalize_utf8(&target.canonical_path)? => {}
+                Ok(resolved) => issue(
+                    issues,
+                    target,
+                    Severity::Error,
+                    format!(
+                        "aggregator symlink {path} resolves to {resolved}; expected {}",
+                        target.canonical_path
+                    ),
+                ),
+                Err(err) => issue(
+                    issues,
+                    target,
+                    Severity::Error,
+                    format!("aggregator symlink {path} is broken: {err}"),
+                ),
             }
         }
+        Ok(_) => issue(
+            issues,
+            target,
+            Severity::Error,
+            format!("aggregator path {path} exists but is not a symlink"),
+        ),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => issue(
+            issues,
+            target,
+            Severity::Error,
+            format!("aggregator symlink {path} is missing"),
+        ),
+        Err(err) => return Err(err).with_context(|| format!("failed to inspect {path}")),
+    }
+    Ok(())
+}
+
+fn canonical_skill_names(canonical_path: &Utf8Path) -> Result<BTreeSet<String>> {
+    crate::mirror::mirror_skill_dirs(canonical_path)?
+        .into_iter()
+        .map(|path| entry_name(&path))
+        .collect()
+}
+
+fn issue(issues: &mut Vec<Issue>, target: &Target, severity: Severity, message: String) {
+    issues.push(Issue {
+        severity,
+        message,
+        scope: target.name.clone(),
+    });
+}
+
+fn read_dir_utf8(path: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(path).with_context(|| format!("failed to read directory {path}"))? {
+        let entry = entry?;
+        entries.push(
+            Utf8PathBuf::from_path_buf(entry.path())
+                .map_err(|path| anyhow::anyhow!("non-UTF-8 path: {}", path.display()))?,
+        );
+    }
+    entries.sort();
+    Ok(entries)
+}
+
+fn entry_name(path: &Utf8Path) -> Result<String> {
+    path.file_name()
+        .map(ToString::to_string)
+        .with_context(|| format!("path has no final component: {path}"))
+}
+
+fn canonicalize_utf8(path: &Utf8Path) -> Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(fs::canonicalize(path)?)
+        .map_err(|path| anyhow::anyhow!("non-UTF-8 path: {}", path.display()))
+}
+
+fn read_link_utf8(path: &Utf8Path) -> Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(fs::read_link(path)?).map_err(|target| {
+        anyhow::anyhow!("non-UTF-8 symlink target at {path}: {}", target.display())
+    })
+}
+
+fn resolve_link_target(link_parent: &Utf8Path, target: &Utf8Path) -> Utf8PathBuf {
+    if target.is_absolute() {
+        return normalize_utf8(target);
+    }
+    normalize_utf8(&link_parent.join(target))
+}
+
+fn relative_path(from_dir: &Utf8Path, to: &Utf8Path) -> Result<Utf8PathBuf> {
+    let from = absolutize_for_relative(from_dir)?;
+    let to = absolutize_for_relative(to)?;
+    let from_components = normal_components(&from);
+    let to_components = normal_components(&to);
+    let common = from_components
+        .iter()
+        .zip(&to_components)
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    let mut out = PathBuf::new();
+    for _ in common..from_components.len() {
+        out.push("..");
+    }
+    for component in &to_components[common..] {
+        out.push(component);
+    }
+    Utf8PathBuf::from_path_buf(out)
+        .map_err(|path| anyhow::anyhow!("non-UTF-8 relative symlink target: {}", path.display()))
+}
+
+fn absolutize_for_relative(path: &Utf8Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        Ok(path.as_std_path().to_path_buf())
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(path.as_std_path()))
+            .context("failed to resolve current directory")
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        commands::Context,
-        config::{Config, DatabaseConfig, GlobalConfig, ViewConfig, ViewScope},
-    };
-    use camino::Utf8PathBuf;
-    use tempfile::tempdir;
+fn normal_components(path: &Path) -> Vec<PathBuf> {
+    path.components()
+        .filter_map(|component| match component {
+            Component::Prefix(prefix) => Some(PathBuf::from(prefix.as_os_str())),
+            Component::RootDir => Some(PathBuf::from("/")),
+            Component::Normal(part) => Some(PathBuf::from(part)),
+            Component::ParentDir => Some(PathBuf::from("..")),
+            Component::CurDir => None,
+        })
+        .collect()
+}
 
-    fn context_with_global(views: Vec<Utf8PathBuf>) -> Context {
-        let tmp = tempdir().unwrap();
-        let mirror_root = Utf8PathBuf::from_path_buf(tmp.keep()).unwrap();
-        Context {
-            config_path: mirror_root.join("skillnet.toml"),
-            catalog_config_path: mirror_root.join("skillnet.catalog.toml"),
-            config: Config {
-                global: GlobalConfig {
-                    canonical_path: None,
-                    views: views
-                        .into_iter()
-                        .map(|path| ViewConfig {
-                            label: path.file_name().unwrap_or("view").to_string(),
-                            path: path.to_string(),
-                            scope: ViewScope::Global,
-                        })
-                        .collect(),
-                },
-                skills_root: None,
-                mirror_root: None,
-                database: DatabaseConfig::default(),
-                projects: Vec::new(),
-            },
-            mirror_root,
-            dry_run: false,
-            allow_dirty_destination: false,
+fn normalize_utf8(path: &Utf8Path) -> Utf8PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.as_std_path().components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::Prefix(prefix) => out.push(prefix.as_os_str()),
+            Component::RootDir => out.push("/"),
+            Component::Normal(part) => out.push(part),
         }
     }
-
-    #[test]
-    fn lint_allows_single_agent_single_destination() {
-        let tmp = tempdir().unwrap();
-        let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
-        let agents = root.join(".agents/skills");
-        fs::create_dir_all(&agents).unwrap();
-        let ctx = context_with_global(vec![agents]);
-
-        let findings = lint(&ctx).unwrap();
-
-        assert!(findings.is_empty());
-    }
-
-    #[test]
-    fn lint_reports_missing_sync_path_parent() {
-        let tmp = tempdir().unwrap();
-        let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
-        let agents = root.join(".agents/skills");
-        let missing = root.join("missing/skills");
-        fs::create_dir_all(&agents).unwrap();
-        let ctx = context_with_global(vec![agents, missing]);
-
-        let findings = lint(&ctx).unwrap();
-
-        assert!(findings
-            .iter()
-            .any(|finding| finding.kind == FindingKind::MissingSyncPath));
-    }
+    Utf8PathBuf::from_path_buf(out)
+        .unwrap_or_else(|path| Utf8PathBuf::from(path.to_string_lossy().to_string()))
 }

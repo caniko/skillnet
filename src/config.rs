@@ -89,6 +89,9 @@ pub struct GlobalConfig {
 pub struct ProjectConfig {
     pub name: String,
     pub path: String,
+    /// Optional repository origin used by `skillnet project clone --all`.
+    #[serde(default)]
+    pub origin: Option<String>,
     /// Relative path inside the project repo holding canonical skills.
     #[serde(default = "default_canonical_rel")]
     pub canonical_rel: String,
@@ -242,6 +245,9 @@ impl Config {
                 })
                 .collect::<Result<Vec<_>>>()?,
             aggregator_path: None,
+            project_root: None,
+            canonical_rel: None,
+            origin: None,
         })
     }
 
@@ -271,6 +277,9 @@ impl Config {
                 })
                 .collect::<Result<Vec<_>>>()?,
             aggregator_path: Some(mirror_root.join("projects").join(&project.name)),
+            project_root: Some(project_root),
+            canonical_rel: Some(project.canonical_rel.clone()),
+            origin: project.origin.clone(),
         })
     }
 }

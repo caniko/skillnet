@@ -36,6 +36,13 @@ canonical global store.
 `skillnet project sync --all` materialises configured project views and the
 project aggregator symlinks under `mirror_root/projects/`.
 
+`skillnet project clone --all` clones every configured project whose `path`
+does not exist and whose `origin` is configured, then runs
+`skillnet project sync --all`. It is idempotent for projects already present on
+disk. Use `--dry-run` to print intended clones without invoking Git. By
+default, HTTPS origins are refused; pass `--ssh-strict=false` only when HTTPS
+clones are intended.
+
 Use `view status|diff` and `project status|diff` to inspect derived view drift
 without mutating files. `skillnet sync` was removed in `0.5.0`; each scope now
 has one canonical store and every other location is a generated view.
@@ -58,10 +65,16 @@ has one canonical store and every other location is a generated view.
 
 ## Doctor
 
-`skillnet doctor` checks resolved global view configuration. P9 expands the
-doctor invariant set for Option B; in `0.5.0` it still focuses on view paths
-that cannot be materialised because a parent directory is missing or the path
-already exists as a non-directory.
+`skillnet doctor` checks the Option B canonical/view/aggregator invariants:
+
+- global canonical store existence and global view symlinks;
+- project canonical stores, committed in-repo view symlinks, and mirror
+  aggregator symlinks;
+- orphan view entries that do not correspond to canonical skill names;
+- broken or unexpected symlink targets.
+
+Missing configured project repositories are warnings because a fresh host may
+not have cloned every project yet. Other invariant violations are errors.
 
 ## Config File Location
 

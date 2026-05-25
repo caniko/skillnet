@@ -9,6 +9,7 @@ use camino::Utf8PathBuf;
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 
+use crate::commands::Context;
 use crate::{
     catalog, commands,
     config::{
@@ -16,7 +17,6 @@ use crate::{
         legacy_config_path, Config, DbOverrides,
     },
 };
-use crate::{commands::Context, exit::ExitError};
 
 use args::{CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, ViewCommand};
 use scope::{resolve_scope, resolve_scopes};
@@ -78,12 +78,8 @@ pub fn run() -> Result<()> {
             commands::status::run(&ctx, &scopes, format)
         }
         Command::Doctor => {
-            let findings = commands::doctor::run(&ctx)?;
-            if findings.is_empty() {
-                Ok(())
-            } else {
-                Err(ExitError::parity_lint("parity lint findings").into())
-            }
+            commands::doctor::run(&ctx)?;
+            Ok(())
         }
         Command::View { command } => run_view_command(&ctx, command),
         Command::Skill { command } => run_skill_command(&ctx, command),
@@ -277,6 +273,11 @@ fn run_project_command(ctx: &Context, command: ProjectCommand) -> Result<()> {
             commands::project_status_command(ctx, &name, all, format)
         }
         ProjectCommand::Diff { name, all } => commands::project_diff_command(ctx, &name, all),
+        ProjectCommand::Clone {
+            all,
+            dry_run,
+            ssh_strict,
+        } => commands::project_clone_all(ctx, all, dry_run, ssh_strict),
     }
 }
 
