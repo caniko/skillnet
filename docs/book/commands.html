@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-719dba0a.js";
+            window.path_to_searchindex_js = "searchindex-bd5d4365.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b7899954.js"></script>
+        <script src="toc-7bb5235c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -177,119 +177,68 @@
                         <h1 id="command-surface"><a class="header" href="#command-surface">Command Surface</a></h1>
 <p>Top-level commands:</p>
 <ul>
-<li><code>status</code>: show scope divergence and catalog health.</li>
-<li><code>doctor</code>: check configured scopes for invariant violations.</li>
+<li><code>status</code>: show canonical store, view drift, destination, and catalog health.</li>
+<li><code>doctor</code>: check configured views for invariant violations.</li>
 <li><code>completions</code>: generate shell completion scripts.</li>
-<li><code>sync</code>: pull from live sources, push to live targets, and inspect divergence.</li>
-<li><code>skill</code>: list, inspect, and edit mirrored skill directories.</li>
-<li><code>scope</code>: inspect configured mirror scopes and their live sources.</li>
-<li><code>project</code>: manage configured project roots.</li>
+<li><code>view</code>: materialise and inspect global view symlinks.</li>
+<li><code>skill</code>: list, inspect, and edit canonical skill directories.</li>
+<li><code>scope</code>: inspect configured canonical scopes.</li>
+<li><code>project</code>: manage configured project roots and materialise project views.</li>
 <li><code>catalog</code>: generate and validate skill catalog metadata.</li>
 <li><code>calibration</code>: record, inspect, analyze, and tune <code>multi-phase-plan</code>
 calibration data.</li>
+<li><code>hook</code>: install, remove, check, and run managed Claude Code hook ingestion.</li>
 </ul>
 <p>Examples:</p>
-<pre><code class="language-sh">skillnet sync pull --scope global
-skillnet sync roundtrip --all
-skillnet sync roundtrip --all --check
+<pre><code class="language-sh">skillnet view sync --all
+skillnet project sync --all
 skillnet doctor
-skillnet sync status --scope global
+skillnet view status --all
+skillnet project status --all
 skillnet skill show global/rust-project-flake
 skillnet project list
 skillnet catalog lint
 skillnet calibration heuristics list
 skillnet calibration walkthrough --dry-run
+skillnet hook status
 </code></pre>
-<h2 id="sync-commands"><a class="header" href="#sync-commands">Sync Commands</a></h2>
-<p><code>skillnet sync roundtrip [--scope &lt;SCOPE&gt;...] [--all] [--check]</code> pulls the
-selected scopes into the mirror and then pushes that mirror state back to each
-configured live destination. It is the first-class replacement for
-<code>skillnet sync pull --then-push</code>; the old flag remains available but prints a
-single-line deprecation warning.</p>
-<p>By default, sync writes are newer-only at skill-directory granularity. Incoming
-skills overwrite existing skills only when the incoming skill tree has a
-strictly newer contained file/symlink mtime. Older incoming skills are skipped,
-equal-mtime identical skills are no-ops, and equal-mtime differing skills fail.
-Destination-only skills are preserved by default. Pass <code>--allow-older</code> to allow
-older or equal-mtime incoming content to overwrite, and pass <code>--allow-delete</code> to
-allow pruning skills that are missing from the incoming side.</p>
-<p><code>--check</code> stages the pull in a temporary mirror and compares the would-be mirror
-contents with each live destination. It does not update the real mirror, does
-not write cache metadata, and does not mutate any destination. A clean check
-prints each destination as <code>clean</code>; drift prints <code>would change</code> summaries and
-exits non-zero.</p>
-<p>Sync exit codes:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Code</th><th>Meaning</th></tr>
-</thead>
-<tbody>
-<tr><td>0</td><td>Clean / command completed successfully</td></tr>
-<tr><td>2</td><td>Pull or temporary reconciliation failed</td></tr>
-<tr><td>3</td><td>Push to a live destination failed</td></tr>
-<tr><td>4</td><td><code>doctor</code> parity lint findings</td></tr>
-<tr><td>5</td><td><code>sync roundtrip --check</code> found would-change drift</td></tr>
-</tbody>
-</table>
-</div>
+<h2 id="view-and-project-commands"><a class="header" href="#view-and-project-commands">View And Project Commands</a></h2>
+<p><code>skillnet view sync --all</code> materialises configured global views from the
+canonical global store.</p>
+<p><code>skillnet project sync --all</code> materialises configured project views and the
+project aggregator symlinks under <code>mirror_root/projects/</code>.</p>
+<p><code>skillnet project clone --all</code> clones every configured project whose <code>path</code>
+does not exist and whose <code>origin</code> is configured, then runs
+<code>skillnet project sync --all</code>. It is idempotent for projects already present on
+disk. Use <code>--dry-run</code> to print intended clones without invoking Git. By
+default, HTTPS origins are refused; pass <code>--ssh-strict=false</code> only when HTTPS
+clones are intended.</p>
+<p>Use <code>view status|diff</code> and <code>project status|diff</code> to inspect derived view drift
+without mutating files. <code>skillnet sync</code> was removed in <code>0.5.0</code>; each scope now
+has one canonical store and every other location is a generated view.</p>
 <h2 id="status-json-schema"><a class="header" href="#status-json-schema">Status JSON Schema</a></h2>
-<p><code>skillnet status --format json</code> and
-<code>skillnet sync status --format json --scope &lt;SCOPE&gt;</code> emit a stable, pretty
-printed JSON document:</p>
-<pre><code class="language-json">{
-  "schema": "skillnet.status.v1",
-  "scopes": [
-    {
-      "name": "global",
-      "state": "clean",
-      "diverged_files": 0,
-      "last_pulled_at": "2026-05-24T12:34:56Z",
-      "cache_state": "fresh"
-    }
-  ]
-}
+<p><code>skillnet status --format json --scope &lt;SCOPE&gt;</code> emits a pretty JSON array:</p>
+<pre><code class="language-json">[
+  {
+    "scope": "global",
+    "kind": "global",
+    "canonical_path": "/home/alice/skills/global",
+    "skill_count": 42,
+    "drift_entries": 0
+  }
+]
 </code></pre>
-<p>Field contract:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Field</th><th>Meaning</th></tr>
-</thead>
-<tbody>
-<tr><td><code>schema</code></td><td>Schema identifier. The current value is always <code>skillnet.status.v1</code>.</td></tr>
-<tr><td><code>scopes[].name</code></td><td>Scope name, such as <code>global</code> or a configured project name.</td></tr>
-<tr><td><code>scopes[].state</code></td><td>Either <code>clean</code> or <code>diverged</code>.</td></tr>
-<tr><td><code>scopes[].diverged_files</code></td><td>Number of divergent files. This is <code>0</code> when <code>state</code> is <code>clean</code>.</td></tr>
-<tr><td><code>scopes[].last_pulled_at</code></td><td>RFC 3339 UTC timestamp for the last successful pull, or <code>null</code> when the scope has never been pulled.</td></tr>
-<tr><td><code>scopes[].cache_state</code></td><td>One of <code>fresh</code>, <code>stale</code>, or <code>missing</code>.</td></tr>
-</tbody>
-</table>
-</div>
-<p>The <code>v1</code> schema is additive-stable: new fields may be added within
-<code>skillnet.status.v1</code>, but removing or renaming an existing field requires a new
-schema value such as <code>skillnet.status.v2</code>.</p>
 <h2 id="doctor"><a class="header" href="#doctor">Doctor</a></h2>
-<p><code>skillnet doctor</code> checks resolved global scope configuration for sync parity
-risks before the first push. It exits 0 when there are no findings and 4 when
-it prints any warning.</p>
-<p>Findings:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Kind</th><th>Meaning</th><th>Recommended fix</th></tr>
-</thead>
-<tbody>
-<tr><td><code>asymmetric fan-out</code></td><td>Canonical agent sources include both <code>agents</code> and <code>claude</code>, but <code>sync_paths</code> does not include the corresponding <code>.agents/skills</code> or <code>.claude/skills</code> target.</td><td>Add the missing canonical target to <code>[global].sync_paths</code>.</td></tr>
-<tr><td><code>missing sync path</code></td><td>A configured <code>sync_paths</code> entry is not an existing directory and cannot be created because its parent is missing, or the path exists as a non-directory.</td><td>Create the parent directory or correct the configured path.</td></tr>
-<tr><td><code>singleton global scope</code></td><td>Global sources name one or more canonical agents, but no sync path is configured; or multiple canonical agents are configured with fewer than two sync paths.</td><td>Add the required canonical sync paths, or remove the extra canonical source if no fan-out is intended.</td></tr>
-</tbody>
-</table>
-</div>
-<p>Output is one warning per line:</p>
-<pre><code class="language-text">warn  global  asymmetric fan-out: sources include "claude" but sync_paths lacks ".claude/skills"
-warn  global  missing sync path: /home/alice/.agents/skills (parent does not exist)
-</code></pre>
+<p><code>skillnet doctor</code> checks the Option B canonical/view/aggregator invariants:</p>
+<ul>
+<li>global canonical store existence and global view symlinks;</li>
+<li>project canonical stores, committed in-repo view symlinks, and mirror
+aggregator symlinks;</li>
+<li>orphan view entries that do not correspond to canonical skill names;</li>
+<li>broken or unexpected symlink targets.</li>
+</ul>
+<p>Missing configured project repositories are warnings because a fresh host may
+not have cloned every project yet. Other invariant violations are errors.</p>
 <h2 id="config-file-location"><a class="header" href="#config-file-location">Config File Location</a></h2>
 <p><code>skillnet --config &lt;path&gt;</code> is the highest-precedence source. When the flag is
 omitted, the binary reads:</p>
@@ -315,20 +264,8 @@ omitted, the binary reads:</p>
 <code>skillnet status</code> reports branch, origin, and dirty state. Commands that write
 to the mirror destination refuse to run when that repository is dirty unless
 <code>--allow-dirty-destination</code> is passed.</p>
-<p><code>skillnet sync pull</code> can also auto-commit selected-scope dirty mirror paths
-before pulling when enabled through <code>skillnet.toml</code> or CLI flags:</p>
-<pre><code class="language-toml">[sync]
-auto_commit_dirty_destination = true
-codex_model = "gpt-5.4-mini"
-codex_reasoning_effort = "medium"
-</code></pre>
-<pre><code class="language-sh">skillnet sync pull --scope global --auto-commit-dirty-destination
-skillnet sync pull --scope global --no-auto-commit-dirty-destination
-skillnet sync pull --scope global --codex-model gpt-5.3-codex --codex-reasoning-effort high
-</code></pre>
-<p>The auto-commit flow only applies to <code>sync pull</code>, only stages dirty paths under
-the selected mirror scopes (plus <code>.skillnet/cache.toml</code>), and requires <code>codex</code>
-to be installed and logged in.</p>
+<p>The removed <code>sync pull</code> auto-commit flow has no replacement in <code>0.5.0</code>; commit
+canonical store changes with Git directly.</p>
 <h2 id="calibration-database"><a class="header" href="#calibration-database">Calibration Database</a></h2>
 <p>Calibration commands use Postgres by default. The backend can be selected in
 <code>skillnet.toml</code>:</p>
@@ -357,8 +294,8 @@ path = "/abs/path/calibration.sqlite"
 </tbody>
 </table>
 </div>
-<p>When a database URL and <code>SKILLNET_DATA_DIR</code>/<code>skillnet_DATA_DIR</code> are both
-set, the URL wins and <code>skillnet</code> prints a warning.</p>
+<p>When a database URL and <code>SKILLNET_DATA_DIR</code>/<code>skillnet_DATA_DIR</code> are both set,
+the URL wins and <code>skillnet</code> prints a warning.</p>
 
                     </main>
 

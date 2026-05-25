@@ -444,6 +444,283 @@ stale_codex_skill_paths = ["{}"]
     )
 }
 
+struct SyncFixture {
+    fixture: Fixture,
+    config: std::path::PathBuf,
+    catalog_config: std::path::PathBuf,
+    global_view: std::path::PathBuf,
+    first_project: std::path::PathBuf,
+    second_project: std::path::PathBuf,
+}
+
+impl SyncFixture {
+    fn new() -> Self {
+        let fixture = Fixture::new();
+        let global_view = fixture.path("views/global/agents");
+        let first_project = fixture.path("work/first");
+        let second_project = fixture.path("work/second");
+
+        write_skill(&fixture.path("global"), "alpha", "global alpha");
+        write_skill(&fixture.path("global"), "beta", "global beta");
+        write_skill(&first_project.join(".skills"), "alpha", "first alpha");
+        write_skill(&first_project.join(".skills"), "beta", "first beta");
+        write_skill(&second_project.join(".skills"), "alpha", "second alpha");
+        write_skill(&second_project.join(".skills"), "beta", "second beta");
+
+        init_git_repo(&first_project);
+        commit_all(&first_project, "initial first project");
+        init_git_repo(&second_project);
+        commit_all(&second_project, "initial second project");
+
+        let config = fixture.write_config(format!(
+            r#"
+[global]
+views = [
+  {{ label = "agents", path = "{}" }},
+]
+
+[[projects]]
+name = "first"
+path = "{}"
+
+[[projects]]
+name = "second"
+path = "{}"
+"#,
+            global_view.display(),
+            first_project.display(),
+            second_project.display()
+        ));
+        let catalog_config = fixture.write_catalog_config("");
+
+        Self {
+            fixture,
+            config,
+            catalog_config,
+            global_view,
+            first_project,
+            second_project,
+        }
+    }
+
+    fn command(&self) -> Command {
+        let command = self
+            .fixture
+            .command_with_catalog(&self.config, &self.catalog_config);
+        assert!(
+            command.get_program().to_string_lossy().contains("target/"),
+            "assert_cmd did not resolve the test-profile binary: {}",
+            command.get_program().to_string_lossy()
+        );
+        command
+    }
+
+    fn project_view(&self, project: &Path) -> std::path::PathBuf {
+        project.join(".claude/skills")
+    }
+
+    fn aggregator(&self, project: &str) -> std::path::PathBuf {
+        self.fixture.path(&format!("projects/{project}"))
+    }
+}
+
+fn assert_symlink_points_to(link: &Path, target: &Path) {
+    assert!(
+        fs::symlink_metadata(link).unwrap().file_type().is_symlink(),
+        "{} should be a symlink",
+        link.display()
+    );
+    assert_eq!(fs::read_link(link).unwrap(), target);
+}
+
+fn assert_relative_symlink_points_to(link: &Path, target: &str) {
+    assert!(
+        fs::symlink_metadata(link).unwrap().file_type().is_symlink(),
+        "{} should be a symlink",
+        link.display()
+    );
+    assert_eq!(fs::read_link(link).unwrap(), Path::new(target));
+}
+
+fn tree_digest(root: &Path) -> String {
+    let mut entries = Vec::new();
+    for entry in WalkDir::new(root).follow_links(false) {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(path).unwrap();
+        let rel = path.strip_prefix(root).unwrap().to_string_lossy();
+        let mut hasher = Sha256::new();
+        hasher.update(rel.as_bytes());
+        if metadata.file_type().is_symlink() {
+            hasher.update(b"\0symlink\0");
+            hasher.update(fs::read_link(path).unwrap().to_string_lossy().as_bytes());
+        } else if metadata.is_dir() {
+            hasher.update(b"\0dir");
+        } else if metadata.is_file() {
+            hasher.update(b"\0file\0");
+            let mut file = fs::File::open(path).unwrap();
+            let mut buf = [0; 8192];
+            loop {
+                let n = file.read(&mut buf).unwrap();
+                if n == 0 {
+                    break;
+                }
+                hasher.update(&buf[..n]);
+            }
+        }
+        entries.push(format!("{:x}", hasher.finalize()));
+    }
+    entries.sort();
+
+    let mut digest = Sha256::new();
+    for entry in entries {
+        digest.update(entry.as_bytes());
+        digest.update(b"\n");
+    }
+    format!("{:x}", digest.finalize())
+}
+
+#[test]
+fn sync_creates_global_and_project_symlinks() {
+    let sync = SyncFixture::new();
+
+    sync.command().arg("sync").assert().success().stdout(
+        predicate::str::contains("agents  ")
+            .and(predicate::str::contains("# first"))
+            .and(predicate::str::contains("# second")),
+    );
+
+    assert_symlink_points_to(
+        &sync.global_view.join("alpha"),
+        &sync.fixture.path("global/alpha"),
+    );
+    assert_symlink_points_to(
+        &sync.global_view.join("beta"),
+        &sync.fixture.path("global/beta"),
+    );
+    for (name, project) in [
+        ("first", &sync.first_project),
+        ("second", &sync.second_project),
+    ] {
+        let view = sync.project_view(project);
+        assert_relative_symlink_points_to(&view.join("alpha"), "../../.skills/alpha");
+        assert_relative_symlink_points_to(&view.join("beta"), "../../.skills/beta");
+        assert_symlink_points_to(&sync.aggregator(name), &project.join(".skills"));
+    }
+}
+
+#[test]
+fn sync_forwards_allow_delete_and_force() {
+    let sync = SyncFixture::new();
+    sync.command().arg("sync").assert().success();
+
+    symlink_file("/missing/global", &sync.global_view.join("stale"));
+    symlink_file(
+        "/missing/first",
+        &sync.project_view(&sync.first_project).join("stale"),
+    );
+
+    sync.command().arg("sync").assert().success();
+    assert!(fs::symlink_metadata(sync.global_view.join("stale")).is_ok());
+    assert!(fs::symlink_metadata(sync.project_view(&sync.first_project).join("stale")).is_ok());
+
+    sync.command()
+        .args(["sync", "--allow-delete"])
+        .assert()
+        .success();
+    assert!(fs::symlink_metadata(sync.global_view.join("stale")).is_err());
+    assert!(fs::symlink_metadata(sync.project_view(&sync.first_project).join("stale")).is_err());
+
+    let sync = SyncFixture::new();
+    fs::create_dir_all(&sync.global_view).unwrap();
+    fs::write(sync.global_view.join("alpha"), "not a symlink").unwrap();
+    fs::create_dir_all(sync.project_view(&sync.first_project)).unwrap();
+    fs::write(
+        sync.project_view(&sync.first_project).join("alpha"),
+        "not a symlink",
+    )
+    .unwrap();
+
+    sync.command().arg("sync").assert().failure().stderr(
+        predicate::str::contains("exists and is not a symlink")
+            .and(predicate::str::contains("pass --force")),
+    );
+
+    sync.command().args(["sync", "--force"]).assert().success();
+    assert_symlink_points_to(
+        &sync.global_view.join("alpha"),
+        &sync.fixture.path("global/alpha"),
+    );
+    assert_relative_symlink_points_to(
+        &sync.project_view(&sync.first_project).join("alpha"),
+        "../../.skills/alpha",
+    );
+}
+
+#[test]
+fn sync_dry_run_does_not_mutate() {
+    let sync = SyncFixture::new();
+    let before = tree_digest(sync.fixture.root());
+
+    sync.command()
+        .args(["--dry-run", "sync"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("# view sync global")
+                .and(predicate::str::contains("# project sync first"))
+                .and(predicate::str::contains("# project sync second"))
+                .and(predicate::str::contains("allow_delete: false"))
+                .and(predicate::str::contains("force: false")),
+        );
+
+    assert_eq!(tree_digest(sync.fixture.root()), before);
+    assert!(!sync.global_view.exists());
+    assert!(!sync.project_view(&sync.first_project).exists());
+    assert!(!sync.aggregator("first").exists());
+}
+
+#[test]
+fn sync_short_circuits_on_view_failure() {
+    let sync = SyncFixture::new();
+    fs::create_dir_all(&sync.global_view).unwrap();
+    fs::write(sync.global_view.join("alpha"), "not a symlink").unwrap();
+    let first_project_before = tree_digest(&sync.first_project);
+    let second_project_before = tree_digest(&sync.second_project);
+
+    sync.command().arg("sync").assert().failure().stderr(
+        predicate::str::contains("failed to sync skill `alpha`")
+            .and(predicate::str::contains("exists and is not a symlink"))
+            .and(predicate::str::contains("pass --force"))
+            .and(predicate::str::contains("# first").not())
+            .and(predicate::str::contains("# second").not()),
+    );
+
+    assert_eq!(tree_digest(&sync.first_project), first_project_before);
+    assert_eq!(tree_digest(&sync.second_project), second_project_before);
+    assert!(!sync.project_view(&sync.first_project).exists());
+    assert!(!sync.project_view(&sync.second_project).exists());
+    assert!(!sync.aggregator("first").exists());
+    assert!(!sync.aggregator("second").exists());
+}
+
+#[test]
+fn sync_help_lists_command() {
+    let mut command = Command::cargo_bin("skillnet").unwrap();
+    command.arg("--help").assert().success().stdout(
+        predicate::str::contains("sync")
+            .and(predicate::str::contains("global view and project view")),
+    );
+
+    let mut command = Command::cargo_bin("skillnet").unwrap();
+    command.args(["sync", "--help"]).assert().success().stdout(
+        predicate::str::contains("--allow-delete")
+            .and(predicate::str::contains("--force"))
+            .and(predicate::str::contains("--dry-run"))
+            .and(predicate::str::contains("--mirror-root")),
+    );
+}
+
 // removed by P4: pre-Option-B reconcile CLI coverage
 #[ignore = "removed by P4: pre-Option-B reconcile CLI coverage"]
 #[test]

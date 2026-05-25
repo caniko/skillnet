@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-719dba0a.js";
+            window.path_to_searchindex_js = "searchindex-bd5d4365.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b7899954.js"></script>
+        <script src="toc-7bb5235c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,6 +187,13 @@
 <li><code>heuristics list</code></li>
 <li><code>heuristics show</code></li>
 <li><code>walkthrough</code></li>
+<li><code>tag</code></li>
+<li><code>untag</code></li>
+<li><code>show</code></li>
+<li><code>query</code></li>
+<li><code>migrate</code></li>
+<li><code>vacuum</code></li>
+<li><code>export</code></li>
 <li><code>analyze</code></li>
 <li><code>propose</code></li>
 <li><code>proposals</code></li>
@@ -217,8 +224,7 @@ skillnet calibration decide &lt;proposal-id&gt; accept --rationale "..."
 and <code>heuristics</code> commands report whether each threshold came from the default
 catalog or an override.</p>
 <h2 id="home-manager-consumers"><a class="header" href="#home-manager-consumers">Home Manager Consumers</a></h2>
-<p>Home Manager users do not need new module options for <code>0.4.0</code>. The new
-calibration helper commands use the existing database configuration exported by
+<p>Calibration commands use the database configuration exported by
 <code>programs.skillnet.database</code> and <code>programs.skillnet.settings</code>.</p>
 <p>After updating the flake input, run:</p>
 <pre><code class="language-sh">home-manager switch

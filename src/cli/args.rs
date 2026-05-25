@@ -68,6 +68,20 @@ pub(super) enum Command {
         #[command(subcommand)]
         command: ViewCommand,
     },
+    /// Materialise every configured global view and project view in one shot.
+    Sync {
+        /// Remove view entries that no longer correspond to canonical skills.
+        #[arg(long)]
+        allow_delete: bool,
+        /// Replace existing non-symlink entries in views.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Manage configured project roots.
+    Project {
+        #[command(subcommand)]
+        command: ProjectCommand,
+    },
     /// List, inspect, and edit mirrored skill directories.
     Skill {
         #[command(subcommand)]
@@ -77,11 +91,6 @@ pub(super) enum Command {
     Scope {
         #[command(subcommand)]
         command: ScopeCommand,
-    },
-    /// Manage configured project roots.
-    Project {
-        #[command(subcommand)]
-        command: ProjectCommand,
     },
     /// Generate and validate skill catalog metadata.
     Catalog {
@@ -612,6 +621,7 @@ pub(super) enum CatalogCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::CommandFactory;
 
     #[test]
     fn path_args_read_environment_fallbacks() {
@@ -671,5 +681,47 @@ mod tests {
                 });
             });
         });
+    }
+
+    #[test]
+    fn sync_command_defaults_to_safe_flags() {
+        let cli = Cli::parse_from(["skillnet", "sync"]);
+
+        assert!(matches!(
+            cli.command,
+            Some(Command::Sync {
+                allow_delete: false,
+                force: false,
+            })
+        ));
+    }
+
+    #[test]
+    fn sync_command_parses_mutation_flags() {
+        let cli = Cli::parse_from(["skillnet", "sync", "--allow-delete", "--force"]);
+
+        assert!(matches!(
+            cli.command,
+            Some(Command::Sync {
+                allow_delete: true,
+                force: true,
+            })
+        ));
+    }
+
+    #[test]
+    fn sync_command_accepts_global_dry_run_flag() {
+        let cli = Cli::parse_from(["skillnet", "--dry-run", "sync"]);
+
+        assert!(cli.dry_run);
+        assert!(matches!(cli.command, Some(Command::Sync { .. })));
+    }
+
+    #[test]
+    fn long_help_lists_sync_command() {
+        let help = Cli::command().render_long_help().to_string();
+
+        assert!(help.contains("sync"));
+        assert!(help.contains("Materialise every configured global view and project view"));
     }
 }

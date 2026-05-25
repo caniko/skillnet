@@ -15,4 +15,10 @@ cargo package --list
 cargo publish --dry-run
 ```
 
+The release tag must be an exact SemVer version and must match
+`Cargo.toml`'s package version. The publish workflow verifies the signed tag
+against `keys/maintainers.gpg`, checks that the version is not already present
+on crates.io, runs the release checks, and then publishes with
+`CRATES_IO_API_TOKEN` or `CARGO_REGISTRY_TOKEN`.
+
 The canonical source repository is `https://codeberg.org/caniko/skillnet`. Generated Forgejo workflows live under `.forgejo/workflows/`.

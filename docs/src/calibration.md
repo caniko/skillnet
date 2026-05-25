@@ -13,6 +13,13 @@ Core subcommands:
 - `heuristics list`
 - `heuristics show`
 - `walkthrough`
+- `tag`
+- `untag`
+- `show`
+- `query`
+- `migrate`
+- `vacuum`
+- `export`
 - `analyze`
 - `propose`
 - `proposals`
@@ -54,8 +61,7 @@ catalog or an override.
 
 ## Home Manager Consumers
 
-Home Manager users do not need new module options for `0.4.0`. The new
-calibration helper commands use the existing database configuration exported by
+Calibration commands use the database configuration exported by
 `programs.skillnet.database` and `programs.skillnet.settings`.
 
 After updating the flake input, run:

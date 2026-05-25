@@ -5,6 +5,13 @@ Top-level commands:
 - `status`: show canonical store, view drift, destination, and catalog health.
 - `doctor`: check configured views for invariant violations.
 - `completions`: generate shell completion scripts.
+- `sync`: materialise every configured global view and project view in one
+  shot. Runs `view sync --all` first, then `project sync --all`, and
+  short-circuits on the first error (project sync is skipped if view sync
+  fails, because project views may symlink through the global mirror).
+  Accepts `--allow-delete` and `--force`; honours the global `--dry-run`,
+  `--allow-dirty-destination`, `--mirror-root`, `--config`,
+  `--catalog-config`, and `--database-url` flags.
 - `view`: materialise and inspect global view symlinks.
 - `skill`: list, inspect, and edit canonical skill directories.
 - `scope`: inspect configured canonical scopes.
@@ -12,10 +19,12 @@ Top-level commands:
 - `catalog`: generate and validate skill catalog metadata.
 - `calibration`: record, inspect, analyze, and tune `multi-phase-plan`
   calibration data.
+- `hook`: install, remove, check, and run managed Claude Code hook ingestion.
 
 Examples:
 
 ```sh
+skillnet sync
 skillnet view sync --all
 skillnet project sync --all
 skillnet doctor
@@ -26,6 +35,7 @@ skillnet project list
 skillnet catalog lint
 skillnet calibration heuristics list
 skillnet calibration walkthrough --dry-run
+skillnet hook status
 ```
 
 ## View And Project Commands

@@ -82,6 +82,13 @@ pub fn run() -> Result<()> {
             Ok(())
         }
         Command::View { command } => run_view_command(&ctx, command),
+        Command::Sync {
+            allow_delete,
+            force,
+        } => {
+            commands::view::sync(&ctx, allow_delete, force)?;
+            commands::project_sync(&ctx, &[], true, allow_delete, force)
+        }
         Command::Skill { command } => run_skill_command(&ctx, command),
         Command::Scope { command } => run_scope_command(&ctx, command),
         Command::Project { command } => run_project_command(&ctx, command),
