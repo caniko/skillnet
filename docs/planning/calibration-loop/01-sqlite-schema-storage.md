@@ -41,7 +41,7 @@ the per-skill scope, and the schema (see Plan step 3 below).
   Phase 02.
 - The sidecar `.calibration.json` parser. Phase 02.
 - Any analysis logic. Phase 04.
-- Schema for *other* skills. This db is `multi-phase-plan`-specific by
+- Schema for _other_ skills. This db is `multi-phase-plan`-specific by
   design; future skills get their own db.
 - Cross-machine sync mechanisms. The db lives in the repo and syncs
   via git.
@@ -49,14 +49,17 @@ the per-skill scope, and the schema (see Plan step 3 below).
 ## Plan
 
 1. **Add dependencies** to `Cargo.toml`:
+
    ```toml
    rusqlite = { version = "0.31", features = ["bundled"] }
    serde_json = "1.0"
    uuid = { version = "1.10", features = ["v4", "serde"] }
    ```
+
    Use `bundled` to avoid linking against system SQLite.
 
 2. **Create the directory layout**:
+
    ```
    data/
    └── multi-phase-plan/
@@ -64,11 +67,13 @@ the per-skill scope, and the schema (see Plan step 3 below).
        │   └── 001-initial.sql
        └── .gitkeep       # ensure the data dir is tracked even before the db exists
    ```
+
    The actual `.sqlite` file is created at runtime; it is **not**
    tracked in `.gitignore` (we want the dataset committed).
 
 3. **Write `data/multi-phase-plan/schema/001-initial.sql`** with the
    full schema from the design:
+
    ```sql
    CREATE TABLE schema_versions (
        version    INTEGER PRIMARY KEY,
@@ -150,6 +155,7 @@ the per-skill scope, and the schema (see Plan step 3 below).
 
 4. **Create `src/calibration/mod.rs`** with module declarations and
    re-exports:
+
    ```rust
    pub mod db;
    pub use db::Db;
@@ -159,7 +165,7 @@ the per-skill scope, and the schema (see Plan step 3 below).
    - `pub struct Db { conn: rusqlite::Connection }`
    - `pub fn open(path: &Path) -> anyhow::Result<Db>` — creates
      parent dirs if missing, opens connection, sets `PRAGMA
-     journal_mode=WAL`, sets `PRAGMA foreign_keys=ON`, runs
+journal_mode=WAL`, sets `PRAGMA foreign_keys=ON`, runs
      `migrate()`.
    - `fn migrate(&mut self) -> anyhow::Result<()>` — reads
      `data/multi-phase-plan/schema/*.sql` in sorted order, checks
@@ -173,6 +179,7 @@ the per-skill scope, and the schema (see Plan step 3 below).
      filenames with a clear error.
 
 6. **Register the module** in `src/main.rs`:
+
    ```rust
    mod calibration;
    ```
@@ -181,7 +188,7 @@ the per-skill scope, and the schema (see Plan step 3 below).
    `tests/calibration_db.rs`:
    - Use `tempfile::tempdir` for the db path.
    - Open with `Db::open`; assert WAL mode is active (`PRAGMA
-     journal_mode` returns `wal`).
+journal_mode` returns `wal`).
    - Insert a synthetic `plans` row via raw SQL; read it back; assert
      fields round-trip including the JSON columns.
    - Run `open` a second time against the same path; assert it does
@@ -239,7 +246,7 @@ the per-skill scope, and the schema (see Plan step 3 below).
   Enforce the three-digit prefix in the migration runner with a
   regex; reject mismatches with a clear error.
 - **Foreign keys are off by default in SQLite.** Setting `PRAGMA
-  foreign_keys=ON` is required for the cascade tests to work.
+foreign_keys=ON` is required for the cascade tests to work.
   Symptom if missed: cascade delete test fails silently (the tag row
   survives).
 - **`data/multi-phase-plan/calibration.sqlite` should not be in

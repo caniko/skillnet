@@ -30,7 +30,7 @@ it.
   thing; it errors with a usage hint.
 - **Fold `catalog show` into `skill show`.** One lookup surface per
   skill: file metadata + catalog entry, side by side. `catalog
-  generate` / `catalog lint` / `catalog search` stay where they are.
+generate` / `catalog lint` / `catalog search` stay where they are.
 - **Status caching.** Cache file under `mirror_root/.skillnet/cache.toml`
   records per-scope last-pull timestamp + content hash. `status` and
   `sync status` only re-walk scopes whose live source mtime is newer
@@ -81,13 +81,13 @@ Globals (apply to whichever mutating subcommand runs): `--config`,
 
 ## Phases
 
-| # | File | Slug | Model | Depends on | Touches | Parallel with |
-|---|------|------|-------|------------|---------|---------------|
-| 01 | [01-foundation.md](./01-foundation.md) | foundation | `5.5 medium` | — | `src/cli/scope.rs` (new), `src/cache.rs` (new), `src/cli/args.rs` (types only), `src/lib.rs` | — |
-| 02 | [02-cli-surface.md](./02-cli-surface.md) | cli-surface | `5.5 high` | 01 | `src/cli/args.rs` (rewrite), `src/cli/mod.rs` (rewrite), `src/commands/mod.rs` | — |
-| 03 | [03-sync-and-status.md](./03-sync-and-status.md) | sync-and-status | `5.5 high` | 02 | `src/commands/sync.rs` (new), `src/commands/status.rs` (new), `src/cache.rs` (impl), `src/reconcile.rs` | 04 |
-| 04 | [04-skill-and-catalog.md](./04-skill-and-catalog.md) | skill-and-catalog | `5.5 medium` | 02 | `src/commands/skill.rs`, `src/catalog/mod.rs`, `src/catalog/render.rs` (show removal) | 03 |
-| 05 | [05-tests-and-migration.md](./05-tests-and-migration.md) | tests-and-migration | `5.5 medium` | 03, 04 | `tests/cli.rs` (rewrite), `MIGRATION.md` (new) | — |
+| #   | File                                                     | Slug                | Model        | Depends on | Touches                                                                                                 | Parallel with |
+| --- | -------------------------------------------------------- | ------------------- | ------------ | ---------- | ------------------------------------------------------------------------------------------------------- | ------------- |
+| 01  | [01-foundation.md](./01-foundation.md)                   | foundation          | `5.5 medium` | —          | `src/cli/scope.rs` (new), `src/cache.rs` (new), `src/cli/args.rs` (types only), `src/lib.rs`            | —             |
+| 02  | [02-cli-surface.md](./02-cli-surface.md)                 | cli-surface         | `5.5 high`   | 01         | `src/cli/args.rs` (rewrite), `src/cli/mod.rs` (rewrite), `src/commands/mod.rs`                          | —             |
+| 03  | [03-sync-and-status.md](./03-sync-and-status.md)         | sync-and-status     | `5.5 high`   | 02         | `src/commands/sync.rs` (new), `src/commands/status.rs` (new), `src/cache.rs` (impl), `src/reconcile.rs` | 04            |
+| 04  | [04-skill-and-catalog.md](./04-skill-and-catalog.md)     | skill-and-catalog   | `5.5 medium` | 02         | `src/commands/skill.rs`, `src/catalog/mod.rs`, `src/catalog/render.rs` (show removal)                   | 03            |
+| 05  | [05-tests-and-migration.md](./05-tests-and-migration.md) | tests-and-migration | `5.5 medium` | 03, 04     | `tests/cli.rs` (rewrite), `MIGRATION.md` (new)                                                          | —             |
 
 ## Parallelism layer (execution waves)
 
@@ -95,17 +95,17 @@ Globals (apply to whichever mutating subcommand runs): `--config`,
 (`scope`, `cache`) and lays out global args / types. Everything else
 depends on this. Single phase, no parallelism.
 
-*Unlock condition: Phase 01's acceptance criteria pass; new types
-compile and are unused-but-warning-free.*
+_Unlock condition: Phase 01's acceptance criteria pass; new types
+compile and are unused-but-warning-free._
 
 **Wave 1 — Surface.** Phase 02 only. It rewrites `args.rs` and
 `mod.rs` wholesale. The new tree exists; dispatch routes to handler
 stubs (or thin wrappers that call existing functions). The binary
 builds and the new help text matches the design.
 
-*Unlock condition: `cargo build` clean, `skillnet --help` shows the
+_Unlock condition: `cargo build` clean, `skillnet --help` shows the
 new tree, every old top-level verb is gone (compile-time, not just
-hidden).*
+hidden)._
 
 **Wave 2 — Fanout (parallel).** Phases 03 and 04 run concurrently.
 They touch disjoint files: 03 owns sync verbs + the new
@@ -115,15 +115,15 @@ They touch disjoint files: 03 owns sync verbs + the new
 The user can dispatch them in two sessions or run sequentially if
 preferred. Either phase landing first does not block the other.
 
-*Unlock condition: both phases' acceptance criteria pass.*
+_Unlock condition: both phases' acceptance criteria pass._
 
 **Wave 3 — Tests + docs.** Phase 05 only. The integration tests in
 `tests/cli.rs` exercise the old verbs heavily; they need wholesale
 rewriting once 03 and 04 have landed. `MIGRATION.md` documents the
 old → new mapping for users.
 
-*Unlock condition: full test suite green; `MIGRATION.md` covers every
-removed verb; plan is exhausted.*
+_Unlock condition: full test suite green; `MIGRATION.md` covers every
+removed verb; plan is exhausted._
 
 ## Whole-set acceptance criteria
 
@@ -131,25 +131,25 @@ removed verb; plan is exhausted.*
 - [ ] `cargo test` green; every test exercises the new surface.
 - [ ] `cargo clippy --all-targets -- -D warnings` clean.
 - [ ] `skillnet --help` shows exactly the tree above. No `mirror`,
-  `toml`, `globalize`, `deglobalize`, top-level `reconcile`/`sync`/
-  `delete`/`rename`/`move`/`list`/`targets`/`sources` verbs.
+      `toml`, `globalize`, `deglobalize`, top-level `reconcile`/`sync`/
+      `delete`/`rename`/`move`/`list`/`targets`/`sources` verbs.
 - [ ] `skillnet <old-verb>` (any removed verb) errors with a clap-
-  level "unknown subcommand" — the help is the migration cue;
-  `MIGRATION.md` is the canonical reference.
+      level "unknown subcommand" — the help is the migration cue;
+      `MIGRATION.md` is the canonical reference.
 - [ ] `--dry-run` works as a global flag on every mutating
-  subcommand; no per-subcommand `--dry-run` remains.
+      subcommand; no per-subcommand `--dry-run` remains.
 - [ ] `--scope` is type-safe (typo → clap error citing valid scopes).
 - [ ] `skillnet` (no args) runs `status`.
 - [ ] `skillnet status` prints, for each configured scope:
-  scope name, last-pulled timestamp (from cache), divergence
-  summary (clean / N files diverged), plus a catalog lint summary.
+      scope name, last-pulled timestamp (from cache), divergence
+      summary (clean / N files diverged), plus a catalog lint summary.
 - [ ] `skillnet sync pull --then-push` runs pull and then push in
-  sequence; failure in pull aborts before push.
+      sequence; failure in pull aborts before push.
 - [ ] `skillnet skill show <scope>/<skill>` shows file metadata
-  **and** the catalog entry in one output.
+      **and** the catalog entry in one output.
 - [ ] `mirror_root/.skillnet/cache.toml` exists after a pull and
-  contains per-scope stamps; subsequent `status` calls don't
-  re-walk live sources whose mtime hasn't advanced.
+      contains per-scope stamps; subsequent `status` calls don't
+      re-walk live sources whose mtime hasn't advanced.
 - [ ] `MIGRATION.md` covers every removed/renamed verb and flag.
 
 ## Global constraints

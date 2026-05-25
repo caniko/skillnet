@@ -52,6 +52,7 @@ Hooks into `skillnet calibration record|verify` and the new
 
 The whole calibration loop is keyed off this content. The CLI
 delivered by Phases 01–04 is inert without a skill body that:
+
 - emits the right sidecar shape (Phase 02 consumes it);
 - evaluates triggers (Phase 04 analyzes them);
 - documents the `surprises` convention (Phase 04 parses it);
@@ -119,7 +120,6 @@ SKILL.md is text. Lands before Phase 06.
    section goes (README vs phase file).
 
    ### Coordination triggers
-
    - **Shared-file contention.** Trigger: ≥2 phases touch the same
      file. Adds README section "Shared-file lockstep" listing each
      file, owning phase, recovery if conflict. Each affected
@@ -136,7 +136,6 @@ SKILL.md is text. Lands before Phase 06.
      README section "PR sequencing & cross-owner coordination".
 
    ### Risk triggers
-
    - **Risk concentration.** Trigger: ≥2 phases routed to `max`.
      Adds README "Risk-tier callout" grouping them with
      rollback-blast-radius notes.
@@ -156,7 +155,6 @@ SKILL.md is text. Lands before Phase 06.
      break.
 
    ### Plan-shape triggers
-
    - **Long serial chain.** Trigger: dependency chain ≥4 phases
      deep. Adds README "Serial-chain recovery" section noting
      compound failure cost; each phase from chain link 2 onward
@@ -172,7 +170,6 @@ SKILL.md is text. Lands before Phase 06.
      closing verification phase.
 
    ### Plan-quality lint triggers (warn, don't add section)
-
    - **Routing tier inversion.** Trigger: a leaf phase routes ≥ its
      orchestrator. Require an inline justification.
    - **Mechanical streak.** Trigger: ≥3 consecutive phases at
@@ -203,10 +200,10 @@ SKILL.md is text. Lands before Phase 06.
    >   vector has not appeared in the dataset before.
    > - **Routing tier outlier.** Any phase routes higher or lower
    >   than the median for its declared complexity class.
-   > - **Verify surprise** *(verify-time only)*. The verifier
+   > - **Verify surprise** _(verify-time only)_. The verifier
    >   reports a failure no trigger pre-empted, an emergency dep,
    >   or a phase that had to be added.
-   > - **Re-routing event** *(verify-time only)*. Any phase was
+   > - **Re-routing event** _(verify-time only)_. Any phase was
    >   executed at a different tier than recommended.
    > - **High-stakes combo.** ≥1 `max` phase AND ≥1 external-repo
    >   phase.
@@ -232,9 +229,9 @@ SKILL.md is text. Lands before Phase 06.
    - Auto-tags applied by `skillnet calibration record`: `flavor`,
      `worktype`, `scope`, `risk`, `signal`, `outcome`.
    - User-tags applied via `skillnet calibration tag <plan-id>
-     <k=v>...`: free-form, key must match `^[a-z][a-z0-9_-]*$`.
+<k=v>...`: free-form, key must match `^[a-z][a-z0-9_-]*$`.
    - Per-band analysis: tag bands let `skillnet calibration analyze
-     --filter-tag k=v` slice the dataset; useful when triggers behave
+--filter-tag k=v` slice the dataset; useful when triggers behave
      differently across flavors or worktypes.
 
 7. **Add the `surprises` text convention** — "Verifier `surprises`
@@ -261,7 +258,7 @@ SKILL.md is text. Lands before Phase 06.
 
 9. **Verify cross-references** end-to-end. The schema spec in
    SKILL.md must match `src/calibration/sidecar.rs` in the
-   *skillnet* repo exactly (Phase 02 is the source-of-truth for
+   _skillnet_ repo exactly (Phase 02 is the source-of-truth for
    field names; SKILL.md mirrors). The `surprises` convention here
    must match what Phase 04's `analyze` parses in the skillnet
    repo. The meta-heuristic names here must match what the auto-tag
@@ -321,7 +318,7 @@ SKILL.md is text. Lands before Phase 06.
   footer (Phase 06) is where revisions get recorded.
 - **Sidecar field-name drift across repos.** This phase writes the
   schema spec into ai-skills SKILL.md. Phase 02 implemented
-  `src/calibration/sidecar.rs` in the *skillnet* repo. Cross-repo
+  `src/calibration/sidecar.rs` in the _skillnet_ repo. Cross-repo
   drift is the most likely failure mode of this whole plan — there's
   no compiler to catch a mismatch. Mitigation: clone the skillnet
   repo locally and diff field-by-field before declaring this phase
@@ -349,7 +346,7 @@ SKILL.md is text. Lands before Phase 06.
   sections live in the README, not in phase files. The phase-file
   contract is preserved. Don't add new mandatory phase-file
   sections — if a heuristic needs information in a phase file,
-  it's a *Pitfalls* or *Plan* addition for that one phase, not a
+  it's a _Pitfalls_ or _Plan_ addition for that one phase, not a
   new top-level section.
 - **mdBook rendering.** If the SUMMARY references this skill,
   ensure the new headings don't break navigation. (The skill

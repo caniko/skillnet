@@ -80,6 +80,7 @@ transparently.
    - Service / timer / scheduled `calibrate` runs.
 
 2. **Write `nix/hm-module.nix`**:
+
    ```nix
    { config, lib, pkgs, ... }:
 
@@ -125,6 +126,7 @@ transparently.
 
 3. **Wire the module into the flake.** In `flake.nix` (extends
    Phase 07's flake):
+
    ```nix
    outputs = { self, nixpkgs, ... }: let
      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin" ];
@@ -136,6 +138,7 @@ transparently.
      hmModules.skillnet = self.hmModules.default;
    };
    ```
+
    Document the dual export (`default` and `skillnet`) so users can
    pick whichever import style they prefer.
 
@@ -143,6 +146,7 @@ transparently.
    CLI (Phases 01–04) needs to honor `$SKILLNET_DATA_DIR` as the
    data-dir override. Update `Db::default_path()` in
    `src/calibration/db.rs`:
+
    ```rust
    pub fn default_path() -> PathBuf {
        std::env::var("SKILLNET_DATA_DIR")
@@ -156,6 +160,7 @@ transparently.
            })
    }
    ```
+
    The compiled-in `/data/nvme0/can/Projects/ai-skills` fallback
    from Phase 01 is removed in this step (it was author-machine-
    specific).
@@ -163,7 +168,7 @@ transparently.
 5. **Write an integration test** at `nix/test-hm-module.nix` (or
    inline in `flake.nix`'s `checks`):
    - Use `home-manager`'s test harness or a `nixos-rebuild
-     test`-style invocation.
+test`-style invocation.
    - Build an HM activation that enables `programs.skillnet`.
    - Verify the `skillnet` binary is on PATH inside the activated
      environment.
@@ -174,7 +179,8 @@ transparently.
 
 6. **Document in README.md** (the crate's README from Phase 07):
    add a "Nix Home Manager" section after the install instructions:
-   ```markdown
+
+   ````markdown
    ### Nix Home Manager
 
    Add the input and import the module:
@@ -186,17 +192,22 @@ transparently.
    imports = [ inputs.skillnet.hmModules.default ];
    programs.skillnet.enable = true;
    ```
+   ````
 
    Options:
    - `programs.skillnet.dataDir` — defaults to
      `$XDG_DATA_HOME/skillnet`.
    - `programs.skillnet.package` — override the package.
+
+   ```
+
    ```
 
 7. **Bump the crate version to `0.1.1`** (or `0.2.0` if the
    `Db::default_path` change is breaking for any existing
    downstream — for 0.1.x it isn't, since there are no downstream
    Rust users yet). Add a CHANGELOG.md entry:
+
    ```markdown
    ## 0.1.1 — YYYY-MM-DD
 

@@ -105,11 +105,13 @@ runner the rest of caniko's projects use; the existing
    `src/calibration/db.rs` (delivered by Phase 01), change the
    migration runner to load SQL via `include_str!` rather than
    reading from disk at runtime:
+
    ```rust
    const MIGRATIONS: &[(u32, &str)] = &[
        (1, include_str!("../../data/multi-phase-plan/schema/001-initial.sql")),
    ];
    ```
+
    This makes the binary self-contained — users don't need the
    schema files on disk. Update the runner accordingly. Add a test
    that exercises a fresh-db migration from the embedded source.
@@ -144,6 +146,7 @@ runner the rest of caniko's projects use; the existing
 
 5. **Cargo.toml metadata** (the `rust-crate-manifest-metadata` skill
    writes most of this; the values are):
+
    ```toml
    [package]
    name = "skillnet"
@@ -180,6 +183,7 @@ runner the rest of caniko's projects use; the existing
    - License + Codeberg repo link.
 
 7. **CHANGELOG.md** with one entry:
+
    ```markdown
    ## 0.1.0 — YYYY-MM-DD
 
@@ -209,7 +213,7 @@ runner the rest of caniko's projects use; the existing
    - `audit` — `cargo audit`.
    - `deny` — `cargo deny check`.
    - `nix-check` — `nix flake check`.
-   All must pass on every push/PR to `main`.
+     All must pass on every push/PR to `main`.
 
 9. **Tag-triggered publish workflow** at
    `.forgejo/workflows/release.yml`. Triggered on `push` of a tag
@@ -224,6 +228,7 @@ runner the rest of caniko's projects use; the existing
     for the non-reversible publish.
 
 11. **Verify on a clean machine**:
+
     ```sh
     # In a fresh shell, outside the dev shell, on any machine:
     cargo install skillnet
@@ -232,6 +237,7 @@ runner the rest of caniko's projects use; the existing
     # First run creates the data dir:
     skillnet calibration migrate
     ```
+
     All should succeed.
 
 12. **Push the initial readme to Codeberg** so the repo's web page

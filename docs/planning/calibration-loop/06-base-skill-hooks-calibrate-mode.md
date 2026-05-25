@@ -19,7 +19,7 @@
 to the **installed** `skillnet` (published from a separate repo at
 `ssh://git@codeberg.org/caniko/skillnet.git`, distributed via the Nix
 HM module in Phase 08, or fallback `nix run` form for users who
-haven't enabled the module). This phase does *not* touch the
+haven't enabled the module). This phase does _not_ touch the
 skillnet repo.
 
 ## Goal
@@ -54,7 +54,7 @@ modes to the three flavor skills and wires the ai-skills flake to
 consume the published `skillnet` crate.
 
 This phase can run as soon as Phase 07 publishes a referenceable
-crate version. It does *not* hard-depend on Phase 08 (HM module)
+crate version. It does _not_ hard-depend on Phase 08 (HM module)
 because the hooks can fall back to `nix run codeberg.org/caniko/skillnet#skillnet
 -- ...`, but writing the prose is cleaner once the HM module's
 installed-on-PATH guarantee exists.
@@ -96,7 +96,7 @@ installed-on-PATH guarantee exists.
    >      PATH directly.
    >    - If not, fall back to
    >      `nix run codeberg.org:caniko/skillnet#skillnet --
-   >      calibration record <plan-dir>`.
+calibration record <plan-dir>`.
    >    - If both fail (no nix, no installed binary), report a
    >      one-line install hint and skip recording — the deliverable
    >      is the plan, not the data row.
@@ -117,7 +117,7 @@ installed-on-PATH guarantee exists.
    >   `verify` section per the sidecar schema, including the
    >   `surprises` field using the structured prefixes
    >   (`dead-weight:`, `missed-signal:`) where applicable.
-   > - If the sidecar does *not* exist but a verify-time meta-
+   > - If the sidecar does _not_ exist but a verify-time meta-
    >   heuristic fires (verify-surprise, re-routing event):
    >   reconstruct a best-effort sidecar from the plan files (plan
    >   metadata derivable from README + phase files; trigger states
@@ -146,38 +146,33 @@ installed-on-PATH guarantee exists.
    > ### Workflow
    >
    > 1. **Run analysis.** Shell out to `skillnet calibration
-   >    analyze --format json` (or `nix run` fallback). The JSON
+analyze --format json` (or `nix run` fallback). The JSON
    >    output contains per-trigger fire/signal rates, candidate
    >    proposals (triggers above min-N with actionable signal),
    >    and skew warnings.
-   >
    > 2. **Surface the report.** Format the JSON as a table for the
    >    user, highlighting:
    >    - Triggers with proposals (one-line summary each).
    >    - Skew warnings (one-line each).
    >    - Triggers below min-N (one-line each; informational only).
-   >
    > 3. **For each candidate proposal, confirm with the user**:
    >    - Show the trigger name, current threshold, proposed
    >      threshold, fire rate, signal rate, supporting plan count.
    >    - Ask whether to formalize the proposal (`propose`), skip
    >      it, or refine the filter tags.
    >    - On confirmation, shell out to `skillnet calibration
-   >      propose --trigger NAME --new-threshold N --rationale
-   >      "<short rationale>" --supporting-plan-ids id1,id2,...`.
-   >
+propose --trigger NAME --new-threshold N --rationale
+"<short rationale>" --supporting-plan-ids id1,id2,...`.
    > 4. **For each pending proposal**, ask the user to accept or
    >    reject with a rationale. Shell out to `skillnet calibration
-   >    decide <id> accept|reject --rationale "..."`.
-   >
+decide <id> accept|reject --rationale "..."`.
    > 5. **Export the changelog.** Shell out to `skillnet calibration
-   >    export-changelog --since <last-changelog-date-in-SKILL.md>`.
+export-changelog --since <last-changelog-date-in-SKILL.md>`.
    >    Emit the markdown blocks to the user with the instruction:
-   >    *"Append these blocks to the 'Calibration changelog' section
+   >    _"Append these blocks to the 'Calibration changelog' section
    >    at the bottom of `global/multi-phase-plan/SKILL.md`, then
    >    edit the per-trigger thresholds in the heuristic catalog to
-   >    match the accepted proposals."*
-   >
+   >    match the accepted proposals."_
    > 6. **Do not edit SKILL.md from the calibrate mode itself.** The
    >    user is the editor; the mode produces text to paste. This
    >    keeps changelog provenance auditable and lets the user catch
@@ -211,7 +206,6 @@ installed-on-PATH guarantee exists.
    run.
 
 6. **Update the anti-patterns section** with one more entry:
-
    - **Hand-editing the calibration changelog.** The changelog is
      the audit trail for threshold tuning. Edits should come from
      `skillnet calibration export-changelog`, not freehand prose.
@@ -228,7 +222,7 @@ installed-on-PATH guarantee exists.
    `skillnet calibration record <plan-dir>` assuming the HM module
    (Phase 08) has installed the binary. The fallback
    `nix run codeberg.org:caniko/skillnet#skillnet -- calibration
-   record <plan-dir>` works for users without the HM module — it
+record <plan-dir>` works for users without the HM module — it
    resolves the published Codeberg flake at runtime. Test both forms
    in a clean shell before declaring the prose right.
 
@@ -264,7 +258,7 @@ installed-on-PATH guarantee exists.
       module (Phase 08).
 - [ ] All hook commands match the CLI surface delivered by Phases
       02 and 04 verbatim (`skillnet calibration record|verify|
-      analyze|propose|decide|export-changelog`).
+    analyze|propose|decide|export-changelog`).
 - [ ] Cross-references to Phase 05's sections ("When a plan gets
       recorded", "Tag conventions", sidecar schema) resolve to
       headings that actually exist in the post-05 file.
@@ -288,9 +282,9 @@ installed-on-PATH guarantee exists.
   meta-heuristic fired at plan time), there's no `plan_id`. Use a
   fresh UUID; the dataset accepts it as a new plan row. Document
   that the reconstructed plan's "shape" is derived from the README
-  + phase files as they exist *now*, not as they existed when the
-  plan was generated. This drift is acknowledged and acceptable —
-  the verify-surprise signal is the value, not perfect provenance.
+  - phase files as they exist _now_, not as they existed when the
+    plan was generated. This drift is acknowledged and acceptable —
+    the verify-surprise signal is the value, not perfect provenance.
 - **`calibrate` mode doesn't auto-edit SKILL.md.** This is
   deliberate; resist the urge to add an "auto-apply" flag. The
   user-as-editor invariant keeps bad proposals from ratcheting bad
@@ -313,7 +307,7 @@ installed-on-PATH guarantee exists.
   the footer is empty (first run), pass no `--since` flag and
   export everything (which will be the full history of accepted
   proposals — initially zero).
-- **Changelog footer placement.** It must be the *last* section in
+- **Changelog footer placement.** It must be the _last_ section in
   the file, because future exports append entries newest-first
   inside it. If you put it before "Reference", future runs will
   scatter changelog entries through the file or require manual

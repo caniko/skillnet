@@ -72,12 +72,13 @@ about `calibrate` mode.
      with hooks + calibrate mode.
    - The published crate works (`cargo install skillnet` succeeds
      on a clean machine; `nix run codeberg.org:caniko/skillnet --
-     --help` succeeds).
+--help` succeeds).
 
    Without all four, this phase is premature; pause and finish the
    prereqs.
 
 2. **Add the flake input.** In `ai-skills/flake.nix`:
+
    ```nix
    inputs = {
      # … existing inputs …
@@ -87,8 +88,9 @@ about `calibrate` mode.
      };
    };
    ```
+
    Run `nix flake update skillnet` (or `nix flake lock --update-input
-   skillnet`) to populate `flake.lock`. Commit the lock change.
+skillnet`) to populate `flake.lock`. Commit the lock change.
 
 3. **Re-export the HM module.** Decide the consumption story:
    - **Option A (recommended): pass-through.** ai-skills' flake
@@ -131,9 +133,9 @@ about `calibrate` mode.
      > **Calibration recording.** Follow the base skill's
      > end-of-plan hook step: evaluate meta-heuristics, write
      > `.calibration.json` if any fire, and run `skillnet
-     > calibration record <plan-dir>`.
+calibration record <plan-dir>`.
    - The flavor-specific routing skill (gpt-plan-routing for codex,
-     claude-plan-routing for claude, both for mixed) is *not*
+     claude-plan-routing for claude, both for mixed) is _not_
      consulted for `calibrate` — calibrate analyzes past plans, it
      doesn't route new ones. Add a one-line note to that effect in
      the calibrate entry.
@@ -142,11 +144,14 @@ about `calibrate` mode.
 
 5. **Delete the old skillnet sources from ai-skills.** Verify first
    that nothing else in ai-skills depends on them:
+
    ```sh
    rg "use crate::calibration" .                  # should match nothing
    rg "skillnet" --type rust .                    # confirm scope
    ```
+
    Then:
+
    ```sh
    git rm -r src/calibration/
    git rm -r src/catalog/ src/cli/ src/commands/  # if these are entirely skillnet
@@ -155,6 +160,7 @@ about `calibrate` mode.
    git rm -r tests/                               # if all tests are skillnet
    git rm -r data/multi-phase-plan/               # schema lives in the crate now
    ```
+
    **Caution**: ai-skills currently contains skillnet as its
    primary content (per repo status). If the consensus is to keep
    ai-skills repo Rust-free, the deletion is wholesale. If
@@ -168,6 +174,7 @@ about `calibrate` mode.
 
 6. **Update repo-root `README.md` (or `CALIBRATION.md`)** with a
    short pointer:
+
    ```markdown
    ## Calibration
 
@@ -201,6 +208,7 @@ about `calibrate` mode.
    `global/multi-phase-plan/SKILL.md`** with the first entry — not
    a threshold change, but a provenance note for the loop's
    activation:
+
    ```markdown
    ### YYYY-MM-DD — Calibration loop activated
 
@@ -264,7 +272,7 @@ about `calibrate` mode.
 - **Wholesale source deletion is non-reversible after push.** If
   ai-skills should retain some Rust tooling, partial-delete only.
   If wholesale is correct, commit on a feature branch first, run
-  `nix flake check`, smoke test, *then* merge to main.
+  `nix flake check`, smoke test, _then_ merge to main.
 - **Flake input via SSH requires SSH agent / keys.** For CI or
   users without SSH access to Codeberg, document the
   `git+https://codeberg.org/caniko/skillnet.git` alternative.
@@ -276,7 +284,7 @@ about `calibrate` mode.
 - **Pass-through HM module composition.** Option A's
   `hmModules.default` collapses ai-skills' own modules with
   skillnet's. If a downstream user wants ai-skills' modules
-  *without* skillnet, they can't easily do that with Option A.
+  _without_ skillnet, they can't easily do that with Option A.
   If this matters, switch to Option B (explicit per-module
   imports) and document the choice.
 - **Flavor-wrapper drift.** Three near-copy files. Edit all three
@@ -290,7 +298,7 @@ about `calibrate` mode.
   documents how `plan` mode consults them. Calibrate doesn't.
   Make this explicit so the user (or the agent) doesn't try to
   invoke routing for calibrate.
-- **Test on a *clean* machine.** Your dev machine already has
+- **Test on a _clean_ machine.** Your dev machine already has
   skillnet installed (from Phase 07 cargo-install or Phase 08 HM
   test). Use a VM or container to confirm the fresh-install path.
 - **Calibration database starts empty.** First few `calibrate`

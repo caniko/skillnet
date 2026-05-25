@@ -43,7 +43,7 @@ specified that the skill never writes SQLite directly.
   `migrate`, `vacuum`, `export`) — Phase 03.
 - Any analysis/proposal command (`analyze`, `propose`, `proposals`,
   `decide`, `export-changelog`) — Phase 04.
-- The skill body that *writes* the sidecar — Phase 05.
+- The skill body that _writes_ the sidecar — Phase 05.
 - The hook that invokes `skillnet calibration record` — Phase 06.
 - Authoring the sidecar from scratch in tests beyond what's needed
   to exercise this command's surface.
@@ -55,6 +55,7 @@ specified that the skill never writes SQLite directly.
    Phase 01's exact module layout.
 
 2. **Define the sidecar schema** in `src/calibration/sidecar.rs`:
+
    ```rust
    #[derive(Deserialize, Serialize, Debug)]
    pub struct Sidecar {
@@ -110,6 +111,7 @@ specified that the skill never writes SQLite directly.
        pub surprises: Option<String>,
    }
    ```
+
    Provide a `Sidecar::load(plan_dir: &Path)` helper that reads
    `.calibration.json`, parses it, and returns a clear error
    distinguishing missing-file from malformed-json from
@@ -132,7 +134,7 @@ specified that the skill never writes SQLite directly.
    - Skip the `verifications` table entirely if `sidecar.verify` is
      present (record cmd ignores it; verify cmd handles it).
    - Print one line on success: `recorded <plan_id> (<n> triggers, <m>
-     phases, <k> tags)`.
+phases, <k> tags)`.
 
 4. **Implement `verify`** in `src/calibration/record.rs` (same file
    for cohesion):
@@ -143,9 +145,10 @@ specified that the skill never writes SQLite directly.
      `plan_id`; upsert `outcome:<value>` tag (deleting any prior
      `outcome:` tag for this plan).
    - Print one line on success: `verified <plan_id>: <outcome>
-     (<pass>/<total> phases passed)`.
+(<pass>/<total> phases passed)`.
 
 5. **Add the clap surface** in `src/cli/args.rs`:
+
    ```rust
    #[derive(Subcommand)]
    pub enum Command {
@@ -167,11 +170,13 @@ specified that the skill never writes SQLite directly.
        // 04 will add: Analyze, Propose, Proposals, Decide, ExportChangelog
    }
    ```
+
    Use a `// PHASE 03` / `// PHASE 04` placeholder comment so the
    downstream phases know exactly where to slot their additions; this
    reduces merge conflicts when 03 and 04 land in parallel.
 
 6. **Add the dispatch** in `src/commands/calibration.rs`:
+
    ```rust
    pub fn run(args: CalibrationArgs) -> anyhow::Result<()> {
        let mut db = Db::open(&Db::default_path())?;
@@ -184,6 +189,7 @@ specified that the skill never writes SQLite directly.
        }
    }
    ```
+
    Wire `Command::Calibration` in the top-level dispatcher
    (`src/commands/mod.rs` or wherever the current pattern lives —
    check `src/main.rs` to confirm).
@@ -235,7 +241,7 @@ specified that the skill never writes SQLite directly.
       idempotency, missing verify section, malformed JSON,
       schema_version mismatch.
 - [ ] `cargo clippy --all-targets -- -D warnings` and `cargo fmt
-      --check` are clean.
+    --check` are clean.
 
 ## Files likely touched
 

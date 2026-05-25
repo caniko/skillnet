@@ -4,7 +4,7 @@
 >
 > Sub-agent role, moderate complexity. The skill verbs are largely a
 > mechanical refactor: today's handlers take `(scope: &str, skill:
-> &str)`; rewrite them to take `&SkillPath`. The catalog show fold is
+&str)`; rewrite them to take `&SkillPath`. The catalog show fold is
 > the design-touchy part — deciding what `skill show` displays from
 > the catalog entry versus the on-disk file, and how the merged
 > output reads. `low` would treat the fold as "just call both
@@ -57,16 +57,16 @@ internally) and `skill show` (a thin wrapper) breaks the promise.
   `skill show` and `catalog show` outputs, deduplicated where they
   overlap.
 - Do **not** add interactive prompts to `skill delete` or `skill
-  rename` ("are you sure?"). Not a goal of the rebuild.
+rename` ("are you sure?"). Not a goal of the rebuild.
 
 ## Plan
 
 1. **Update handler signatures in `src/commands/skill.rs`**:
    - `delete(ctx, path: &SkillPath)` instead of `(ctx, scope, skill,
-     sync_live, dry_run)`.
+sync_live, dry_run)`.
    - `rename(ctx, path: &SkillPath, new: &str, force: bool)`.
    - `move_skill(ctx, from: &SkillPath, to_scope: &Scope, to_name:
-     Option<&str>, copy: bool, force: bool)`. Drop the `sync_live`
+Option<&str>, copy: bool, force: bool)`. Drop the `sync_live`
      parameter — sync is no longer composable from edit verbs.
    - All read `dry_run` from `ctx.dry_run`.
 
@@ -98,7 +98,7 @@ internally) and `skill show` (a thin wrapper) breaks the promise.
      ```
 
      If no catalog entry exists for this skill, print `catalog
-     entry: (none — run 'skillnet catalog generate')`. Don't error.
+entry: (none — run 'skillnet catalog generate')`. Don't error.
 
 3. **Delete `pub fn show` from `src/catalog/mod.rs`** (or wherever
    `catalog::show` lives — grep first). Move any reusable helpers
@@ -117,7 +117,7 @@ internally) and `skill show` (a thin wrapper) breaks the promise.
      `<scope>/<skill>` (required); `to` is either `<scope>` (rename
      within destination keeps skill name) or `<scope>/<name>` (rename
      on move). Add a small `parse_move_target(input: &str) -> (Scope,
-     Option<String>)` helper.
+Option<String>)` helper.
 
 5. **Drop the `--sync` parameter** from every `commands::skill::*`
    handler signature. The Phase 02 dispatch was passing `false`; now
@@ -143,7 +143,7 @@ internally) and `skill show` (a thin wrapper) breaks the promise.
    - `skillnet skill show global/<nonexistent>` errors clearly with
      "skill not found in scope".
    - `skillnet skill move global/foo myproj` moves; `skillnet skill
-     move global/foo myproj/bar` moves and renames.
+move global/foo myproj/bar` moves and renames.
    - `skillnet skill delete global/foo` deletes from the mirror;
      `skillnet sync push --scope global` then mirrors the deletion
      to live (verify the two-step workflow is ergonomic).
@@ -155,23 +155,23 @@ internally) and `skill show` (a thin wrapper) breaks the promise.
 - [ ] `rg 'globalize|deglobalize' src/` returns no matches.
 - [ ] `rg 'catalog::show|catalog_show' src/` returns no matches.
 - [ ] `rg 'sync_live|--sync' src/` returns no matches in source code
-  (doc/comment hits in `MIGRATION.md`-bound text are fine if any
-  exist).
+      (doc/comment hits in `MIGRATION.md`-bound text are fine if any
+      exist).
 - [ ] `commands::skill::*` handlers take `&SkillPath` or `&Scope`,
-  not `&str` scope/skill pairs.
+      not `&str` scope/skill pairs.
 - [ ] `commands::skill::show` exists and prints the merged view.
 - [ ] `skillnet skill show global/<skill>` shows both file metadata
-  (path, file list, frontmatter summary) and the catalog entry in
-  one output.
+      (path, file list, frontmatter summary) and the catalog entry in
+      one output.
 - [ ] `skillnet skill show <scope>/<missing-skill>` errors with a
-  clear message ("skill `<missing-skill>` not found in scope
-  `<scope>`"), not a panic.
+      clear message ("skill `<missing-skill>` not found in scope
+      `<scope>`"), not a panic.
 - [ ] `skillnet catalog --help` does **not** list `show` (Phase 02
-  already removed it from args; Phase 04 removes the underlying fn).
+      already removed it from args; Phase 04 removes the underlying fn).
 - [ ] `skillnet skill move global/foo myproj` moves the skill.
 - [ ] `skillnet skill move global/foo myproj/bar` moves + renames.
 - [ ] `skillnet skill delete global/foo` deletes; subsequent
-  `skillnet sync push --scope global` removes from live.
+      `skillnet sync push --scope global` removes from live.
 
 ## Files likely touched
 
@@ -190,7 +190,7 @@ internally) and `skill show` (a thin wrapper) breaks the promise.
 
 - **`skill show` becoming a kitchen sink.** Symptom: it tries to
   also print git status, last-modified, dependencies, lint warnings.
-  Recovery: the fold is *only* file metadata + catalog entry.
+  Recovery: the fold is _only_ file metadata + catalog entry.
   Anything else is future work. If a section feels like it belongs,
   ask: "would Phase 05's MIGRATION.md need to document this section
   as a new feature?" If yes, defer it.
@@ -219,7 +219,7 @@ internally) and `skill show` (a thin wrapper) breaks the promise.
 
 - **`catalog::show` callers outside `cli/mod.rs`.** Symptom: deleting
   the function breaks something internal. Recovery: `rg
-  'catalog::show'` before deletion; the function is small enough to
+'catalog::show'` before deletion; the function is small enough to
   rewrite if needed. Phase 02 already removed the args-level entry
   point, so callers should only be internal — likely none.
 

@@ -45,7 +45,7 @@ as the two biggest UX wins of the rebuild. Phase 02 set up the tree;
 03 is where the umbrella actually becomes useful. Without this phase
 the rebuild is mostly cosmetic.
 
-The cache also has to be wired *now*, before Phase 04 tries to use
+The cache also has to be wired _now_, before Phase 04 tries to use
 `status` to validate its own changes. If 04 lands first and `status`
 is still stubbed, the verify pass on 04 has nothing to lean on.
 
@@ -54,8 +54,7 @@ is still stubbed, the verify pass on 04 has nothing to lean on.
 - Do **not** touch `src/commands/skill.rs` or `src/catalog/`. Those
   are Phase 04's territory; landing them here causes file conflicts
   on the Wave 2 parallel fanout.
-- Do **not** rewrite the integration tests in `tests/cli.rs`. Phase
-  05.
+- Do **not** rewrite the integration tests in `tests/cli.rs`. Phase 05.
 - Do **not** add a `--json` or `--quiet` output mode on `status` or
   `sync status`. Out of scope for the rebuild; future work.
 - Do **not** parallelise the per-scope walks. Sequential is fine for
@@ -166,37 +165,37 @@ is still stubbed, the verify pass on 04 has nothing to lean on.
 
 - [ ] `cargo build` clean, no warnings.
 - [ ] `cargo clippy --lib --bins -- -D warnings` clean.
-  (`--all-targets` still excluded until Phase 05.)
+      (`--all-targets` still excluded until Phase 05.)
 - [ ] `src/commands/sync.rs` exists with `pull`, `push`, `status`,
-  `diff` exported.
+      `diff` exported.
 - [ ] `src/commands/status.rs` exists with `run` exported.
 - [ ] Dispatch in `src/cli/mod.rs` routes `Sync::*` and `Status` to
-  the new functions; the Phase 02 marker errors are gone.
+      the new functions; the Phase 02 marker errors are gone.
 - [ ] After `skillnet sync pull --scope global`, the file
-  `<mirror_root>/.skillnet/cache.toml` exists and contains a
-  `[stamps.global]` table with `last_pulled_at`, `live_source_max_mtime_nanos`,
-  `mirror_content_hash`.
+      `<mirror_root>/.skillnet/cache.toml` exists and contains a
+      `[stamps.global]` table with `last_pulled_at`, `live_source_max_mtime_nanos`,
+      `mirror_content_hash`.
 - [ ] `skillnet status` on a fresh checkout (no cache) prints a
-  "no cache yet" hint and still produces a divergence summary by
-  doing a one-shot walk; it does **not** write the cache.
+      "no cache yet" hint and still produces a divergence summary by
+      doing a one-shot walk; it does **not** write the cache.
 - [ ] `skillnet sync status` on a scope whose live mtime hasn't
-  changed since the last pull does **not** walk live sources
-  recursively — verify by `strace -c -e openat skillnet sync status`
-  or by adding a temporary log line and removing it. (Acceptance is
-  "verified once, not regression-gated"; an `#[cfg(debug)]` counter
-  is fine but not required.)
+      changed since the last pull does **not** walk live sources
+      recursively — verify by `strace -c -e openat skillnet sync status`
+      or by adding a temporary log line and removing it. (Acceptance is
+      "verified once, not regression-gated"; an `#[cfg(debug)]` counter
+      is fine but not required.)
 - [ ] `skillnet sync pull --then-push --scope global` runs both
-  operations sequentially; a forced pull failure aborts before push.
-  Test by temporarily breaking a source path.
+      operations sequentially; a forced pull failure aborts before push.
+      Test by temporarily breaking a source path.
 - [ ] `skillnet sync diff` prints per-file deltas (`+ path`,
-  `- path`, `~ path`) with no panics on a deliberately divergent
-  scope.
+      `- path`, `~ path`) with no panics on a deliberately divergent
+      scope.
 - [ ] `skillnet` (no args) calls `Status::run` (the no-args alias).
 - [ ] Cache is best-effort: deleting `.skillnet/cache.toml` mid-use
-  does not break any command; commands that need it recompute.
-  Corrupting the file (e.g., `echo garbage > cache.toml`) does not
-  break `status` — it falls back to a full walk and logs nothing
-  alarming.
+      does not break any command; commands that need it recompute.
+      Corrupting the file (e.g., `echo garbage > cache.toml`) does not
+      break `status` — it falls back to a full walk and logs nothing
+      alarming.
 
 ## Files likely touched
 
@@ -228,7 +227,7 @@ is still stubbed, the verify pass on 04 has nothing to lean on.
 - **`live_source_max_mtime` racing the walk.** Symptom: between
   taking the mtime and computing the hash, a user edits a live file;
   the cached stamp claims clean-as-of-T but the mirror lags. Cause:
-  ordering. Recovery: compute hash *first*, then mtime, then write.
+  ordering. Recovery: compute hash _first_, then mtime, then write.
   The stamp's promise becomes "as of this mtime, the mirror matched
   the hash" — which is what `is_stale` needs anyway. Document the
   ordering.
@@ -251,7 +250,7 @@ is still stubbed, the verify pass on 04 has nothing to lean on.
 - **`diff` output format scope creep.** Symptom: 200 lines of unified
   diff per file on a large divergence. Cause: trying to be `git diff`.
   Recovery: keep it short — `+ path`, `- path`, `~ path` plus
-  *optionally* the first 3 lines of unified diff for `~`. Future
+  _optionally_ the first 3 lines of unified diff for `~`. Future
   work can add `--full`.
 
 - **Catalog lint as part of `status`.** Symptom: `status` becomes

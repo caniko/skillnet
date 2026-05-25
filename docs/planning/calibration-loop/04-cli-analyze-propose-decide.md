@@ -26,7 +26,7 @@ loop:
   compute per-trigger fire+signal rates from the recorded dataset and
   emit candidate threshold deltas as a structured report.
 - `propose --trigger NAME --new-threshold N [--filter-tag k=v]...
-  --rationale "..." --supporting-plan-ids id,id,...` — write a
+--rationale "..." --supporting-plan-ids id,id,...` — write a
   proposal row.
 - `proposals [--pending|--accepted|--rejected]` — list proposals.
 - `decide <proposal-id> accept|reject --rationale "..."` — record a
@@ -68,7 +68,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
 - Anomaly detection beyond simple boundary cases. The min-N guard is
   the only statistical machinery in this phase.
 - Per-flavor separate thresholds. The data carries `flavor:*` tags
-  (Phase 02) and `analyze` can filter by them, but the *skill itself*
+  (Phase 02) and `analyze` can filter by them, but the _skill itself_
   uses one threshold per trigger today. Per-band thresholds are a
   later phase if/when the data justifies them.
 
@@ -88,14 +88,14 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
    - **Fire rate** = `N_fires / (N_fires + N_misses)`. Tells us how
      often the trigger captures something; pure descriptive.
    - **Signal rate** = the fraction of `N_fires` where the section
-     `T` added correlates with a verified-good outcome, *minus* the
+     `T` added correlates with a verified-good outcome, _minus_ the
      fraction of `N_misses` where the corresponding failure mode
      appeared anyway.
 
      Concretely: define `helpful(T, plan)` and `failure_mode(T,
-     plan)`:
+plan)`:
      - `helpful(T, plan)` = `T.fired` AND `plan.verification.outcome
-       ∈ {shipped, partial}` AND the verifier did not list `T.name`
+∈ {shipped, partial}` AND the verifier did not list `T.name`
        in `surprises` as dead weight.
      - `failure_mode(T, plan)` = the verifier listed `T.name` in
        `surprises` as a missed signal (i.e., trigger should have
@@ -103,6 +103,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
        hint matching `T`'s scope.
 
      Then:
+
      ```
      true_positives  = count(fired AND helpful)
      false_positives = count(fired AND NOT helpful)
@@ -111,6 +112,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
      signal_rate = (true_positives - false_positives - false_negatives)
                    / max(1, true_positives + false_positives + false_negatives)
      ```
+
      This is a custom score, not a standard precision/recall — chosen
      because both false-positive (dead-weight sections) and
      false-negative (missed failure modes) are equally bad here, and
@@ -148,12 +150,13 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
    - Additionally, when run without filter tags, `analyze` emits a
      "skew check" section that re-runs the rates separately for
      each value of `flavor` and `worktype`. If any band's signal
-     rate differs from the global by more than ±0.3 *and* the band
+     rate differs from the global by more than ±0.3 _and_ the band
      has at least 30 fires, emit a warning: "trigger T shows skew
      across <tag>: consider per-band thresholds".
 
 5. **CLI surface** in `src/cli/args.rs` under the `// PHASE 04
-   commands here` placeholder:
+commands here` placeholder:
+
    ```rust
    Analyze {
        #[arg(long, value_parser = parse_kv)]
@@ -197,6 +200,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
        since: Option<String>,         // ISO date
    },
    ```
+
    `parse_kv` from Phase 03 is reused; if Phase 03 hasn't landed,
    bring a local copy (and Phase 03's coordination note will dedupe
    it).
@@ -212,6 +216,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
      format).
 
 7. **Output format for `analyze`** (table mode):
+
    ```
    TRIGGER             FIRES  MISSES  FIRE%   SIGNAL  VERDICT
    chain-depth            18      42  30.0%   +0.42   hold
@@ -225,12 +230,14 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
        run `skillnet calibration propose ...` to formalize
    SKEW WARNINGS (0):
    ```
+
    JSON mode emits the same data as a structured object so the
    skill's `calibrate` mode can consume it programmatically.
 
 8. **Changelog export format** for `export-changelog`. The output is
    intended to be pasted into the bottom of
    `global/multi-phase-plan/SKILL.md`:
+
    ```markdown
    ### 2026-MM-DD — <trigger-name>: <old> → <new>
 
@@ -240,6 +247,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
    - **Supporting plans**: <count>, ids: <comma list>
    - **Filter tags (if any)**: <k=v list>
    ```
+
    One block per accepted proposal, newest first. `--since YYYY-MM-DD`
    limits to proposals decided on or after the given date.
 
@@ -259,7 +267,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
    - `--filter-tag flavor=codex` restricts the dataset correctly.
    - `propose` inserts a row with `decision=pending`.
    - `proposals --pending` lists it; `decide <id> accept --rationale
-     "..."` updates it; `proposals --accepted` lists it.
+"..."` updates it; `proposals --accepted` lists it.
    - `decide` on an already-decided proposal errors clearly.
    - `export-changelog` emits the expected markdown for one accepted
      proposal; `--since` filters correctly.
@@ -294,7 +302,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
 - [ ] `cargo test --test calibration_analyze` covers the eight
       scenarios in Plan step 9.
 - [ ] `cargo clippy --all-targets -- -D warnings` and `cargo fmt
-      --check` are clean.
+    --check` are clean.
 
 ## Files likely touched
 
@@ -303,7 +311,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
 - `src/commands/calibration.rs` (insert dispatch arms at the
   placeholder)
 - `src/calibration/mod.rs` (+ `pub mod analyze; pub mod propose; pub
-  mod decide; pub mod changelog;`)
+mod decide; pub mod changelog;`)
 - `src/calibration/analyze.rs` (new — the substantive deliverable)
 - `src/calibration/propose.rs` (new)
 - `src/calibration/decide.rs` (new)
@@ -313,7 +321,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
 ## Pitfalls
 
 - **Coordinating clap insertions with Phase 03.** Use the `// PHASE
-  04 commands here` placeholder Phase 02 left. If Phase 03 has
+04 commands here` placeholder Phase 02 left. If Phase 03 has
   already landed and removed the placeholder, restore your own
   insertion location and resolve the merge by adding your variants
   after 03's.
@@ -321,7 +329,7 @@ the `// PHASE 04 commands here` placeholder Phase 02 left.
   The `surprises` column is free text from the verifier. Don't try
   to NLP-parse it. The skill convention (defined in Phase 05) is
   that surprises use a structured prefix: `dead-weight:
-  <trigger-name>: <note>` for false positives and
+<trigger-name>: <note>` for false positives and
   `missed-signal: <expected-trigger-name>: <note>` for false
   negatives. Anything else is treated as informational only.
   Document this convention in `analyze.rs`'s rustdoc so the

@@ -121,18 +121,18 @@ breaking change.
 - [ ] `cargo build` clean.
 - [ ] `cargo clippy --all-targets -- -D warnings` clean.
 - [ ] `cargo test` green, including the two new unit tests
-  (cache round-trip + SkillPath parse).
+      (cache round-trip + SkillPath parse).
 - [ ] `src/cli/scope.rs` exists and exports `Scope`, `SkillPath`,
-  `scope_value_parser`.
+      `scope_value_parser`.
 - [ ] `src/cache.rs` exists and exports `Cache`, `ScopeStamp`,
-  `cache_path`, `load`, `save`, `live_source_max_mtime`, `is_stale`.
+      `cache_path`, `load`, `save`, `live_source_max_mtime`, `is_stale`.
 - [ ] No existing CLI behavior changed. `skillnet --help` output is
-  byte-identical to before this phase (the new modules are unwired).
+      byte-identical to before this phase (the new modules are unwired).
 - [ ] No new dependencies added unless strictly required. (`toml` and
-  `serde` should already be in `Cargo.toml` via the existing config
-  loader; reuse them. `walkdir` may need adding if `live_source_max_mtime`
-  needs recursive walking — check existing usage in `fs_ops.rs` first
-  before adding.)
+      `serde` should already be in `Cargo.toml` via the existing config
+      loader; reuse them. `walkdir` may need adding if `live_source_max_mtime`
+      needs recursive walking — check existing usage in `fs_ops.rs` first
+      before adding.)
 
 ## Files likely touched
 
@@ -149,7 +149,7 @@ breaking change.
 
 - **Parser closures vs values.** `clap::builder::PossibleValuesParser`
   takes static or owned values; the project list is config-derived,
-  so it has to be built at runtime *after* `Config::load`. This means
+  so it has to be built at runtime _after_ `Config::load`. This means
   the value parser is attached in `cli/mod.rs::run` after config
   loads, not in the `#[derive(Parser)]` definition. Document this
   attach point in `scope.rs` doc comments so Phase 02 doesn't try to

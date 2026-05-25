@@ -35,7 +35,7 @@ against the new shape because their argument signatures depend on it.
 Phase 02 unblocks the parallel fanout in Wave 2.
 
 This phase is also where the "no hidden aliases" doctrine becomes
-enforceable. Once the old verbs are *deleted from `args.rs`*, they
+enforceable. Once the old verbs are _deleted from `args.rs`_, they
 cannot creep back as `#[command(hide = true)]` shortcuts. The
 codebase becomes the source of truth.
 
@@ -54,7 +54,7 @@ codebase becomes the source of truth.
 - Do **not** rewrite tests. Phase 05 owns `tests/cli.rs`. Existing
   tests will fail at this phase — that's expected; the test crate is
   not part of `cargo build`. **However**, ensure `cargo build --tests`
-  is *not* part of the acceptance criteria for this phase — only
+  is _not_ part of the acceptance criteria for this phase — only
   `cargo build` is.
 - Do **not** add `MIGRATION.md`. Phase 05.
 
@@ -83,7 +83,7 @@ codebase becomes the source of truth.
      `Rename { path: String, new: String }`,
      `Move { from: String, to: String }`.
      Use a single positional `String` for the `<scope>/<skill>` path;
-     parse with `SkillPath::parse` *after* config loads (inside
+     parse with `SkillPath::parse` _after_ config loads (inside
      `mod.rs::run`), not via clap's value parser, because parsing
      needs the configured-projects list. For `Move`, `to` is `<scope>`
      or `<scope>/<name>` — same parser handles both.
@@ -104,7 +104,7 @@ codebase becomes the source of truth.
    - Handle `Completions` before config load (today's pattern; keep it).
    - Load `Context`.
    - If `command` is `None`, dispatch to `Status` (the no-args alias).
-   - For every command, parse string args into typed forms *here*
+   - For every command, parse string args into typed forms _here_
      using `SkillPath::parse(&ctx)` and a `Scope` resolver that turns
      `Vec<String>` + `all: bool` into `Vec<Scope>`. **Validation
      happens at the dispatch boundary, before handlers run.** Pass
@@ -148,39 +148,39 @@ codebase becomes the source of truth.
 
 - [ ] `cargo build` clean, no warnings.
 - [ ] `cargo clippy --all-targets -- -D warnings` clean.
-  (Note: `--all-targets` includes tests, which will fail Phase 02 —
-  use `cargo clippy --lib --bins` for this phase's gate, and re-run
-  `--all-targets` once Phase 05 lands. Document this in the chat
-  reply when running the phase.)
+      (Note: `--all-targets` includes tests, which will fail Phase 02 —
+      use `cargo clippy --lib --bins` for this phase's gate, and re-run
+      `--all-targets` once Phase 05 lands. Document this in the chat
+      reply when running the phase.)
 - [ ] `skillnet --help` lists exactly: `status`, `completions`,
-  `sync`, `skill`, `scope`, `project`, `catalog`. Nothing else. No
-  `mirror`, `toml`, `reconcile`, `globalize`, `deglobalize`, top-
-  level `delete`/`rename`/`move`/`list`/`targets`/`sources`.
+      `sync`, `skill`, `scope`, `project`, `catalog`. Nothing else. No
+      `mirror`, `toml`, `reconcile`, `globalize`, `deglobalize`, top-
+      level `delete`/`rename`/`move`/`list`/`targets`/`sources`.
 - [ ] `skillnet sync --help` lists `pull`, `push`, `status`, `diff`.
 - [ ] `skillnet skill --help` lists `list`, `show`, `delete`,
-  `rename`, `move`. No `globalize`/`deglobalize`.
+      `rename`, `move`. No `globalize`/`deglobalize`.
 - [ ] `skillnet scope --help` lists `list`, `sources`.
 - [ ] `skillnet project --help` lists `list`, `add`, `remove`.
 - [ ] `skillnet catalog --help` lists `generate`, `lint`, `search`.
-  **No `show`** (still wired internally via `skill show` — Phase 04
-  removes the underlying function).
+      **No `show`** (still wired internally via `skill show` — Phase 04
+      removes the underlying function).
 - [ ] `skillnet` (no args) executes the same code path as `skillnet
-  status`. Both currently error with the Phase 03 marker — that's
-  expected at end of Phase 02.
+status`. Both currently error with the Phase 03 marker — that's
+      expected at end of Phase 02.
 - [ ] `skillnet --dry-run sync push` (or any mutating subcommand)
-  honors the dry-run flag globally. No `--dry-run` on individual
-  subcommands.
+      honors the dry-run flag globally. No `--dry-run` on individual
+      subcommands.
 - [ ] Old verb invocation errors at clap level with "unknown
-  subcommand". E.g., `skillnet reconcile` →
-  `error: unrecognized subcommand 'reconcile'`.
+      subcommand". E.g., `skillnet reconcile` →
+      `error: unrecognized subcommand 'reconcile'`.
 - [ ] `skillnet sync pull --then-push --scope global` runs the
-  existing reconcile + sync code paths back to back for the global
-  scope.
+      existing reconcile + sync code paths back to back for the global
+      scope.
 - [ ] `skillnet skill move global/foo myproj` parses to a `Move`
-  command with `from=(Global, "foo")`, `to=(Project("myproj"), None)`
-  and executes today's move_skill behavior.
+      command with `from=(Global, "foo")`, `to=(Project("myproj"), None)`
+      and executes today's move_skill behavior.
 - [ ] `Context` has a `pub dry_run: bool` field and every mutating
-  handler reads it from `ctx`, not from a per-call parameter.
+      handler reads it from `ctx`, not from a per-call parameter.
 
 ## Files likely touched
 
@@ -188,7 +188,7 @@ codebase becomes the source of truth.
   from 389 (no duplicates).
 - `src/cli/mod.rs` — **wholesale rewrite**. Expect ~200 lines.
 - `src/cli/scope.rs` — minor additions: a `resolve_scopes(config,
-  scope_args: &[String], all: bool) -> Result<Vec<Scope>>` helper if
+scope_args: &[String], all: bool) -> Result<Vec<Scope>>` helper if
   not already in Phase 01.
 - `src/commands/context.rs` — add `pub dry_run: bool` field; update
   `Context::load` signature to take it.

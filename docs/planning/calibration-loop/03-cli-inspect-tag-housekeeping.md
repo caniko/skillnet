@@ -3,8 +3,7 @@
 > **Recommended Codex model: GPT 5.5 low**
 >
 > Mechanical clap + SQL work: half a dozen small subcommands that
-> wrap straightforward queries against the schema laid down in Phase
-> 01. No design content, no algorithmic decisions, no log
+> wrap straightforward queries against the schema laid down in Phase 01. No design content, no algorithmic decisions, no log
 > interpretation. The only judgment calls are output formatting
 > (table vs json) and tag-key validation, both of which the Plan
 > resolves explicitly. A `medium` tier would over-engineer the output
@@ -15,7 +14,7 @@
 `/data/nvme0/can/Projects/skillnet` (the new standalone crate at
 `ssh://git@codeberg.org/caniko/skillnet.git`). All CLI work in
 phases 01–04 and 07–08 happens here; the `ai-skills` repo is the
-*consumer*, touched only by phases 05, 06, 09.
+_consumer_, touched only by phases 05, 06, 09.
 
 ## Goal
 
@@ -74,6 +73,7 @@ the placeholder comments Phase 02 left.
    `// PHASE 03 commands here` placeholder lives.
 
 2. **Add clap variants** in `src/cli/args.rs` under the placeholder:
+
    ```rust
    Tag {
        plan_id: String,
@@ -111,6 +111,7 @@ the placeholder comments Phase 02 left.
        out: Option<Utf8PathBuf>,
    },
    ```
+
    Add a `parse_kv` helper that splits `key=value` and validates the
    key against `^[a-z][a-z0-9_-]*$` — rejects empty keys, mixed-case
    keys, etc. Add `QueryFormat` (`Table`, `Json`) and `ExportFormat`
@@ -134,7 +135,7 @@ the placeholder comments Phase 02 left.
        with conditions composed from the args:
        - each `--tag k=v` becomes an `EXISTS (SELECT 1 FROM tags …)`.
        - `--trigger NAME [--fired|--missed]` becomes an `EXISTS
-         (SELECT 1 FROM triggers WHERE name=? AND fired=?)`.
+(SELECT 1 FROM triggers WHERE name=? AND fired=?)`.
        - Use parameterized queries; never string-interpolate user
          input.
        - Table output: id, created_at (iso), name, flavor, worktype,
@@ -200,7 +201,7 @@ the placeholder comments Phase 02 left.
 - [ ] `cargo test --test calibration_inspect` covers all bullets
       above.
 - [ ] `cargo clippy --all-targets -- -D warnings` and `cargo fmt
-      --check` are clean.
+    --check` are clean.
 
 ## Files likely touched
 
@@ -209,7 +210,7 @@ the placeholder comments Phase 02 left.
 - `src/commands/calibration.rs` (insert dispatch arms at the
   placeholder)
 - `src/calibration/mod.rs` (+ `pub mod tag; pub mod query; pub mod
-  housekeeping; pub mod format;`)
+housekeeping; pub mod format;`)
 - `src/calibration/tag.rs` (new)
 - `src/calibration/query.rs` (new)
 - `src/calibration/housekeeping.rs` (new)
@@ -221,7 +222,7 @@ the placeholder comments Phase 02 left.
 - **Shared file with Phase 04.** `src/cli/args.rs` and
   `src/commands/calibration.rs` are also touched by Phase 04 in the
   same wave. Coordinate placement: 03 inserts at `// PHASE 03
-  commands here`, 04 inserts at `// PHASE 04 commands here`. As long
+commands here`, 04 inserts at `// PHASE 04 commands here`. As long
   as both phases respect their placeholders, the merge is trivial.
   If you remove the other phase's placeholder, you'll break their
   workflow.
@@ -236,7 +237,7 @@ the placeholder comments Phase 02 left.
   "cannot VACUUM from within a transaction".
 - **Auto-tag protection is per-key, not per-tag-pair.** If user has
   manually overwritten `flavor:codex` to `flavor:claude` via `tag`,
-  `untag flavor=claude` should still fail. The rule guards the *key*.
+  `untag flavor=claude` should still fail. The rule guards the _key_.
 - **Table output for `query` can be very wide.** Cap the tag-summary
   column to ~40 chars; truncate with `…` on overflow. Don't try to
   pretty-print 200 columns.
@@ -245,7 +246,7 @@ the placeholder comments Phase 02 left.
   hygiene; if you implement it, document it in `--help`. Skip if it
   adds friction — punt to a follow-up.
 - **`Show` for a plan that has no verify row.** Emit `"verify":
-  null`, not an error. Verify is optional.
+null`, not an error. Verify is optional.
 
 ## Reference
 
