@@ -2,7 +2,7 @@
   "schema_version": 1,
   "plan": {
     "id": "4fcf3228-596e-4843-b8c5-72660b79b9df",
-    "name": "Plan — Two-way sync and config centralisation",
+    "name": "Plan \u2014 Two-way sync and config centralisation",
     "flavor": "codex",
     "worktype": null,
     "created_at": 1779793802,
@@ -129,12 +129,12 @@
       "slug": "library-primitives",
       "routing_tier": "high",
       "files": [
-        "Cargo.toml` — no new dependencies; `filetime` and `walkdir` are",
-        "src/commands/context.rs` — `ensure_target_clean` addition.",
-        "src/fs_ops.rs` — no edits expected; existing `newest_mtime_nanos`,",
-        "src/view.rs` — comparator, outcome enum, promotion primitives,",
-        "tests/dirty_gate.rs` — new; 3 fixtures per step 10.",
-        "tests/view_sync.rs` — new or extended; 14 fixtures per step 10."
+        "Cargo.toml` \u2014 no new dependencies; `filetime` and `walkdir` are",
+        "src/commands/context.rs` \u2014 `ensure_target_clean` addition.",
+        "src/fs_ops.rs` \u2014 no edits expected; existing `newest_mtime_nanos`,",
+        "src/view.rs` \u2014 comparator, outcome enum, promotion primitives,",
+        "tests/dirty_gate.rs` \u2014 new; 3 fixtures per step 10.",
+        "tests/view_sync.rs` \u2014 new or extended; 14 fixtures per step 10."
       ]
     },
     {
@@ -156,11 +156,11 @@
       "slug": "config-centralisation",
       "routing_tier": "medium",
       "files": [
-        "src/cli/args.rs` — add `Command::Config` variant +",
-        "src/cli/mod.rs` — add `Command::Config` arm; add deprecation",
-        "src/commands/config.rs` — **new file**.",
-        "src/commands/mod.rs` — register `pub mod config;`.",
-        "tests/config_migrate.rs` — **new file** with 10 tests."
+        "src/cli/args.rs` \u2014 add `Command::Config` variant +",
+        "src/cli/mod.rs` \u2014 add `Command::Config` arm; add deprecation",
+        "src/commands/config.rs` \u2014 **new file**.",
+        "src/commands/mod.rs` \u2014 register `pub mod config;`.",
+        "tests/config_migrate.rs` \u2014 **new file** with 10 tests."
       ]
     },
     {
@@ -168,11 +168,11 @@
       "slug": "hm-module",
       "routing_tier": "medium",
       "files": [
-        "nix/hm-module.nix` — new options + rewritten activation script.",
-        "nix/test-hm-module.nix` — new snapshot assertions.",
-        "src/commands/project.rs` — HM-managed config gate at the start",
-        "src/config.rs` — new `config_is_hm_managed` helper (and unit",
-        "tests/cli.rs` — optional integration test for the gate."
+        "nix/hm-module.nix` \u2014 new options + rewritten activation script.",
+        "nix/test-hm-module.nix` \u2014 new snapshot assertions.",
+        "src/commands/project.rs` \u2014 HM-managed config gate at the start",
+        "src/config.rs` \u2014 new `config_is_hm_managed` helper (and unit",
+        "tests/cli.rs` \u2014 optional integration test for the gate."
       ]
     },
     {
@@ -180,16 +180,16 @@
       "slug": "docs-release-rollup",
       "routing_tier": "medium",
       "files": [
-        "CHANGELOG.md` — new `[0.6.0]` block.",
-        "Cargo.lock` — bump propagation.",
-        "Cargo.toml` — version bump.",
-        "README.md` — possibly one-line addition.",
-        "docs/src/SUMMARY.md` — new entries.",
-        "docs/src/commands.md` — `sync` section rewrite.",
-        "docs/src/migration/centralised-config.md` — **new file**.",
-        "docs/src/migration/option-b.md` — appended section.",
-        "docs/src/planning/index.md` — **new file**, if SUMMARY",
-        "tests/cli.rs` — snapshot test.",
+        "CHANGELOG.md` \u2014 new `[0.6.0]` block.",
+        "Cargo.lock` \u2014 bump propagation.",
+        "Cargo.toml` \u2014 version bump.",
+        "README.md` \u2014 possibly one-line addition.",
+        "docs/src/SUMMARY.md` \u2014 new entries.",
+        "docs/src/commands.md` \u2014 `sync` section rewrite.",
+        "docs/src/migration/centralised-config.md` \u2014 **new file**.",
+        "docs/src/migration/option-b.md` \u2014 appended section.",
+        "docs/src/planning/index.md` \u2014 **new file**, if SUMMARY",
+        "tests/cli.rs` \u2014 snapshot test.",
         "tests/snapshots/cli__sync_help_output_matches_snapshot.snap"
       ]
     }
@@ -203,5 +203,18 @@
     "risk": "mixed",
     "scope": "cross-org"
   },
-  "verify": null
+  "verify": {
+    "verified_at": 1779883070,
+    "elapsed_seconds": null,
+    "outcome": "partial",
+    "phase_outcomes": {
+      "1": "passed",
+      "2": "passed",
+      "3": "passed",
+      "4": "passed",
+      "5": "skipped"
+    },
+    "emergency_changes": null,
+    "surprises": "Phase 05 (docs-release-rollup) not executed: Cargo.toml still 0.5.1, docs/src/migration/centralised-config.md absent, SUMMARY.md unchanged, no sync --help snapshot test. Phases 01-04 landed with passing tests and clean nix flake check.\ndead-weight: external-repo-phases: no external repo touched in any phase; trigger fired on textual file-path patterns.\ndead-weight: revendor-phase: no vendoring or lockfile churn in plan; trigger fired on text matching.\ndead-weight: trivial-phase-swamp: no low-tier phases existed; all five routed to medium or high."
+  }
 }
