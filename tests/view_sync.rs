@@ -430,6 +430,7 @@ fn drift_entry_missing_serializes_reconcile_fields_as_null() {
         canonical_mtime_nanos: None,
         view_sha: None,
         canonical_sha: None,
+        reconcile_outcome: None,
     })
     .unwrap();
 

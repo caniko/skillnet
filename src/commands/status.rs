@@ -6,6 +6,7 @@ use super::Context;
 use crate::{
     cli::{args::StatusFormat, Scope},
     model::{Target, TargetScope},
+    view::{DriftEntry, ReconcileOutcome},
 };
 
 pub fn run(ctx: &Context, scopes: &[Scope], format: StatusFormat) -> Result<()> {
@@ -61,14 +62,18 @@ fn status_row(target: Target) -> Result<StatusRow> {
     let skill_count = crate::mirror::mirror_skill_dirs(&target.canonical_path)
         .map(|skills| skills.len())
         .unwrap_or(0);
-    let drift_entries = match target.scope {
+    let drift = match target.scope {
         TargetScope::Global => target
             .views
             .iter()
-            .map(|view| crate::view::view_status(&target.canonical_path, view).map(|d| d.len()))
-            .sum::<Result<usize>>()?,
-        TargetScope::Project => crate::view::project_status(&target)?.len(),
+            .map(|view| crate::view::view_status(&target.canonical_path, view))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>(),
+        TargetScope::Project => crate::view::project_status(&target)?,
     };
+    let promotion_status = promotion_status_counts(&drift);
     Ok(StatusRow {
         scope: target.name,
         kind: match target.scope {
@@ -77,8 +82,37 @@ fn status_row(target: Target) -> Result<StatusRow> {
         },
         canonical_path: target.canonical_path.to_string(),
         skill_count,
-        drift_entries,
+        drift_entries: drift.len(),
+        would_promote: promotion_status.would_promote,
+        needs_tie_break: promotion_status.needs_tie_break,
+        drift,
     })
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PromotionStatusCounts {
+    pub would_promote: usize,
+    pub needs_tie_break: usize,
+}
+
+pub(crate) fn promotion_status_counts(drift: &[DriftEntry]) -> PromotionStatusCounts {
+    let mut counts = PromotionStatusCounts::default();
+    for entry in drift {
+        match entry.reconcile_outcome.as_ref() {
+            Some(ReconcileOutcome::ViewNewer { .. }) => counts.would_promote += 1,
+            Some(
+                ReconcileOutcome::EqualMtimeDifferentContent { .. }
+                | ReconcileOutcome::BothAdvanced { .. },
+            ) => counts.needs_tie_break += 1,
+            Some(
+                ReconcileOutcome::CanonicalNewer { .. }
+                | ReconcileOutcome::Identical
+                | ReconcileOutcome::AdoptCandidate,
+            )
+            | None => {}
+        }
+    }
+    counts
 }
 
 fn print_destination_health(ctx: &Context) {
@@ -137,4 +171,7 @@ struct StatusRow {
     canonical_path: String,
     skill_count: usize,
     drift_entries: usize,
+    would_promote: usize,
+    needs_tie_break: usize,
+    drift: Vec<DriftEntry>,
 }

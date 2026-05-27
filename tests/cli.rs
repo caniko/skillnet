@@ -10,7 +10,7 @@ use std::{
 };
 
 use assert_cmd::Command;
-use filetime::{set_file_mtime, FileTime};
+use filetime::{set_file_mtime, set_file_times, FileTime};
 use predicates::prelude::*;
 use sha2::{Digest, Sha256};
 use tempfile::{tempdir, TempDir};
@@ -524,6 +524,64 @@ path = "{}"
     }
 }
 
+struct PromotionFixture {
+    fixture: Fixture,
+    config: std::path::PathBuf,
+    catalog_config: std::path::PathBuf,
+    canonical: std::path::PathBuf,
+    view: std::path::PathBuf,
+    view_mtime: FileTime,
+    canonical_mtime: FileTime,
+}
+
+impl PromotionFixture {
+    fn global_view_newer() -> Self {
+        let fixture = Fixture::new();
+        let canonical = fixture.path("global");
+        let view = fixture.path("views/global/agents");
+        write_skill(&canonical, "alpha", "canonical old");
+        write_skill(&view, "alpha", "view new");
+        let canonical_mtime = FileTime::from_unix_time(1_700_000_000, 0);
+        let view_mtime = FileTime::from_unix_time(1_700_003_600, 0);
+        set_skill_file_times(&canonical, "alpha", canonical_mtime);
+        set_skill_file_times(&view, "alpha", view_mtime);
+        let config = fixture.write_config(format!(
+            r#"
+[global]
+views = [
+  {{ label = "agents", path = "{}" }},
+]
+"#,
+            view.display()
+        ));
+        let catalog_config = fixture.write_catalog_config("");
+
+        Self {
+            fixture,
+            config,
+            catalog_config,
+            canonical,
+            view,
+            view_mtime,
+            canonical_mtime,
+        }
+    }
+
+    fn command(&self) -> Command {
+        self.fixture
+            .command_with_catalog(&self.config, &self.catalog_config)
+    }
+}
+
+fn set_skill_file_times(root: &Path, name: &str, time: FileTime) {
+    let path = root.join(name).join("SKILL.md");
+    set_file_times(&path, time, time).unwrap();
+}
+
+fn file_mtime(path: &Path) -> FileTime {
+    FileTime::from_last_modification_time(&fs::metadata(path).unwrap())
+}
+
 fn assert_symlink_points_to(link: &Path, target: &Path) {
     assert!(
         fs::symlink_metadata(link).unwrap().file_type().is_symlink(),
@@ -586,8 +644,8 @@ fn sync_creates_global_and_project_symlinks() {
 
     sync.command().arg("sync").assert().success().stdout(
         predicate::str::contains("agents  ")
-            .and(predicate::str::contains("# first"))
-            .and(predicate::str::contains("# second")),
+            .and(predicate::str::contains("first:claude"))
+            .and(predicate::str::contains("second:claude")),
     );
 
     assert_symlink_points_to(
@@ -641,9 +699,42 @@ fn sync_forwards_allow_delete_and_force() {
     )
     .unwrap();
 
-    sync.command().arg("sync").assert().failure().stderr(
-        predicate::str::contains("exists and is not a symlink")
-            .and(predicate::str::contains("pass --force")),
+    sync.command()
+        .args(["sync", "--no-promote"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("exists and is not a symlink")
+                .and(predicate::str::contains("pass --force")),
+        );
+
+    fs::remove_file(sync.global_view.join("alpha")).unwrap();
+    fs::remove_file(sync.project_view(&sync.first_project).join("alpha")).unwrap();
+    write_skill(&sync.global_view, "alpha", "old view alpha");
+    write_skill(
+        &sync.project_view(&sync.first_project),
+        "alpha",
+        "old view alpha",
+    );
+    set_skill_file_times(
+        &sync.global_view,
+        "alpha",
+        FileTime::from_unix_time(1_700_000_000, 0),
+    );
+    set_skill_file_times(
+        &sync.fixture.path("global"),
+        "alpha",
+        FileTime::from_unix_time(1_700_003_600, 0),
+    );
+    set_skill_file_times(
+        &sync.project_view(&sync.first_project),
+        "alpha",
+        FileTime::from_unix_time(1_700_000_000, 0),
+    );
+    set_skill_file_times(
+        &sync.first_project.join(".skills"),
+        "alpha",
+        FileTime::from_unix_time(1_700_003_600, 0),
     );
 
     sync.command().args(["sync", "--force"]).assert().success();
@@ -688,13 +779,17 @@ fn sync_short_circuits_on_view_failure() {
     let first_project_before = tree_digest(&sync.first_project);
     let second_project_before = tree_digest(&sync.second_project);
 
-    sync.command().arg("sync").assert().failure().stderr(
-        predicate::str::contains("failed to sync skill `alpha`")
-            .and(predicate::str::contains("exists and is not a symlink"))
-            .and(predicate::str::contains("pass --force"))
-            .and(predicate::str::contains("# first").not())
-            .and(predicate::str::contains("# second").not()),
-    );
+    sync.command()
+        .args(["sync", "--no-promote"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("failed to sync skill `alpha`")
+                .and(predicate::str::contains("exists and is not a symlink"))
+                .and(predicate::str::contains("pass --force"))
+                .and(predicate::str::contains("# first").not())
+                .and(predicate::str::contains("# second").not()),
+        );
 
     assert_eq!(tree_digest(&sync.first_project), first_project_before);
     assert_eq!(tree_digest(&sync.second_project), second_project_before);
@@ -716,9 +811,261 @@ fn sync_help_lists_command() {
     command.args(["sync", "--help"]).assert().success().stdout(
         predicate::str::contains("--allow-delete")
             .and(predicate::str::contains("--force"))
+            .and(predicate::str::contains("--apply-promote"))
+            .and(predicate::str::contains("--no-promote"))
+            .and(predicate::str::contains("--prefer"))
+            .and(predicate::str::contains("--adopt-new"))
             .and(predicate::str::contains("--dry-run"))
             .and(predicate::str::contains("--mirror-root")),
     );
+}
+
+#[test]
+fn sync_default_on_view_newer_fixture_exits_2_and_does_not_mutate() {
+    let promotion = PromotionFixture::global_view_newer();
+
+    promotion
+        .command()
+        .arg("sync")
+        .assert()
+        .code(2)
+        .stdout(predicate::str::contains("would promote"));
+
+    assert!(fs::symlink_metadata(promotion.view.join("alpha"))
+        .unwrap()
+        .is_dir());
+    assert_eq!(read_skill(&promotion.canonical, "alpha"), "canonical old");
+    assert_eq!(
+        file_mtime(&promotion.canonical.join("alpha/SKILL.md")),
+        promotion.canonical_mtime
+    );
+}
+
+#[test]
+fn sync_apply_promote_on_view_newer_fixture_succeeds() {
+    let promotion = PromotionFixture::global_view_newer();
+
+    promotion
+        .command()
+        .args(["sync", "--apply-promote"])
+        .assert()
+        .success();
+
+    assert_symlink_points_to(
+        &promotion.view.join("alpha"),
+        &promotion.canonical.join("alpha"),
+    );
+    assert_eq!(read_skill(&promotion.canonical, "alpha"), "view new");
+    assert_eq!(
+        file_mtime(&promotion.canonical.join("alpha/SKILL.md")),
+        promotion.view_mtime
+    );
+}
+
+#[test]
+fn sync_no_promote_on_view_newer_fixture_errors() {
+    let promotion = PromotionFixture::global_view_newer();
+
+    promotion
+        .command()
+        .args(["sync", "--no-promote"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("exists and is not a symlink"));
+
+    assert_eq!(read_skill(&promotion.canonical, "alpha"), "canonical old");
+    assert_eq!(
+        file_mtime(&promotion.canonical.join("alpha/SKILL.md")),
+        promotion.canonical_mtime
+    );
+}
+
+#[test]
+fn sync_dry_run_collapses_code_2_to_code_0() {
+    let promotion = PromotionFixture::global_view_newer();
+
+    promotion
+        .command()
+        .args(["--dry-run", "sync"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("would promote"));
+
+    assert!(fs::symlink_metadata(promotion.view.join("alpha"))
+        .unwrap()
+        .is_dir());
+    assert_eq!(read_skill(&promotion.canonical, "alpha"), "canonical old");
+}
+
+#[test]
+fn sync_per_project_dirty_gate_refuses_promotion() {
+    let fixture = Fixture::new();
+    let project = fixture.path("work/demo");
+    write_skill(&project.join(".skills"), "alpha", "canonical old");
+    write_skill(&project.join(".claude/skills"), "alpha", "view new");
+    set_skill_file_times(
+        &project.join(".skills"),
+        "alpha",
+        FileTime::from_unix_time(1_700_000_000, 0),
+    );
+    set_skill_file_times(
+        &project.join(".claude/skills"),
+        "alpha",
+        FileTime::from_unix_time(1_700_003_600, 0),
+    );
+    init_git_repo(&project);
+    commit_all(&project, "baseline");
+    fs::write(project.join("dirty"), "dirty").unwrap();
+    StdCommand::new("git")
+        .args(["add", "."])
+        .current_dir(&project)
+        .output()
+        .unwrap();
+    let config = fixture.write_config(project_config("demo", &project));
+    let catalog_config = fixture.write_catalog_config("");
+
+    fixture
+        .command_with_catalog(&config, &catalog_config)
+        .args(["sync", "--apply-promote"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(project.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn sync_with_allow_dirty_destination_bypasses_per_project_gate() {
+    let fixture = Fixture::new();
+    let project = fixture.path("work/demo");
+    write_skill(&project.join(".skills"), "alpha", "canonical old");
+    write_skill(&project.join(".claude/skills"), "alpha", "view new");
+    set_skill_file_times(
+        &project.join(".skills"),
+        "alpha",
+        FileTime::from_unix_time(1_700_000_000, 0),
+    );
+    set_skill_file_times(
+        &project.join(".claude/skills"),
+        "alpha",
+        FileTime::from_unix_time(1_700_003_600, 0),
+    );
+    init_git_repo(&project);
+    commit_all(&project, "baseline");
+    fs::write(project.join("dirty"), "dirty").unwrap();
+    StdCommand::new("git")
+        .args(["add", "."])
+        .current_dir(&project)
+        .output()
+        .unwrap();
+    let config = fixture.write_config(project_config("demo", &project));
+    let catalog_config = fixture.write_catalog_config("");
+
+    fixture
+        .command_with_catalog(&config, &catalog_config)
+        .args(["--allow-dirty-destination", "sync", "--apply-promote"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn status_json_emits_would_promote_and_tie_break_counts() {
+    let fixture = Fixture::new();
+    let canonical = fixture.path("global");
+    let view = fixture.path("views/global/agents");
+    write_skill(&canonical, "alpha", "canonical alpha");
+    write_skill(&view, "alpha", "view alpha");
+    set_skill_file_times(
+        &canonical,
+        "alpha",
+        FileTime::from_unix_time(1_700_000_000, 0),
+    );
+    set_skill_file_times(&view, "alpha", FileTime::from_unix_time(1_700_003_600, 0));
+    write_skill(&canonical, "beta", "canonical beta");
+    write_skill(&view, "beta", "view beta");
+    let same_time = FileTime::from_unix_time(1_700_010_000, 0);
+    set_skill_file_times(&canonical, "beta", same_time);
+    set_skill_file_times(&view, "beta", same_time);
+    let config = fixture.write_config(format!(
+        r#"
+[global]
+views = [
+  {{ label = "agents", path = "{}" }},
+]
+"#,
+        view.display()
+    ));
+    let catalog_config = fixture.write_catalog_config("");
+
+    let output = fixture
+        .command_with_catalog(&config, &catalog_config)
+        .args(["status", "--all", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let global = value
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["scope"] == "global")
+        .unwrap();
+
+    assert_eq!(global["would_promote"], 1);
+    assert_eq!(global["needs_tie_break"], 1);
+    let drift = global["drift"].as_array().unwrap();
+    let alpha = drift
+        .iter()
+        .find(|entry| entry["skill"] == "alpha")
+        .unwrap();
+    assert!(alpha["view_mtime_nanos"].as_u64().is_some());
+    assert!(alpha["canonical_mtime_nanos"].as_u64().is_some());
+    let beta = drift.iter().find(|entry| entry["skill"] == "beta").unwrap();
+    assert!(beta["view_sha"].as_str().unwrap().len() >= 8);
+    assert!(beta["canonical_sha"].as_str().unwrap().len() >= 8);
+}
+
+#[test]
+fn status_json_leaves_legacy_fields_unchanged() {
+    let fixture = Fixture::new();
+    let canonical = fixture.path("global");
+    let view = fixture.path("views/global/agents");
+    write_skill(&canonical, "missing", "missing");
+    write_skill(&canonical, "linked", "linked");
+    fs::create_dir_all(&view).unwrap();
+    symlink_file("/missing/target", &view.join("linked"));
+    write_skill(&view, "stale", "stale");
+    let config = fixture.write_config(format!(
+        r#"
+[global]
+views = [
+  {{ label = "agents", path = "{}" }},
+]
+"#,
+        view.display()
+    ));
+    let catalog_config = fixture.write_catalog_config("");
+
+    let output = fixture
+        .command_with_catalog(&config, &catalog_config)
+        .args(["status", "--all", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let global = value
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["scope"] == "global")
+        .unwrap();
+
+    assert_eq!(global["would_promote"], 0);
+    assert_eq!(global["needs_tie_break"], 0);
+    for entry in global["drift"].as_array().unwrap() {
+        assert!(entry["view_mtime_nanos"].is_null());
+        assert!(entry["canonical_mtime_nanos"].is_null());
+        assert!(entry["view_sha"].is_null());
+        assert!(entry["canonical_sha"].is_null());
+    }
 }
 
 // removed by P4: pre-Option-B reconcile CLI coverage

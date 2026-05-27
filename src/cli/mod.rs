@@ -83,11 +83,31 @@ pub fn run() -> Result<()> {
         }
         Command::View { command } => run_view_command(&ctx, command),
         Command::Sync {
-            allow_delete,
+            apply_promote,
+            no_promote,
             force,
+            prefer,
+            adopt_new,
+            allow_delete,
         } => {
-            commands::view::sync(&ctx, allow_delete, force)?;
-            commands::project_sync(&ctx, &[], true, allow_delete, force)
+            let preference = prefer.map(|preference| match preference {
+                args::PreferenceArg::View => crate::view::Preference::View,
+                args::PreferenceArg::Canonical => crate::view::Preference::Canonical,
+            });
+            let options = crate::view::PromotionOptions {
+                apply_promote,
+                force_demote: force,
+                prefer: preference,
+                adopt_new,
+                allow_delete,
+                relative_links: false,
+                project_root: None,
+            };
+            let exit_code = commands::sync::run(&ctx, options, no_promote)?;
+            if exit_code != 0 {
+                std::process::exit(exit_code);
+            }
+            Ok(())
         }
         Command::Skill { command } => run_skill_command(&ctx, command),
         Command::Scope { command } => run_scope_command(&ctx, command),

@@ -57,6 +57,8 @@ pub struct DriftEntry {
     pub canonical_mtime_nanos: Option<u128>,
     pub view_sha: Option<String>,
     pub canonical_sha: Option<String>,
+    #[serde(skip)]
+    pub reconcile_outcome: Option<ReconcileOutcome>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -482,22 +484,14 @@ pub fn view_status_with_options(
                     canonical_mtime_nanos: None,
                     view_sha: None,
                     canonical_sha: None,
+                    reconcile_outcome: None,
                 });
                 continue;
             }
             Err(err) => return Err(err).with_context(|| format!("failed to inspect {link}")),
         };
         if !metadata.file_type().is_symlink() {
-            drift.push(DriftEntry {
-                skill: skill.clone(),
-                kind: DriftKind::NonSymlink,
-                expected: Some(desired),
-                actual: Some(link),
-                view_mtime_nanos: None,
-                canonical_mtime_nanos: None,
-                view_sha: None,
-                canonical_sha: None,
-            });
+            drift.push(non_symlink_drift_entry(skill, &desired, target, &link));
             continue;
         }
         let actual = read_link_utf8(&link)?;
@@ -511,6 +505,7 @@ pub fn view_status_with_options(
                 canonical_mtime_nanos: None,
                 view_sha: None,
                 canonical_sha: None,
+                reconcile_outcome: None,
             });
         }
     }
@@ -528,10 +523,65 @@ pub fn view_status_with_options(
             canonical_mtime_nanos: None,
             view_sha: None,
             canonical_sha: None,
+            reconcile_outcome: None,
         });
     }
 
     Ok(drift)
+}
+
+fn non_symlink_drift_entry(
+    skill: &str,
+    desired: &Utf8Path,
+    canonical_skill: &Utf8Path,
+    link: &Utf8Path,
+) -> DriftEntry {
+    let mut entry = DriftEntry {
+        skill: skill.to_string(),
+        kind: DriftKind::NonSymlink,
+        expected: Some(desired.to_path_buf()),
+        actual: Some(link.to_path_buf()),
+        view_mtime_nanos: None,
+        canonical_mtime_nanos: None,
+        view_sha: None,
+        canonical_sha: None,
+        reconcile_outcome: None,
+    };
+
+    match compare_view_entry(canonical_skill, link) {
+        Ok(outcome) => {
+            match &outcome {
+                ReconcileOutcome::ViewNewer {
+                    view_mtime,
+                    canonical_mtime,
+                }
+                | ReconcileOutcome::CanonicalNewer {
+                    view_mtime,
+                    canonical_mtime,
+                } => {
+                    entry.view_mtime_nanos = Some(*view_mtime);
+                    entry.canonical_mtime_nanos = Some(*canonical_mtime);
+                }
+                ReconcileOutcome::EqualMtimeDifferentContent {
+                    view_sha,
+                    canonical_sha,
+                    mtime,
+                } => {
+                    entry.view_mtime_nanos = Some(*mtime);
+                    entry.canonical_mtime_nanos = Some(*mtime);
+                    entry.view_sha = Some(view_sha.clone());
+                    entry.canonical_sha = Some(canonical_sha.clone());
+                }
+                ReconcileOutcome::BothAdvanced { .. }
+                | ReconcileOutcome::Identical
+                | ReconcileOutcome::AdoptCandidate => {}
+            }
+            entry.reconcile_outcome = Some(outcome);
+        }
+        Err(err) => eprintln!("warn: failed to classify non-symlink view entry {link}: {err:#}"),
+    }
+
+    entry
 }
 
 pub fn view_diff(canonical: &Utf8Path, view: &ViewTarget) -> Result<Vec<FileDelta>> {
@@ -657,6 +707,7 @@ pub fn project_status(target: &Target) -> Result<Vec<DriftEntry>> {
                 canonical_mtime_nanos: None,
                 view_sha: None,
                 canonical_sha: None,
+                reconcile_outcome: None,
             });
         }
     }

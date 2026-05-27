@@ -70,12 +70,24 @@ pub(super) enum Command {
     },
     /// Materialise every configured global view and project view in one shot.
     Sync {
+        /// Promote view-side edits back into canonical skills.
+        #[arg(long)]
+        apply_promote: bool,
+        /// Disable promotion handling and keep legacy non-symlink errors.
+        #[arg(long, conflicts_with = "apply_promote", conflicts_with = "force")]
+        no_promote: bool,
+        /// Destructively demote view-side content when canonical is newer.
+        #[arg(long)]
+        force: bool,
+        /// Tie-breaker for equal-mtime or both-advanced conflicts.
+        #[arg(long, value_enum)]
+        prefer: Option<PreferenceArg>,
+        /// Adopt view-only skills into canonical when promotion is enabled.
+        #[arg(long)]
+        adopt_new: bool,
         /// Remove view entries that no longer correspond to canonical skills.
         #[arg(long)]
         allow_delete: bool,
-        /// Replace existing non-symlink entries in views.
-        #[arg(long)]
-        force: bool,
     },
     /// Manage configured project roots.
     Project {
@@ -397,6 +409,12 @@ pub(crate) enum StatusFormat {
     Json,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum PreferenceArg {
+    View,
+    Canonical,
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub(crate) enum Decision {
     Accept,
@@ -684,29 +702,67 @@ mod tests {
     }
 
     #[test]
-    fn sync_command_defaults_to_safe_flags() {
+    fn sync_command_defaults_record_promotion_off() {
         let cli = Cli::parse_from(["skillnet", "sync"]);
 
         assert!(matches!(
             cli.command,
             Some(Command::Sync {
-                allow_delete: false,
+                apply_promote: false,
+                no_promote: false,
                 force: false,
+                prefer: None,
+                adopt_new: false,
+                allow_delete: false,
             })
         ));
     }
 
     #[test]
-    fn sync_command_parses_mutation_flags() {
-        let cli = Cli::parse_from(["skillnet", "sync", "--allow-delete", "--force"]);
+    fn sync_command_parses_apply_promote_and_prefer() {
+        let cli = Cli::parse_from([
+            "skillnet",
+            "sync",
+            "--apply-promote",
+            "--force",
+            "--prefer",
+            "view",
+            "--adopt-new",
+            "--allow-delete",
+        ]);
 
         assert!(matches!(
             cli.command,
             Some(Command::Sync {
-                allow_delete: true,
+                apply_promote: true,
+                no_promote: false,
                 force: true,
+                prefer: Some(PreferenceArg::View),
+                adopt_new: true,
+                allow_delete: true,
             })
         ));
+    }
+
+    #[test]
+    fn sync_command_rejects_apply_promote_with_no_promote() {
+        let err = Cli::try_parse_from(["skillnet", "sync", "--apply-promote", "--no-promote"])
+            .unwrap_err();
+        let message = err.to_string();
+
+        assert!(!message.is_empty());
+        assert!(message.contains("--apply-promote"));
+        assert!(message.contains("--no-promote"));
+    }
+
+    #[test]
+    fn sync_command_rejects_no_promote_with_force() {
+        let err = Cli::try_parse_from(["skillnet", "sync", "--force", "--no-promote"]).unwrap_err();
+        let message = err.to_string();
+
+        assert!(!message.is_empty());
+        assert!(message.contains("--force"));
+        assert!(message.contains("--no-promote"));
     }
 
     #[test]

@@ -5,7 +5,7 @@ use camino::Utf8Path;
 use serde::Serialize;
 use toml_edit::{value, ArrayOfTables, DocumentMut, Item, Table};
 
-use super::{view::format_view_summary, Context};
+use super::{status::promotion_status_counts, view::format_view_summary, Context};
 use crate::cli::args::StatusFormat;
 use crate::config::expand_path;
 use crate::view::{
@@ -198,9 +198,13 @@ pub fn project_status_command(
 ) -> Result<()> {
     let mut rows = Vec::new();
     for target in project_targets(ctx, names, all)? {
+        let drift = project_status(&target)?;
+        let promotion_status = promotion_status_counts(&drift);
         rows.push(ProjectStatusRow {
             name: target.name.clone(),
-            drift: project_status(&target)?,
+            would_promote: promotion_status.would_promote,
+            needs_tie_break: promotion_status.needs_tie_break,
+            drift,
         });
     }
 
@@ -296,6 +300,8 @@ fn drift_marker(kind: DriftKind) -> char {
 #[derive(Serialize)]
 struct ProjectStatusRow {
     name: String,
+    would_promote: usize,
+    needs_tie_break: usize,
     drift: Vec<DriftEntry>,
 }
 

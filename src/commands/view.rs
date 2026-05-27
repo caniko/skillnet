@@ -4,6 +4,7 @@ use serde::Serialize;
 use super::Context;
 use crate::{
     cli::args::StatusFormat,
+    commands::status::promotion_status_counts,
     model::Target,
     view::{
         materialize_view_with_options, view_diff, view_status, DriftEntry, DriftKind,
@@ -41,10 +42,14 @@ pub fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
     let target = ctx.config.global_target(&ctx.mirror_root)?;
     let mut rows = Vec::new();
     for view in &target.views {
+        let drift = view_status(&target.canonical_path, view)?;
+        let promotion_status = promotion_status_counts(&drift);
         rows.push(ViewStatusRow {
             label: view.label.clone(),
             path: view.path.to_string(),
-            drift: view_status(&target.canonical_path, view)?,
+            would_promote: promotion_status.would_promote,
+            needs_tie_break: promotion_status.needs_tie_break,
+            drift,
         });
     }
 
@@ -119,5 +124,7 @@ fn drift_marker(kind: DriftKind) -> char {
 struct ViewStatusRow {
     label: String,
     path: String,
+    would_promote: usize,
+    needs_tie_break: usize,
     drift: Vec<DriftEntry>,
 }

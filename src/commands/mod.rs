@@ -7,6 +7,7 @@ mod mirror;
 mod project;
 mod skill;
 pub mod status;
+pub mod sync;
 pub(crate) mod view;
 
 pub use context::Context;
