@@ -18,13 +18,16 @@ use std::{
     fs,
     os::unix::fs as unix_fs,
     path::{Component, Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Serialize;
+use walkdir::WalkDir;
 
 use crate::{
+    fs_ops::{content_signature, copy_dir, newest_mtime_nanos},
     mirror::mirror_skill_dirs,
     model::{Target, ViewTarget},
 };
@@ -36,7 +39,7 @@ pub struct ViewSyncOptions {
     pub relative_links: bool,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct ViewSyncSummary {
     pub created: usize,
     pub updated: usize,
@@ -50,6 +53,10 @@ pub struct DriftEntry {
     pub kind: DriftKind,
     pub expected: Option<Utf8PathBuf>,
     pub actual: Option<Utf8PathBuf>,
+    pub view_mtime_nanos: Option<u128>,
+    pub canonical_mtime_nanos: Option<u128>,
+    pub view_sha: Option<String>,
+    pub canonical_sha: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -66,6 +73,63 @@ pub struct FileDelta {
     pub kind: FileDeltaKind,
     pub expected: Option<Utf8PathBuf>,
     pub actual: Option<Utf8PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub enum ReconcileOutcome {
+    Identical,
+    ViewNewer {
+        view_mtime: u128,
+        canonical_mtime: u128,
+    },
+    CanonicalNewer {
+        view_mtime: u128,
+        canonical_mtime: u128,
+    },
+    EqualMtimeDifferentContent {
+        view_sha: String,
+        canonical_sha: String,
+        mtime: u128,
+    },
+    BothAdvanced {
+        view_only: Vec<Utf8PathBuf>,
+        canonical_only: Vec<Utf8PathBuf>,
+    },
+    AdoptCandidate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Preference {
+    View,
+    Canonical,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PromotionOptions {
+    pub apply_promote: bool,
+    pub force_demote: bool,
+    pub prefer: Option<Preference>,
+    pub adopt_new: bool,
+    pub allow_delete: bool,
+    pub relative_links: bool,
+    pub project_root: Option<Utf8PathBuf>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct PromotionSummary {
+    pub view: ViewSyncSummary,
+    pub promoted: Vec<String>,
+    pub demoted_destructive: Vec<String>,
+    pub adopted: Vec<String>,
+    pub would_promote: Vec<WouldEntry>,
+    pub would_demote_destructive: Vec<WouldEntry>,
+    pub needs_tie_break: Vec<WouldEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WouldEntry {
+    pub skill: String,
+    pub outcome: ReconcileOutcome,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -112,6 +176,285 @@ pub fn materialize_view_with_options(
     Ok(summary)
 }
 
+pub fn materialize_view_with_promotion(
+    canonical_root: &Utf8Path,
+    view: &ViewTarget,
+    options: PromotionOptions,
+    ensure_clean: impl Fn(&Utf8Path) -> Result<()>,
+) -> Result<PromotionSummary> {
+    ensure_clean(canonical_root)?;
+
+    let expected = expected_skill_links(canonical_root)?;
+    fs::create_dir_all(&view.path)
+        .with_context(|| format!("failed to create view directory {}", view.path))?;
+
+    let mut summary = PromotionSummary::default();
+    for (skill, canonical_skill) in &expected {
+        let link = view.path.join(skill);
+        let desired = desired_link_target(&view.path, canonical_skill, options.relative_links)?;
+        match fs::symlink_metadata(&link) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                let current = read_link_utf8(&link)?;
+                if current == desired {
+                    summary.view.unchanged += 1;
+                } else {
+                    atomic_symlink(&desired, &link)?;
+                    summary.view.updated += 1;
+                }
+            }
+            Ok(_) => {
+                let outcome = compare_view_entry(canonical_skill, &link)
+                    .with_context(|| format!("failed to compare skill `{skill}`"))?;
+                apply_reconcile_outcome(
+                    ReconcileAction {
+                        skill,
+                        link: &link,
+                        canonical_skill,
+                        desired: &desired,
+                    },
+                    outcome,
+                    &options,
+                    &ensure_clean,
+                    &mut summary,
+                )?;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                atomic_symlink(&desired, &link)?;
+                summary.view.created += 1;
+            }
+            Err(err) => return Err(err).with_context(|| format!("failed to inspect {link}")),
+        }
+    }
+
+    for stale in stale_view_entries(&view.path, expected.keys())? {
+        let skill = stale
+            .file_name()
+            .context("stale view entry has no final component")?
+            .to_string();
+        let metadata = fs::symlink_metadata(&stale)
+            .with_context(|| format!("failed to inspect stale view entry {stale}"))?;
+        if metadata.file_type().is_symlink() {
+            if options.allow_delete {
+                remove_view_entry(&stale)
+                    .with_context(|| format!("failed to remove stale view entry {stale}"))?;
+                summary.view.removed += 1;
+            }
+            continue;
+        }
+
+        let canonical_skill = canonical_root.join(&skill);
+        let outcome = compare_view_entry(&canonical_skill, &stale)
+            .with_context(|| format!("failed to compare stale skill `{skill}`"))?;
+        if matches!(outcome, ReconcileOutcome::AdoptCandidate)
+            && options.adopt_new
+            && options.apply_promote
+        {
+            ensure_project_clean_for_write(&options, &ensure_clean)?;
+            promote_view_to_canonical(&stale, &canonical_skill)
+                .with_context(|| format!("failed to adopt skill `{skill}`"))?;
+            summary.adopted.push(skill);
+        }
+    }
+
+    Ok(summary)
+}
+
+struct ReconcileAction<'a> {
+    skill: &'a str,
+    link: &'a Utf8Path,
+    canonical_skill: &'a Utf8Path,
+    desired: &'a Utf8Path,
+}
+
+fn apply_reconcile_outcome(
+    action: ReconcileAction<'_>,
+    outcome: ReconcileOutcome,
+    options: &PromotionOptions,
+    ensure_clean: &impl Fn(&Utf8Path) -> Result<()>,
+    summary: &mut PromotionSummary,
+) -> Result<()> {
+    match outcome {
+        ReconcileOutcome::Identical => {
+            demote_to_symlink(action.link, action.desired)?;
+            summary.view.updated += 1;
+        }
+        ReconcileOutcome::ViewNewer { .. } if options.apply_promote => {
+            ensure_project_clean_for_write(options, ensure_clean)?;
+            promote_view_to_canonical(action.link, action.canonical_skill)
+                .with_context(|| format!("failed to promote skill `{}`", action.skill))?;
+            demote_to_symlink(action.link, action.desired)?;
+            summary.promoted.push(action.skill.to_string());
+            summary.view.updated += 1;
+        }
+        ReconcileOutcome::ViewNewer { .. } => {
+            summary.would_promote.push(WouldEntry {
+                skill: action.skill.to_string(),
+                outcome,
+            });
+        }
+        ReconcileOutcome::CanonicalNewer { .. } if options.force_demote => {
+            demote_to_symlink(action.link, action.desired)?;
+            summary.demoted_destructive.push(action.skill.to_string());
+            summary.view.updated += 1;
+        }
+        ReconcileOutcome::CanonicalNewer { .. } => {
+            summary.would_demote_destructive.push(WouldEntry {
+                skill: action.skill.to_string(),
+                outcome,
+            });
+        }
+        ReconcileOutcome::EqualMtimeDifferentContent { .. }
+        | ReconcileOutcome::BothAdvanced { .. }
+            if options.prefer == Some(Preference::View) && options.apply_promote =>
+        {
+            ensure_project_clean_for_write(options, ensure_clean)?;
+            promote_view_to_canonical(action.link, action.canonical_skill)
+                .with_context(|| format!("failed to promote skill `{}`", action.skill))?;
+            demote_to_symlink(action.link, action.desired)?;
+            summary.promoted.push(action.skill.to_string());
+            summary.view.updated += 1;
+        }
+        ReconcileOutcome::EqualMtimeDifferentContent { .. }
+        | ReconcileOutcome::BothAdvanced { .. }
+            if options.prefer == Some(Preference::Canonical) && options.force_demote =>
+        {
+            demote_to_symlink(action.link, action.desired)?;
+            summary.demoted_destructive.push(action.skill.to_string());
+            summary.view.updated += 1;
+        }
+        ReconcileOutcome::EqualMtimeDifferentContent { .. }
+        | ReconcileOutcome::BothAdvanced { .. } => {
+            summary.needs_tie_break.push(WouldEntry {
+                skill: action.skill.to_string(),
+                outcome,
+            });
+        }
+        ReconcileOutcome::AdoptCandidate if options.adopt_new && options.apply_promote => {
+            ensure_project_clean_for_write(options, ensure_clean)?;
+            promote_view_to_canonical(action.link, action.canonical_skill)
+                .with_context(|| format!("failed to adopt skill `{}`", action.skill))?;
+            summary.adopted.push(action.skill.to_string());
+        }
+        ReconcileOutcome::AdoptCandidate => {}
+    }
+    Ok(())
+}
+
+fn ensure_project_clean_for_write(
+    options: &PromotionOptions,
+    ensure_clean: &impl Fn(&Utf8Path) -> Result<()>,
+) -> Result<()> {
+    if let Some(project_root) = &options.project_root {
+        ensure_clean(project_root)?;
+    }
+    Ok(())
+}
+
+fn demote_to_symlink(link: &Utf8Path, desired: &Utf8Path) -> Result<()> {
+    remove_view_entry(link)?;
+    atomic_symlink(desired, link)
+}
+
+pub fn compare_view_entry(
+    canonical_skill: &Utf8Path,
+    view_entry: &Utf8Path,
+) -> Result<ReconcileOutcome> {
+    let metadata = fs::symlink_metadata(view_entry)
+        .with_context(|| format!("failed to inspect view entry {view_entry}"))?;
+    if metadata.file_type().is_symlink() {
+        bail!("{view_entry} is a symlink; compare_view_entry expects a non-symlink view entry");
+    }
+    if !canonical_skill.exists() {
+        return Ok(ReconcileOutcome::AdoptCandidate);
+    }
+
+    let view_mtime = newest_mtime_nanos(view_entry)
+        .with_context(|| format!("failed to compute newest mtime for {view_entry}"))?;
+    let canonical_mtime = newest_mtime_nanos(canonical_skill)
+        .with_context(|| format!("failed to compute newest mtime for {canonical_skill}"))?;
+    let view_sha = content_signature(view_entry)
+        .with_context(|| format!("failed to compute content signature for {view_entry}"))?;
+    let canonical_sha = content_signature(canonical_skill)
+        .with_context(|| format!("failed to compute content signature for {canonical_skill}"))?;
+
+    if view_mtime > now_nanos()? {
+        return Ok(ReconcileOutcome::EqualMtimeDifferentContent {
+            view_sha,
+            canonical_sha,
+            mtime: view_mtime,
+        });
+    }
+
+    if view_sha == canonical_sha {
+        return Ok(ReconcileOutcome::Identical);
+    }
+
+    match view_mtime.cmp(&canonical_mtime) {
+        std::cmp::Ordering::Greater => {
+            let (view_only, canonical_only) = file_set_delta(view_entry, canonical_skill)?;
+            if canonical_only.is_empty() {
+                Ok(ReconcileOutcome::ViewNewer {
+                    view_mtime,
+                    canonical_mtime,
+                })
+            } else {
+                Ok(ReconcileOutcome::BothAdvanced {
+                    view_only,
+                    canonical_only,
+                })
+            }
+        }
+        std::cmp::Ordering::Less => {
+            let (view_only, canonical_only) = file_set_delta(view_entry, canonical_skill)?;
+            if view_only.is_empty() {
+                Ok(ReconcileOutcome::CanonicalNewer {
+                    view_mtime,
+                    canonical_mtime,
+                })
+            } else {
+                Ok(ReconcileOutcome::BothAdvanced {
+                    view_only,
+                    canonical_only,
+                })
+            }
+        }
+        std::cmp::Ordering::Equal => Ok(ReconcileOutcome::EqualMtimeDifferentContent {
+            view_sha,
+            canonical_sha,
+            mtime: view_mtime,
+        }),
+    }
+}
+
+pub fn promote_view_to_canonical(view_entry: &Utf8Path, canonical_skill: &Utf8Path) -> Result<()> {
+    let canonical_parent = canonical_skill
+        .parent()
+        .context("canonical skill path has no parent")?;
+    let skill = canonical_skill
+        .file_name()
+        .context("canonical skill path has no file name")?;
+    let staging_parent = canonical_parent.join(".skillnet-tmp");
+    let staging = staging_parent.join(format!("{skill}-{}", std::process::id()));
+
+    if staging.exists() {
+        fs::remove_dir_all(&staging)
+            .with_context(|| format!("failed to remove stale staging directory {staging}"))?;
+    }
+    fs::create_dir_all(&staging_parent)
+        .with_context(|| format!("failed to create staging parent {staging_parent}"))?;
+    copy_dir(view_entry, &staging)
+        .with_context(|| format!("failed to stage promoted skill from {view_entry}"))?;
+
+    if canonical_skill.exists() {
+        fs::remove_dir_all(canonical_skill).with_context(|| {
+            format!("failed to remove existing canonical skill {canonical_skill}")
+        })?;
+    }
+    fs::rename(&staging, canonical_skill)
+        .with_context(|| format!("failed to replace canonical skill {canonical_skill}"))?;
+    Ok(())
+}
+
 pub fn view_status(canonical: &Utf8Path, view: &ViewTarget) -> Result<Vec<DriftEntry>> {
     view_status_with_options(canonical, view, ViewSyncOptions::default())
 }
@@ -135,6 +478,10 @@ pub fn view_status_with_options(
                     kind: DriftKind::Missing,
                     expected: Some(desired),
                     actual: None,
+                    view_mtime_nanos: None,
+                    canonical_mtime_nanos: None,
+                    view_sha: None,
+                    canonical_sha: None,
                 });
                 continue;
             }
@@ -146,6 +493,10 @@ pub fn view_status_with_options(
                 kind: DriftKind::NonSymlink,
                 expected: Some(desired),
                 actual: Some(link),
+                view_mtime_nanos: None,
+                canonical_mtime_nanos: None,
+                view_sha: None,
+                canonical_sha: None,
             });
             continue;
         }
@@ -156,6 +507,10 @@ pub fn view_status_with_options(
                 kind: DriftKind::WrongTarget,
                 expected: Some(desired),
                 actual: Some(actual),
+                view_mtime_nanos: None,
+                canonical_mtime_nanos: None,
+                view_sha: None,
+                canonical_sha: None,
             });
         }
     }
@@ -169,6 +524,10 @@ pub fn view_status_with_options(
             kind: DriftKind::Stale,
             expected: None,
             actual: Some(stale),
+            view_mtime_nanos: None,
+            canonical_mtime_nanos: None,
+            view_sha: None,
+            canonical_sha: None,
         });
     }
 
@@ -241,6 +600,38 @@ pub fn materialize_project_with_options(
     Ok(ProjectSyncSummary { views, aggregator })
 }
 
+pub fn materialize_project_with_promotion(
+    target: &Target,
+    options: PromotionOptions,
+    ensure_clean: impl Fn(&Utf8Path) -> Result<()>,
+) -> Result<ProjectPromotionSummary> {
+    let mut views = Vec::with_capacity(target.views.len());
+    for view in &target.views {
+        let summary = materialize_view_with_promotion(
+            &target.canonical_path,
+            view,
+            PromotionOptions {
+                relative_links: true,
+                project_root: target.project_root.clone(),
+                ..options.clone()
+            },
+            &ensure_clean,
+        )?;
+        views.push(ProjectPromotionViewSummary {
+            label: view.label.clone(),
+            path: view.path.clone(),
+            summary,
+        });
+    }
+
+    let aggregator = match &target.aggregator_path {
+        Some(path) => Some(ensure_aggregator_symlink(path, &target.canonical_path)?),
+        None => None,
+    };
+
+    Ok(ProjectPromotionSummary { views, aggregator })
+}
+
 pub fn project_status(target: &Target) -> Result<Vec<DriftEntry>> {
     let mut drift = Vec::new();
     for view in &target.views {
@@ -262,6 +653,10 @@ pub fn project_status(target: &Target) -> Result<Vec<DriftEntry>> {
                 actual: fs::read_link(path)
                     .ok()
                     .and_then(|path| Utf8PathBuf::from_path_buf(path).ok()),
+                view_mtime_nanos: None,
+                canonical_mtime_nanos: None,
+                view_sha: None,
+                canonical_sha: None,
             });
         }
     }
@@ -314,11 +709,62 @@ pub struct ProjectViewSummary {
     pub summary: ViewSyncSummary,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ProjectPromotionSummary {
+    pub views: Vec<ProjectPromotionViewSummary>,
+    pub aggregator: Option<AggregatorStatus>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProjectPromotionViewSummary {
+    pub label: String,
+    pub path: Utf8PathBuf,
+    pub summary: PromotionSummary,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum AggregatorStatus {
     Created,
     Updated,
     Unchanged,
+}
+
+fn now_nanos() -> Result<u128> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before the Unix epoch")?
+        .as_nanos())
+}
+
+fn file_set_delta(
+    view_entry: &Utf8Path,
+    canonical_skill: &Utf8Path,
+) -> Result<(Vec<Utf8PathBuf>, Vec<Utf8PathBuf>)> {
+    let view_files = comparable_file_set(view_entry)?;
+    let canonical_files = comparable_file_set(canonical_skill)?;
+    let view_only = view_files.difference(&canonical_files).cloned().collect();
+    let canonical_only = canonical_files.difference(&view_files).cloned().collect();
+    Ok((view_only, canonical_only))
+}
+
+fn comparable_file_set(root: &Utf8Path) -> Result<BTreeSet<Utf8PathBuf>> {
+    let mut files = BTreeSet::new();
+    for entry in WalkDir::new(root).follow_links(false) {
+        let entry = entry?;
+        let path = Utf8PathBuf::from_path_buf(entry.path().to_path_buf())
+            .map_err(|p| anyhow::anyhow!("non-UTF-8 path in skill tree: {}", p.display()))?;
+        if path
+            .components()
+            .any(|component| component.as_str() == ".skillnet-tmp")
+        {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+            files.insert(path.strip_prefix(root)?.to_path_buf());
+        }
+    }
+    Ok(files)
 }
 
 fn expected_skill_links(canonical: &Utf8Path) -> Result<BTreeMap<String, Utf8PathBuf>> {

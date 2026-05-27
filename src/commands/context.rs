@@ -37,11 +37,16 @@ impl Context {
         })
     }
 
-    pub(crate) fn ensure_destination_clean(&self) -> Result<()> {
+    pub fn ensure_target_clean(&self, target: &Utf8Path) -> Result<()> {
         if self.dry_run || self.allow_dirty_destination {
             return Ok(());
         }
-        crate::vcs::ensure_clean(&self.mirror_root)
+        crate::vcs::ensure_clean(target)
+            .with_context(|| format!("destination target `{target}` is not clean"))
+    }
+
+    pub(crate) fn ensure_destination_clean(&self) -> Result<()> {
+        self.ensure_target_clean(&self.mirror_root)
     }
 
     pub(super) fn all_targets(&self) -> Result<Vec<Target>> {
