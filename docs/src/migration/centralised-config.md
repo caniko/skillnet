@@ -40,13 +40,13 @@ skillnet config migrate
 
 The command makes one decision per file:
 
-| Legacy cwd file | XDG file | Default action |
-| ---- | ---- | ---- |
-| absent | absent | No-op; prints that there is no config to migrate. |
-| absent | present | No-op; prints that the file is already centralised. |
-| present | absent | Moves the cwd file to XDG and writes a breadcrumb in the old directory. |
-| present | present, same content | Deletes the cwd file and writes a breadcrumb. |
-| present | present, different content | Refuses; pass `--force` only after deciding the cwd file should overwrite XDG. |
+| Legacy cwd file | XDG file                   | Default action                                                                 |
+| --------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| absent          | absent                     | No-op; prints that there is no config to migrate.                              |
+| absent          | present                    | No-op; prints that the file is already centralised.                            |
+| present         | absent                     | Moves the cwd file to XDG and writes a breadcrumb in the old directory.        |
+| present         | present, same content      | Deletes the cwd file and writes a breadcrumb.                                  |
+| present         | present, different content | Refuses; pass `--force` only after deciding the cwd file should overwrite XDG. |
 
 Breadcrumb files are plain text:
 

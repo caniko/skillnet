@@ -50,16 +50,16 @@ view entry with a symlink.
 
 Promotion flags:
 
-| Flag | Default | Behaviour |
-| ---- | ------- | --------- |
-| `--apply-promote` | off | Executes pending `ViewNewer` outcomes and any `--prefer`-resolved or `--adopt-new`-promoted outcomes. Without this flag, those outcomes are reported as would-promote/would-adopt only. |
-| `--no-promote` | off | Hard-disables the promotion path entirely. Non-symlink view entries error as in `0.5.x`. Use this for CI and consumer-only hosts. |
-| `--force` | off | Demotes `CanonicalNewer` entries, destroying view-side content. In `0.6.0`, this is the destructive demote branch rather than the promotion branch. |
-| `--prefer <view\|canonical>` | unset | Tie-breaker for `EqualMtimeDifferentContent` and `BothAdvanced`. Only consulted when `--apply-promote` is also passed. |
-| `--adopt-new` | off | Treats `AdoptCandidate` outcomes as promotion candidates. Only acts when `--apply-promote` is also passed. |
-| `--allow-delete` | off | Existing pruning semantics. Removes view entries with no canonical sibling and no `--adopt-new`. |
-| `--dry-run` | off | Global flag. Never mutates and never escalates would-promote work to exit code `2`; prints would-* lines and exits `0`. |
-| `--allow-dirty-destination` | off | Global flag. Allows canonical writes even when the destination Git working tree is dirty. This now gates every canonical write site, not just `mirror_root`. |
+| Flag                         | Default | Behaviour                                                                                                                                                                               |
+| ---------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--apply-promote`            | off     | Executes pending `ViewNewer` outcomes and any `--prefer`-resolved or `--adopt-new`-promoted outcomes. Without this flag, those outcomes are reported as would-promote/would-adopt only. |
+| `--no-promote`               | off     | Hard-disables the promotion path entirely. Non-symlink view entries error as in `0.5.x`. Use this for CI and consumer-only hosts.                                                       |
+| `--force`                    | off     | Demotes `CanonicalNewer` entries, destroying view-side content. In `0.6.0`, this is the destructive demote branch rather than the promotion branch.                                     |
+| `--prefer <view\|canonical>` | unset   | Tie-breaker for `EqualMtimeDifferentContent` and `BothAdvanced`. Only consulted when `--apply-promote` is also passed.                                                                  |
+| `--adopt-new`                | off     | Treats `AdoptCandidate` outcomes as promotion candidates. Only acts when `--apply-promote` is also passed.                                                                              |
+| `--allow-delete`             | off     | Existing pruning semantics. Removes view entries with no canonical sibling and no `--adopt-new`.                                                                                        |
+| `--dry-run`                  | off     | Global flag. Never mutates and never escalates would-promote work to exit code `2`; prints would-\* lines and exits `0`.                                                                |
+| `--allow-dirty-destination`  | off     | Global flag. Allows canonical writes even when the destination Git working tree is dirty. This now gates every canonical write site, not just `mirror_root`.                            |
 
 `--apply-promote` conflicts with `--no-promote`. `--force` also conflicts with
 `--no-promote`, so a destructive demote must be requested as its own explicit
@@ -67,11 +67,11 @@ mode.
 
 Exit codes:
 
-| Code | Meaning |
-| ---- | ------- |
-| `0` | All outcomes were created, updated, unchanged, removed, identical, auto-demoted, or adopt candidates left visible but not promoted. |
-| `2` | At least one would-promote, would-demote-destructive, or needs-tie-break outcome was reported and not actioned. |
-| `1` | Any other error, including IO errors, parse errors, dirty destinations, or parse-time flag conflicts. |
+| Code | Meaning                                                                                                                             |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | All outcomes were created, updated, unchanged, removed, identical, auto-demoted, or adopt candidates left visible but not promoted. |
+| `2`  | At least one would-promote, would-demote-destructive, or needs-tie-break outcome was reported and not actioned.                     |
+| `1`  | Any other error, including IO errors, parse errors, dirty destinations, or parse-time flag conflicts.                               |
 
 `--dry-run` collapses exit code `2` to `0` because it is an explicit preview.
 

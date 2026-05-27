@@ -13,8 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `skillnet sync` promotes a view entry's content into the canonical store
   when the view entry is a real directory newer than canonical. Promotion is
-  dry-run-by-default; the command prints `would promote ...` lines and exits
-  2. Pass `--apply-promote` to perform the promotion; pass `--no-promote` to
+  dry-run-by-default; the command prints `would promote ...` lines and exits 2. Pass `--apply-promote` to perform the promotion; pass `--no-promote` to
   keep `0.5.x` behaviour. Tie-breaks via `--prefer view|canonical`; promotion
   of view-only skills via `--adopt-new`.
 - `skillnet config migrate` moves `skillnet.toml` and
@@ -57,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   partially reversed. Promotion is opt-in per invocation (`--apply-promote`),
   opt-in per host via the HM toggle, and dry-run-by-default in every other
   setting.
+- Forgejo CI and publish workflows were refreshed from simit's generated
+  release infrastructure before tagging.
 
 ## [0.5.1] - 2026-05-25
 

@@ -50,7 +50,7 @@ semantics; this dossier closes the remaining gaps the user just opened.
 - Per-target dirty-destination gating for both `mirror_root` and per-project
   canonicals ([reconcile-pull-research.md:269-275](reconcile-pull-research.md#L269-L275)).
 
-What that dossier *did not* settle, which this user message now collapses:
+What that dossier _did not_ settle, which this user message now collapses:
 
 - **Surface shape.** The prior recommendation was a two-tier surface:
   `skillnet view reconcile` + `skillnet project reconcile` + top-level
@@ -58,7 +58,7 @@ What that dossier *did not* settle, which this user message now collapses:
   command, so the prior recommendation is now overconstrained.
 - **Default behaviour.** The prior dossier kept reconcile-pull opt-in to
   preserve the v0.5.0 "no reconcile" stance. The user's new request implies
-  promotion should be the *default* of `skillnet sync`, with no opt-in flag at
+  promotion should be the _default_ of `skillnet sync`, with no opt-in flag at
   the call site.
 - **Config location.** The prior dossier never addressed where the configs
   live; it implicitly assumed today's working-directory pickup.
@@ -68,11 +68,11 @@ What that dossier *did not* settle, which this user message now collapses:
 `skillnet sync` ([src/cli/args.rs:71-79](../../../src/cli/args.rs#L71-L79),
 [src/cli/mod.rs:85-91](../../../src/cli/mod.rs#L85-L91)) runs
 `commands::view::sync` then `commands::project_sync(ctx, &[], true, ...)`
-unconditionally — a single shot covering every configured global view *and*
+unconditionally — a single shot covering every configured global view _and_
 every configured project view. It already resolves `mirror_root`, every
 configured project root, and every view destination from `Config`
 ([src/config.rs:217-285](../../../src/config.rs#L217-L285)), so the "resolve
-all paths from configuration" half of ask 2 is *already true today*.
+all paths from configuration" half of ask 2 is _already true today_.
 
 What it does not do: handle non-symlink view entries without `--force`. That is
 exactly the gap [reconcile-pull-research.md](reconcile-pull-research.md)
@@ -84,13 +84,13 @@ Config discovery is already XDG-first
 ([src/config.rs:440-462](../../../src/config.rs#L440-L462),
 [src/cli/mod.rs:102-138](../../../src/cli/mod.rs#L102-L138)):
 
-| Rank | Source                         | Resolves to                                            |
-| ---- | ------------------------------ | ------------------------------------------------------ |
-| 1    | `--config <path>`              | absolute or cwd-relative                               |
-| 2    | `SKILLNET_CONFIG` env          | absolute or cwd-relative                               |
-| 3    | XDG, if present                | `$XDG_CONFIG_HOME/skillnet/skillnet.toml`              |
-| 4    | legacy cwd, if present         | `./skillnet.toml`                                      |
-| 5    | missing-config error path      | XDG path                                               |
+| Rank | Source                    | Resolves to                               |
+| ---- | ------------------------- | ----------------------------------------- |
+| 1    | `--config <path>`         | absolute or cwd-relative                  |
+| 2    | `SKILLNET_CONFIG` env     | absolute or cwd-relative                  |
+| 3    | XDG, if present           | `$XDG_CONFIG_HOME/skillnet/skillnet.toml` |
+| 4    | legacy cwd, if present    | `./skillnet.toml`                         |
+| 5    | missing-config error path | XDG path                                  |
 
 The same precedence applies to `--catalog-config` /
 `SKILLNET_CATALOG_CONFIG` (`skillnet.catalog.toml`).
@@ -102,8 +102,8 @@ directory (rank 4 in the table). On a fresh shell in any other cwd, the CLI
 silently falls through to the XDG path that does not yet exist and fails with
 "no such file or directory".
 
-So the *infrastructure* to centralise is already there; the *files* and the
-*HM-managed override* are missing.
+So the _infrastructure_ to centralise is already there; the _files_ and the
+_HM-managed override_ are missing.
 
 ### Existing HM module surface
 
@@ -137,7 +137,7 @@ The schema gap with the user's existing files:
   ([hm-module.nix:105-114](../../../nix/hm-module.nix#L105-L114)), so it round-
   trips fine.
 
-What the HM module does *not* yet expose:
+What the HM module does _not_ yet expose:
 
 - A toggle that flips `skillnet sync` from "fail on non-symlink view" to
   "promote view → canonical, then symlink". The prior dossier names it
@@ -151,7 +151,7 @@ What the HM module does *not* yet expose:
 
 ### What "single CLI command" already means today
 
-`skillnet sync` is *one* command already. Three things still feel multi-step
+`skillnet sync` is _one_ command already. Three things still feel multi-step
 from the user's vantage:
 
 1. **Non-symlink resolution requires `--force`.** The user wants this to
@@ -167,20 +167,20 @@ from the user's vantage:
 
 ## Evidence Inventory
 
-| Source | What it proves |
-|---|---|
-| [src/cli/mod.rs:85-91](../../../src/cli/mod.rs#L85-L91) | `skillnet sync` already chains view + project sync, already iterates every configured target via `Config::targets` |
-| [src/view.rs:337-359](../../../src/view.rs#L337-L359) | `ensure_symlink` is the single chokepoint that refuses non-symlinks without `--force`; the promotion path slots in here |
-| [src/config.rs:440-462](../../../src/config.rs#L440-L462) | XDG path resolution is already implemented; centralisation is a file-move + HM wiring, not a code change |
-| [src/config.rs:102-138 via cli/mod.rs](../../../src/cli/mod.rs#L102-L138) | The CWD-legacy rank still exists; removing it would break the user's current invocation pattern until the file is moved |
-| [nix/hm-module.nix:71-114, 236-246](../../../nix/hm-module.nix#L71-L114) | `programs.skillnet.settings` and `catalogSettings` are TOML pass-throughs; the schema the user already has is supported as-is |
-| [nix/hm-module.nix:198-231](../../../nix/hm-module.nix#L198-L231) | Module assertions enforce absolute paths for `skillsRoot`/`mirrorRoot`/`configFile`/`catalogConfigFile`; no surprise rewrite |
-| [nix/hm-module.nix:311-327](../../../nix/hm-module.nix#L311-L327) | HM activation already runs `view sync --all --allow-delete` and `project sync --all --allow-delete` — the entry point that today errors on non-symlinks |
-| `cat /data/nvme0/can/Projects/ai-skills/skillnet.toml` | Live `skills_root = mirror_root = /data/nvme0/can/Projects/ai-skills`; 12 configured projects; views use the short `[{ label, path }]` form |
-| `cat /data/nvme0/can/Projects/ai-skills/skillnet.catalog.toml` | Catalog rules are all keyed by `path_prefix`/`name`/`project`; they reference paths relative to `skills_root`, so the file is portable to any host that points at the same `skills_root` |
-| `ls -la /home/can/.claude/skills/berg-codeberg-ci` | Existing view entries are already symlinks pointing into `ai-skills/global/...`; the promotion path is exercised only when something *else* replaces a symlink with a real directory |
-| `git show 15a1352:src/reconcile.rs` (via the existing dossier) | Recovers the pre-0.5.0 staging+rename+manifest writer; the template for the canonical-side write |
-| [reconcile-pull-research.md](reconcile-pull-research.md) (full) | Comparator ladder, dirty-state gating extension, doctor wiring, and test fixtures already designed. Avoid redoing this work. |
+| Source                                                                    | What it proves                                                                                                                                                                           |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [src/cli/mod.rs:85-91](../../../src/cli/mod.rs#L85-L91)                   | `skillnet sync` already chains view + project sync, already iterates every configured target via `Config::targets`                                                                       |
+| [src/view.rs:337-359](../../../src/view.rs#L337-L359)                     | `ensure_symlink` is the single chokepoint that refuses non-symlinks without `--force`; the promotion path slots in here                                                                  |
+| [src/config.rs:440-462](../../../src/config.rs#L440-L462)                 | XDG path resolution is already implemented; centralisation is a file-move + HM wiring, not a code change                                                                                 |
+| [src/config.rs:102-138 via cli/mod.rs](../../../src/cli/mod.rs#L102-L138) | The CWD-legacy rank still exists; removing it would break the user's current invocation pattern until the file is moved                                                                  |
+| [nix/hm-module.nix:71-114, 236-246](../../../nix/hm-module.nix#L71-L114)  | `programs.skillnet.settings` and `catalogSettings` are TOML pass-throughs; the schema the user already has is supported as-is                                                            |
+| [nix/hm-module.nix:198-231](../../../nix/hm-module.nix#L198-L231)         | Module assertions enforce absolute paths for `skillsRoot`/`mirrorRoot`/`configFile`/`catalogConfigFile`; no surprise rewrite                                                             |
+| [nix/hm-module.nix:311-327](../../../nix/hm-module.nix#L311-L327)         | HM activation already runs `view sync --all --allow-delete` and `project sync --all --allow-delete` — the entry point that today errors on non-symlinks                                  |
+| `cat /data/nvme0/can/Projects/ai-skills/skillnet.toml`                    | Live `skills_root = mirror_root = /data/nvme0/can/Projects/ai-skills`; 12 configured projects; views use the short `[{ label, path }]` form                                              |
+| `cat /data/nvme0/can/Projects/ai-skills/skillnet.catalog.toml`            | Catalog rules are all keyed by `path_prefix`/`name`/`project`; they reference paths relative to `skills_root`, so the file is portable to any host that points at the same `skills_root` |
+| `ls -la /home/can/.claude/skills/berg-codeberg-ci`                        | Existing view entries are already symlinks pointing into `ai-skills/global/...`; the promotion path is exercised only when something _else_ replaces a symlink with a real directory     |
+| `git show 15a1352:src/reconcile.rs` (via the existing dossier)            | Recovers the pre-0.5.0 staging+rename+manifest writer; the template for the canonical-side write                                                                                         |
+| [reconcile-pull-research.md](reconcile-pull-research.md) (full)           | Comparator ladder, dirty-state gating extension, doctor wiring, and test fixtures already designed. Avoid redoing this work.                                                             |
 
 Commands run for research:
 
@@ -196,9 +196,9 @@ No active database query was needed; the calibration DB is unrelated.
 
 One related, still-live dossier:
 
-| Plan | Status | What carries forward |
-|---|---|---|
-| [docs/src/planning/reconcile-pull-research.md](reconcile-pull-research.md) | **active**, never converted into phase docs | Comparator ladder, library primitives, atomic staging pattern, doctor wiring, HM activation toggle pattern, test fixtures. Two of its recommendations need to be *amended* by the user's new constraints (see Work That Should Survive). |
+| Plan                                                                       | Status                                      | What carries forward                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [docs/src/planning/reconcile-pull-research.md](reconcile-pull-research.md) | **active**, never converted into phase docs | Comparator ladder, library primitives, atomic staging pattern, doctor wiring, HM activation toggle pattern, test fixtures. Two of its recommendations need to be _amended_ by the user's new constraints (see Work That Should Survive). |
 
 No multi-phase plan set has been generated from that dossier yet. This
 dossier is positioned to feed the same downstream `multi-phase-plan-*`
@@ -271,7 +271,7 @@ default.
 
 - **Architectural reversal, amplified.** The prior dossier flagged that even
   an opt-in reconcile-pull would surprise users of the v0.5.0 "no reconcile"
-  stance. Making promotion the *default* of `skillnet sync` magnifies this
+  stance. Making promotion the _default_ of `skillnet sync` magnifies this
   risk by an order of magnitude. Mitigations:
   - Ship under a deliberate version bump to `0.6.0` and a prominent
     CHANGELOG entry.
@@ -281,8 +281,8 @@ default.
     Idempotent reruns are then safe; surprise mutation is impossible.
     Counter-recommendation if the user wants "fully automatic": skip this
     and accept the risk explicitly.
-  - Surface a per-target log line in the sync summary saying *exactly which
-    canonical was overwritten and from where*.
+  - Surface a per-target log line in the sync summary saying _exactly which
+    canonical was overwritten and from where_.
 - **HM activation now mutates canonical.** Today,
   `home-manager switch` calls `skillnet view sync --all --allow-delete`
   ([hm-module.nix:324-325](../../../nix/hm-module.nix#L324-L325)). If
@@ -293,7 +293,7 @@ default.
     via `programs.skillnet.activation.promote = true|false` (default
     `false`).
   - This inverts the prior dossier's `programs.skillnet.activation.reconcile`
-    suggestion: opt-in is now needed to *enable* the default CLI behaviour
+    suggestion: opt-in is now needed to _enable_ the default CLI behaviour
     during activation, not to enable a separate subcommand.
 - **Config-file location of a mutating CLI vs. a read-only `/nix/store`.**
   `programs.skillnet.settings != null` writes the config into
@@ -305,7 +305,7 @@ default.
     pointing at the right Nix option.
   - Optional, more elegant: split the config into a small "stable HM part"
     (paths, views, NM-owned) and a "mutable cwd part" (per-project add/remove
-    bookkeeping) — *do not pursue without a strong reason*; it adds schema
+    bookkeeping) — _do not pursue without a strong reason_; it adds schema
     complexity for limited gain.
 - **`skills_root` host-coupling.** The live `skillnet.toml` hard-codes
   `/data/nvme0/can/Projects/ai-skills`. Moving the config to HM means this
@@ -327,12 +327,12 @@ default.
   deprecation window. Once it drops, anyone with the same habit on a fresh
   install will see a confusing "no config" error. Mitigations:
   - Keep the legacy pickup for one full release after centralisation
-    (so the release that introduces promotion does *not* simultaneously drop
+    (so the release that introduces promotion does _not_ simultaneously drop
     legacy CWD discovery).
   - Print a deprecation warning when the CLI falls through to rank 4 of the
     discovery table.
 - **Doctor under promotion-default.** A `NonSymlink` entry today is an
-  error. Under promotion-default it is a *normal incoming state* that
+  error. Under promotion-default it is a _normal incoming state_ that
   `skillnet sync` resolves on next run. Doctor should classify it as
   `Severity::Warn` with the hint "next `skillnet sync` will promote view →
   canonical and re-link" — but only when the view content is newer than
@@ -342,7 +342,7 @@ default.
 
 ## Candidate Next Steps
 
-Sequencing matches the prior dossier's phase letters; this section *amends*
+Sequencing matches the prior dossier's phase letters; this section _amends_
 them where the new constraints demand it. Anything not amended carries over
 verbatim from
 [reconcile-pull-research.md § Candidate Next Steps](reconcile-pull-research.md#L234-L356).
@@ -374,8 +374,8 @@ Replace the prior two-tier proposal with:
    every `ensure_symlink` call site that hits a non-symlink entry.
 2. **Default conflict policy: dry-run-on-conflict**. When a view entry is a
    non-symlink, sync prints the proposed promotion (`would promote
-   <view-path> → <canonical-path> (view newest_mtime=...,
-   canonical newest_mtime=...)`) and **does not mutate canonical**. It still
+<view-path> → <canonical-path> (view newest_mtime=...,
+canonical newest_mtime=...)`) and **does not mutate canonical**. It still
    performs the harmless clean-symlink work for other entries. The exit code
    is non-zero so wrappers (HM activation, CI) notice.
 3. **`--apply-promote`** re-runs and actually performs every
@@ -388,7 +388,7 @@ Replace the prior two-tier proposal with:
 5. **No new `reconcile` subcommand.** `view reconcile` / `project reconcile`
    from the prior dossier are dropped in favour of folding into `sync`.
 6. **Status surface gains a `would-promote` count** so `skillnet status
-   --format json` rows expose whether a future `sync --apply-promote` would
+--format json` rows expose whether a future `sync --apply-promote` would
    change canonical.
 7. Honour the existing global `--dry-run` flag (prints would-promote
    diagnostics without exit-code escalation) and
@@ -400,7 +400,7 @@ Same intent as the prior dossier but adjusted severities:
 
 - `NonSymlink` with `view newer mtime` → `Severity::Warn`, hint
   `"next 'skillnet sync --apply-promote' will pull view-side edits into
-   canonical and re-link"`.
+ canonical and re-link"`.
 - `NonSymlink` with `canonical newer mtime` or `Identical` → keep
   `Severity::Error`. These remain demolition candidates; promotion does not
   rescue them.
@@ -413,9 +413,10 @@ This phase did not exist in the prior dossier. Three sub-steps, in order:
 
 E1. **Add a one-shot migration command.**
 `skillnet config migrate` (idempotent):
+
 - Finds the current `skillnet.toml` and `skillnet.catalog.toml` via the same
   precedence the runtime uses, except prefers rank 4 (legacy cwd) when both
-  rank 3 (XDG) and rank 4 exist *and* they differ — and refuses, asking the
+  rank 3 (XDG) and rank 4 exist _and_ they differ — and refuses, asking the
   user to disambiguate.
 - Moves both files to `$XDG_CONFIG_HOME/skillnet/`.
 - Leaves a `.skillnet.toml.moved-to-xdg` breadcrumb in the original
@@ -485,14 +486,14 @@ against a fixture host and `nix flake check` against the canix repo.
 Each of the six open questions is closed; the concrete specs in
 [Final Design](#final-design) below assume these answers.
 
-| # | Decision | Choice | Why |
-|---|---|---|---|
-| 1 | Default behaviour of `skillnet sync` on non-symlink view | **Dry-run-on-conflict**: print the proposed promotion, do not mutate canonical, exit `2`. Mutation requires explicit `--apply-promote` | Idempotent reruns are safe; HM activation cannot silently rewrite canonical; mtime-spoof has no force-multiplier effect |
-| 2 | Adoption policy for unknown view skills | Never adopt without `--adopt-new`. `Stale` semantics on view-only entries unchanged | Foreign content stays foreign; promotion path stays explicit |
-| 3 | Migration command vs. manual `mv` | Ship `skillnet config migrate` | Small, idempotent, handles the both-locations-present-and-different edge case the user will hit at least once |
-| 4 | HM activation default | `programs.skillnet.activation.promote = false`, `programs.skillnet.activation.failOnConflict = true` | Multi-host safe; mutation only on hosts that explicitly opt in; loud activation surfaces drift instead of masking it like today's `|| true` |
-| 5 | Per-target `--allow-dirty-destination` | Extend the existing global flag to gate every canonical write (mirror + per-project repo) | Smallest surface; no concrete need yet for per-scope override |
-| 6 | Legacy CWD config discovery sunset | Deprecation warning in `0.6.0`, drop in `0.7.0` | Two-release window matches the cadence of every other breaking change in this CHANGELOG |
+| #   | Decision                                                 | Choice                                                                                                                                 | Why                                                                                                                                 |
+| --- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --- | ----- |
+| 1   | Default behaviour of `skillnet sync` on non-symlink view | **Dry-run-on-conflict**: print the proposed promotion, do not mutate canonical, exit `2`. Mutation requires explicit `--apply-promote` | Idempotent reruns are safe; HM activation cannot silently rewrite canonical; mtime-spoof has no force-multiplier effect             |
+| 2   | Adoption policy for unknown view skills                  | Never adopt without `--adopt-new`. `Stale` semantics on view-only entries unchanged                                                    | Foreign content stays foreign; promotion path stays explicit                                                                        |
+| 3   | Migration command vs. manual `mv`                        | Ship `skillnet config migrate`                                                                                                         | Small, idempotent, handles the both-locations-present-and-different edge case the user will hit at least once                       |
+| 4   | HM activation default                                    | `programs.skillnet.activation.promote = false`, `programs.skillnet.activation.failOnConflict = true`                                   | Multi-host safe; mutation only on hosts that explicitly opt in; loud activation surfaces drift instead of masking it like today's ` |     | true` |
+| 5   | Per-target `--allow-dirty-destination`                   | Extend the existing global flag to gate every canonical write (mirror + per-project repo)                                              | Smallest surface; no concrete need yet for per-scope override                                                                       |
+| 6   | Legacy CWD config discovery sunset                       | Deprecation warning in `0.6.0`, drop in `0.7.0`                                                                                        | Two-release window matches the cadence of every other breaking change in this CHANGELOG                                             |
 
 ## Final Design
 
@@ -500,24 +501,24 @@ Each of the six open questions is closed; the concrete specs in
 
 Single command, no subcommands added. Existing flags kept; new flags added.
 
-| Flag | Default | Behaviour |
-|---|---|---|
-| `--apply-promote` | off | Executes pending `ViewNewer` outcomes and any `--prefer`-resolved or `--adopt-new`-promoted outcomes. Without this flag, those outcomes are reported as `WouldPromote`/`WouldAdopt` only |
-| `--no-promote` | off | Hard-disables the promotion path entirely. Non-symlink view entries error as in `0.5.x` unless `--force` is also passed. Required for CI and consumer-only hosts |
-| `--force` | off | Demote `CanonicalNewer` entries (destroys view-side content). Same name and shape as today; semantics narrowed to the destructive demote-only branch |
-| `--prefer <view\|canonical>` | unset | Tie-breaker for `EqualMtimeDifferentContent` and `BothAdvanced`. Only consulted when `--apply-promote` is also passed |
-| `--adopt-new` | off | Treat `AdoptCandidate` outcomes as promotion candidates. Only acts when `--apply-promote` is also passed |
-| `--allow-delete` | off | Existing semantics. Prunes view entries with no canonical sibling and no `--adopt-new` |
-| `--dry-run` (global) | off | Never mutates, never exit-2-escalates. Prints would-* lines and exits `0` |
-| `--allow-dirty-destination` (global) | off | Now gates every canonical write site, not just `mirror_root`. See §5 |
+| Flag                                 | Default | Behaviour                                                                                                                                                                                |
+| ------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--apply-promote`                    | off     | Executes pending `ViewNewer` outcomes and any `--prefer`-resolved or `--adopt-new`-promoted outcomes. Without this flag, those outcomes are reported as `WouldPromote`/`WouldAdopt` only |
+| `--no-promote`                       | off     | Hard-disables the promotion path entirely. Non-symlink view entries error as in `0.5.x` unless `--force` is also passed. Required for CI and consumer-only hosts                         |
+| `--force`                            | off     | Demote `CanonicalNewer` entries (destroys view-side content). Same name and shape as today; semantics narrowed to the destructive demote-only branch                                     |
+| `--prefer <view\|canonical>`         | unset   | Tie-breaker for `EqualMtimeDifferentContent` and `BothAdvanced`. Only consulted when `--apply-promote` is also passed                                                                    |
+| `--adopt-new`                        | off     | Treat `AdoptCandidate` outcomes as promotion candidates. Only acts when `--apply-promote` is also passed                                                                                 |
+| `--allow-delete`                     | off     | Existing semantics. Prunes view entries with no canonical sibling and no `--adopt-new`                                                                                                   |
+| `--dry-run` (global)                 | off     | Never mutates, never exit-2-escalates. Prints would-\* lines and exits `0`                                                                                                               |
+| `--allow-dirty-destination` (global) | off     | Now gates every canonical write site, not just `mirror_root`. See §5                                                                                                                     |
 
 Mutually exclusive combinations rejected at parse time:
 
 - `--apply-promote` with `--no-promote`.
 - `--force` with `--no-promote` (deliberate: `--no-promote` requires the
-  user to pass `--force` *without* `--no-promote` to demote, matching today's
-  behaviour and making the destructive path explicit). *Reconsider only if a
-  CI use-case for "demote-only, never promote, never error" emerges.*
+  user to pass `--force` _without_ `--no-promote` to demote, matching today's
+  behaviour and making the destructive path explicit). _Reconsider only if a
+  CI use-case for "demote-only, never promote, never error" emerges._
 
 ### 2. Comparator outcomes and action matrix
 
@@ -534,25 +535,25 @@ pub enum ReconcileOutcome {
 
 Per-entry action matrix:
 
-| Outcome | Default action | With `--apply-promote` | With `--force` | With `--no-promote` |
-|---|---|---|---|---|
-| `Identical` | auto-demote to symlink | same | same | same |
-| `ViewNewer` | report `WouldPromote`, no mutation, escalate exit | promote view → canonical (atomic stage+rename), then demote | error: "view newer; pass `--apply-promote`" | error: "view non-symlink; pass `--force` to destroy view-side edits" |
-| `CanonicalNewer` | report `WouldDemoteDestructive`, no mutation, escalate exit | error: "canonical newer; `--force` required to discard view content" | demote (destroys view content) | error as today |
-| `EqualMtimeDifferentContent` | report `NeedsPreferenceTieBreak`, escalate exit | requires `--prefer view\|canonical`; otherwise error | n/a | error |
-| `BothAdvanced` | same as above | requires `--prefer view\|canonical`; promote-or-discard whole skill (no per-file merge) | n/a | error |
-| `AdoptCandidate` | no-op (stale entry visible in status) | requires `--adopt-new`; promote into canonical | n/a | no-op |
+| Outcome                      | Default action                                              | With `--apply-promote`                                                                  | With `--force`                              | With `--no-promote`                                                  |
+| ---------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------- |
+| `Identical`                  | auto-demote to symlink                                      | same                                                                                    | same                                        | same                                                                 |
+| `ViewNewer`                  | report `WouldPromote`, no mutation, escalate exit           | promote view → canonical (atomic stage+rename), then demote                             | error: "view newer; pass `--apply-promote`" | error: "view non-symlink; pass `--force` to destroy view-side edits" |
+| `CanonicalNewer`             | report `WouldDemoteDestructive`, no mutation, escalate exit | error: "canonical newer; `--force` required to discard view content"                    | demote (destroys view content)              | error as today                                                       |
+| `EqualMtimeDifferentContent` | report `NeedsPreferenceTieBreak`, escalate exit             | requires `--prefer view\|canonical`; otherwise error                                    | n/a                                         | error                                                                |
+| `BothAdvanced`               | same as above                                               | requires `--prefer view\|canonical`; promote-or-discard whole skill (no per-file merge) | n/a                                         | error                                                                |
+| `AdoptCandidate`             | no-op (stale entry visible in status)                       | requires `--adopt-new`; promote into canonical                                          | n/a                                         | no-op                                                                |
 
 Per-skill atomicity is preserved. Three-way file-level merge is explicitly
 not done.
 
 ### 3. Exit codes
 
-| Code | Meaning |
-|---|---|
-| `0` | All outcomes were `Created`, `Updated`, `Unchanged`, `Removed`, `Identical`, auto-demoted, or `AdoptCandidate` (visible-but-not-promoted) |
-| `2` | At least one `WouldPromote`, `WouldDemoteDestructive`, or `NeedsPreferenceTieBreak` was reported and not actioned |
-| `1` | Any other error (IO, parse, dirty destination, parse-time flag conflict, etc.) |
+| Code | Meaning                                                                                                                                   |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | All outcomes were `Created`, `Updated`, `Unchanged`, `Removed`, `Identical`, auto-demoted, or `AdoptCandidate` (visible-but-not-promoted) |
+| `2`  | At least one `WouldPromote`, `WouldDemoteDestructive`, or `NeedsPreferenceTieBreak` was reported and not actioned                         |
+| `1`  | Any other error (IO, parse, dirty destination, parse-time flag conflict, etc.)                                                            |
 
 `--dry-run` collapses code `2` to code `0` because it is explicitly a
 preview, never a gate.
@@ -595,7 +596,7 @@ impl Context {
 The existing call site that passes `ctx.mirror_root` is replaced with one
 call per write target. Every canonical write — mirror-side or per-project —
 flows through this gate. The `--allow-dirty-destination` flag bypasses
-*every* such gate; this is the same flag, expanded in scope. Mirror-only
+_every_ such gate; this is the same flag, expanded in scope. Mirror-only
 gating remains the default; per-project gating is added.
 
 When the target is not inside a git working tree (`vcs::ensure_clean`
@@ -617,13 +618,13 @@ skillnet config migrate
 Per-file decision table (run independently for `skillnet.toml` and
 `skillnet.catalog.toml`):
 
-| Legacy cwd file | XDG file | Default action | Notes |
-|---|---|---|---|
-| absent | absent | no-op | exit code `0`, prints "no config to migrate" |
-| absent | present | no-op | prints `"already centralised at <path>"` |
-| present | absent | move cwd → XDG, write breadcrumb `<cwd>/.skillnet.toml.moved-to-xdg` containing the XDG path | `mkdir -p $XDG_CONFIG_HOME/skillnet` if missing |
-| present | present, content equal | delete cwd, write breadcrumb | sha256 compare; cheap |
-| present | present, content different | refuse with diff hint, exit `1` | `--force` overwrites XDG with cwd content |
+| Legacy cwd file | XDG file                   | Default action                                                                               | Notes                                           |
+| --------------- | -------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| absent          | absent                     | no-op                                                                                        | exit code `0`, prints "no config to migrate"    |
+| absent          | present                    | no-op                                                                                        | prints `"already centralised at <path>"`        |
+| present         | absent                     | move cwd → XDG, write breadcrumb `<cwd>/.skillnet.toml.moved-to-xdg` containing the XDG path | `mkdir -p $XDG_CONFIG_HOME/skillnet` if missing |
+| present         | present, content equal     | delete cwd, write breadcrumb                                                                 | sha256 compare; cheap                           |
+| present         | present, content different | refuse with diff hint, exit `1`                                                              | `--force` overwrites XDG with cwd content       |
 
 Breadcrumb file contents are exactly the absolute destination path plus a
 trailing newline. The file is plain text; no TOML, no JSON. Easy to
@@ -736,14 +737,14 @@ TOML pass-throughs unchanged.
 `skillnet doctor` ([commands/doctor.rs](../../../src/commands/doctor.rs))
 classifies each `NonSymlink` entry by its comparator outcome and reports:
 
-| Sub-outcome | Severity | Hint |
-|---|---|---|
-| `Identical` | Info | "`skillnet sync` will silently demote to symlink" |
-| `ViewNewer` | Warn | "`skillnet sync --apply-promote` will pull view → canonical and re-link" |
-| `CanonicalNewer` | Error | "`skillnet sync --force` will destroy view-side edits; review before running" |
-| `EqualMtimeDifferentContent` | Error | "`skillnet sync --apply-promote --prefer view\|canonical` required" |
-| `BothAdvanced` | Error | "`skillnet sync --apply-promote --prefer view\|canonical` required; per-file merge is not supported" |
-| `AdoptCandidate` | Info | "view-only skill; `skillnet sync --apply-promote --adopt-new` to promote" |
+| Sub-outcome                  | Severity | Hint                                                                                                 |
+| ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `Identical`                  | Info     | "`skillnet sync` will silently demote to symlink"                                                    |
+| `ViewNewer`                  | Warn     | "`skillnet sync --apply-promote` will pull view → canonical and re-link"                             |
+| `CanonicalNewer`             | Error    | "`skillnet sync --force` will destroy view-side edits; review before running"                        |
+| `EqualMtimeDifferentContent` | Error    | "`skillnet sync --apply-promote --prefer view\|canonical` required"                                  |
+| `BothAdvanced`               | Error    | "`skillnet sync --apply-promote --prefer view\|canonical` required; per-file merge is not supported" |
+| `AdoptCandidate`             | Info     | "view-only skill; `skillnet sync --apply-promote --adopt-new` to promote"                            |
 
 Doctor's overall exit code stays as today: `0` if all entries are `Info`,
 non-zero if any `Warn`/`Error` row is present. `Info` is purely
@@ -780,10 +781,10 @@ No code change needed. Document this in the new
 
 ### 12. Migration and release sequencing
 
-| Version | Ships |
-|---|---|
+| Version | Ships                                                                                                                                                                                                                                                                                                       |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `0.6.0` | All twelve sections above, including `skillnet config migrate`. Legacy cwd config discovery still works but prints a deprecation warning every invocation that falls through to rank 4. `programs.skillnet.activation.promote` defaults to `false` so HM hosts upgrading to `0.6.0` see no behaviour change |
-| `0.7.0` | Rank-4 legacy cwd discovery is removed. `skillnet config migrate` is kept (idempotent no-op once XDG is populated). Single CHANGELOG line plus a one-paragraph note in `docs/src/migration/centralised-config.md` |
+| `0.7.0` | Rank-4 legacy cwd discovery is removed. `skillnet config migrate` is kept (idempotent no-op once XDG is populated). Single CHANGELOG line plus a one-paragraph note in `docs/src/migration/centralised-config.md`                                                                                           |
 
 No `0.5.x` patch release. The migration command is small enough to ship
 inside the `0.6.0` cut and gives users a one-shot path that will not break.
@@ -818,7 +819,7 @@ group these into phases as it likes.
 
 - **Per-file three-way merge.** Skills stay per-skill atomic.
   `BothAdvanced` always asks the user; never auto-merges.
-- **Adoption from a view into a *different* project's canonical.** Promotion
+- **Adoption from a view into a _different_ project's canonical.** Promotion
   always targets the view's own canonical (global view → global canonical,
   project view → that project's canonical). Cross-scope promotion is not
   modelled.

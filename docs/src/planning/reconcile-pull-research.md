@@ -55,12 +55,12 @@ docs/mdBook, and the Home Manager activation flow.
 The pre-`0.5.0` reconciler is gone (deleted in `15a1352`), but its
 content-and-time primitives survive in [src/fs_ops.rs](../../../src/fs_ops.rs):
 
-| Function | Location | What it does |
-|---|---|---|
-| `newest_mtime_nanos(path)` | [fs_ops.rs:15-32](../../../src/fs_ops.rs#L15-L32) | Walks every file + symlink under the skill dir, returns max mtime in nanos |
-| `content_signature(path)` | [fs_ops.rs:34-70](../../../src/fs_ops.rs#L34-L70) | sha256 of (sorted relative path + 0x00 + kind + bytes/target + 0x00) per entry — covers files and symlinks but not executable-bit-only diffs |
-| `copy_dir(src, dest)` | [fs_ops.rs:72-112](../../../src/fs_ops.rs#L72-L112) | Recursive copy preserving permissions and mtimes (files, symlinks, and dirs) via `filetime` |
-| `ensure_skill_dir(path)` | [fs_ops.rs:166-171](../../../src/fs_ops.rs#L166-L171) | Validates a skill dir by `SKILL.md` presence |
+| Function                   | Location                                              | What it does                                                                                                                                 |
+| -------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `newest_mtime_nanos(path)` | [fs_ops.rs:15-32](../../../src/fs_ops.rs#L15-L32)     | Walks every file + symlink under the skill dir, returns max mtime in nanos                                                                   |
+| `content_signature(path)`  | [fs_ops.rs:34-70](../../../src/fs_ops.rs#L34-L70)     | sha256 of (sorted relative path + 0x00 + kind + bytes/target + 0x00) per entry — covers files and symlinks but not executable-bit-only diffs |
+| `copy_dir(src, dest)`      | [fs_ops.rs:72-112](../../../src/fs_ops.rs#L72-L112)   | Recursive copy preserving permissions and mtimes (files, symlinks, and dirs) via `filetime`                                                  |
+| `ensure_skill_dir(path)`   | [fs_ops.rs:166-171](../../../src/fs_ops.rs#L166-L171) | Validates a skill dir by `SKILL.md` presence                                                                                                 |
 
 The deleted `reconcile::overwrite_action` had the exact selection ladder we
 need (reversed direction: we want view → canonical):
@@ -106,21 +106,21 @@ external tool replaces the symlink with a directory.
 
 ## Evidence Inventory
 
-| Source | Lines | What it proves |
-|---|---|---|
-| `which skillnet && readlink -f $(which skillnet)` | n/a | Installed binary is `skillnet-0.5.1` from a Nix store path; source matches local repo at HEAD |
-| `cd /data/nvme0/can/Projects/skillnet && git log --oneline -20` | n/a | Recent commits show `21f1f83 Add top-level sync command` (current `sync`), `15a1352 feat!: delete reconcile, sync pull/roundtrip; release 0.5.0` (the deletion this dossier partially reverses), `00ada1a feat!: Option B config schema` |
-| `git show 15a1352 --stat` | n/a | Shows `src/reconcile.rs` (534 lines), `src/commands/sync.rs` (787 lines), `src/cache.rs`, `src/codex.rs` were the major deletions |
-| `git show 15a1352^:src/reconcile.rs` | full file | Recovers the prior reconcile model — `Candidate`, `Choice`, `choose_latest`, `overwrite_action`, `write_skill_set`, `RECONCILIATION.md` manifest writer |
-| [src/view.rs:32-76](../../../src/view.rs#L32-L76) | DriftKind enum + structs | Confirms `NonSymlink` is already a first-class drift class |
-| [src/view.rs:337-359](../../../src/view.rs#L337-L359) | `ensure_symlink` | Confirms `--force` is the only existing escape hatch for non-symlinks |
-| [src/fs_ops.rs:15-70](../../../src/fs_ops.rs#L15-L70) | mtime + sha primitives | The exact comparators reconcile-pull needs are present |
-| [src/commands/context.rs:40-45](../../../src/commands/context.rs#L40-L45) | dirty-destination gate | Confirms the gate exists for mirror_root but not per-project canonical roots |
-| [src/cli/args.rs:686-718](../../../src/cli/args.rs#L686-L718) | sync defaults tests | Pins current default flag shape; new flag must keep `allow_delete: false, force: false` as defaults |
-| `skillnet status --all` on the live host | n/a | All 12 scopes report `clean`, so testing must rely on fixtures, not live drift |
-| `skillnet doctor` | "doctor: no issues" | Confirms no current invariant violations to anchor reconcile against |
-| [docs/src/migration/option-b.md:78-89](../migration/option-b.md#L78-L89) | doctor invariants list | Reconcile-pull must keep these invariants; a partial pull is a doctor-correctable state, not a permanent one |
-| [docs/src/commands.md:111-113](../commands.md#L111-L113) | "The removed `sync pull` auto-commit flow has no replacement in `0.5.0`" | Confirms the user is asking for a deliberate (partial) revert of a documented decision |
+| Source                                                                    | Lines                                                                    | What it proves                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `which skillnet && readlink -f $(which skillnet)`                         | n/a                                                                      | Installed binary is `skillnet-0.5.1` from a Nix store path; source matches local repo at HEAD                                                                                                                                            |
+| `cd /data/nvme0/can/Projects/skillnet && git log --oneline -20`           | n/a                                                                      | Recent commits show `21f1f83 Add top-level sync command` (current `sync`), `15a1352 feat!: delete reconcile, sync pull/roundtrip; release 0.5.0` (the deletion this dossier partially reverses), `00ada1a feat!: Option B config schema` |
+| `git show 15a1352 --stat`                                                 | n/a                                                                      | Shows `src/reconcile.rs` (534 lines), `src/commands/sync.rs` (787 lines), `src/cache.rs`, `src/codex.rs` were the major deletions                                                                                                        |
+| `git show 15a1352^:src/reconcile.rs`                                      | full file                                                                | Recovers the prior reconcile model — `Candidate`, `Choice`, `choose_latest`, `overwrite_action`, `write_skill_set`, `RECONCILIATION.md` manifest writer                                                                                  |
+| [src/view.rs:32-76](../../../src/view.rs#L32-L76)                         | DriftKind enum + structs                                                 | Confirms `NonSymlink` is already a first-class drift class                                                                                                                                                                               |
+| [src/view.rs:337-359](../../../src/view.rs#L337-L359)                     | `ensure_symlink`                                                         | Confirms `--force` is the only existing escape hatch for non-symlinks                                                                                                                                                                    |
+| [src/fs_ops.rs:15-70](../../../src/fs_ops.rs#L15-L70)                     | mtime + sha primitives                                                   | The exact comparators reconcile-pull needs are present                                                                                                                                                                                   |
+| [src/commands/context.rs:40-45](../../../src/commands/context.rs#L40-L45) | dirty-destination gate                                                   | Confirms the gate exists for mirror_root but not per-project canonical roots                                                                                                                                                             |
+| [src/cli/args.rs:686-718](../../../src/cli/args.rs#L686-L718)             | sync defaults tests                                                      | Pins current default flag shape; new flag must keep `allow_delete: false, force: false` as defaults                                                                                                                                      |
+| `skillnet status --all` on the live host                                  | n/a                                                                      | All 12 scopes report `clean`, so testing must rely on fixtures, not live drift                                                                                                                                                           |
+| `skillnet doctor`                                                         | "doctor: no issues"                                                      | Confirms no current invariant violations to anchor reconcile against                                                                                                                                                                     |
+| [docs/src/migration/option-b.md:78-89](../migration/option-b.md#L78-L89)  | doctor invariants list                                                   | Reconcile-pull must keep these invariants; a partial pull is a doctor-correctable state, not a permanent one                                                                                                                             |
+| [docs/src/commands.md:111-113](../commands.md#L111-L113)                  | "The removed `sync pull` auto-commit flow has no replacement in `0.5.0`" | Confirms the user is asking for a deliberate (partial) revert of a documented decision                                                                                                                                                   |
 
 ## Existing Plan Status
 
@@ -132,7 +132,7 @@ Only one prior plan set is materially related, and it has been retired:
   under `docs/planning/`). The plan that originally drove the v0.5.0 removal
   of reconcile is **done and being garbage-collected** — its premise was
   "canonical is the only writer, reconcile is unnecessary." This dossier
-  amends that premise: canonical is the only *intended* writer, but external
+  amends that premise: canonical is the only _intended_ writer, but external
   tools can accidentally promote a view to a writer, so we need a one-way
   recovery path.
 - `docs/planning/reconciliation-anomalies-research.md` in `ai-skills`. Also
@@ -177,7 +177,7 @@ None blocking. Two soft inputs deserve a decision before phase 1 starts:
 - **Adoption policy for unknown skills in a view.** If a view directory
   contains a non-symlink whose name has no canonical counterpart at all (e.g.
   `~/.claude/skills/some-new-thing/` with no `global/some-new-thing/`), is
-  this a *new skill to promote* or *foreign content to leave alone*? Today
+  this a _new skill to promote_ or _foreign content to leave alone_? Today
   `view_status` would classify it as `Stale` and `--allow-delete` would prune
   it. Recommendation: keep "Stale" semantics by default; add a separate
   `--adopt-new` flag (or refuse) so promotion is always explicit. Open
@@ -295,6 +295,7 @@ Two-tier surface, no breaking changes:
        [--allow-delete] [--force-canonical] [--prefer view|canonical]
        [--adopt-new]
    ```
+
    - Default (no flags): pull `ViewNewer` outcomes only; bail on anything
      that needs a decision; print a status table for the rest.
    - `--prefer view` / `--prefer canonical`: resolve `EqualMtimeDifferentContent`
@@ -304,7 +305,7 @@ Two-tier surface, no breaking changes:
      name as a deprecated alias for one release.
    - `--adopt-new`: promote unknown view skills into canonical.
 2. **Top-level convenience** `skillnet sync --pull`: runs `view reconcile
-   --all` then `project reconcile --all` then the existing
+--all` then `project reconcile --all` then the existing
    `materialize_view`/`materialize_project` pass. Default of
    `skillnet sync` (no flag) stays exactly as today.
 3. Standard JSON output via `--format json` for the report, matching the
@@ -325,7 +326,7 @@ entry's severity when it would be a pull candidate:
   `Severity::Error` (today's behaviour); these are unambiguously
   reproducible by `sync --force`.
 
-This way the new behaviour is *discoverable* without changing default
+This way the new behaviour is _discoverable_ without changing default
 mutation.
 
 ### Phase E — Docs, tests, release
@@ -334,7 +335,7 @@ mutation.
   explaining the comparator ladder, the conflict outcomes, and the
   intentional asymmetry (view → canonical only).
 - [docs/src/migration/option-b.md](../migration/option-b.md): append a
-  "Reconcile-pull (post-0.5.x)" note clarifying that this is *not* a return
+  "Reconcile-pull (post-0.5.x)" note clarifying that this is _not_ a return
   to multi-source arbitration.
 - [CHANGELOG.md](../../../CHANGELOG.md): record the new commands and flag
   defaults under `[Unreleased]`; cut a `0.6.0` release because the new
@@ -372,7 +373,7 @@ implementer end-to-end is the cheapest path.
    but leave it `false` by default. Confirm or pick "do not expose at all
    until requested".
 5. **Per-target dirty-destination policy.** Recommended: extend the global
-   `--allow-dirty-destination` flag to gate *every* canonical write,
+   `--allow-dirty-destination` flag to gate _every_ canonical write,
    including project canonicals. Alternative: per-scope flag like
    `--allow-dirty <scope>`. The recommended path keeps the flag surface
    minimal.

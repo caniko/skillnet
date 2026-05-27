@@ -223,8 +223,7 @@ skillnet catalog generate
 ```
 
 `skillnet sync` is dry-run-on-conflict for promotion candidates: a real
-view-side directory newer than canonical prints `would promote ...` and exits
-2. Rerun with `--apply-promote` to pull that content into canonical. See
+view-side directory newer than canonical prints `would promote ...` and exits 2. Rerun with `--apply-promote` to pull that content into canonical. See
 [docs/src/commands.md](docs/src/commands.md) for the full flag table.
 
 Calibration commands are available under the dedicated command group:

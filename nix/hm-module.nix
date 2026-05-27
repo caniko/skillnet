@@ -348,10 +348,10 @@ in {
       home.activation.skillnet-views = lib.hm.dag.entryAfter ["writeBoundary" "skillnet-skills-root"] ''
         if [ -z "''${SKILLNET_MIRROR_ROOT-}" ]; then
           mirror=${lib.escapeShellArg (
-            if cfg.mirrorRoot != null
-            then cfg.mirrorRoot
-            else ""
-          )}
+          if cfg.mirrorRoot != null
+          then cfg.mirrorRoot
+          else ""
+        )}
         else
           mirror="$SKILLNET_MIRROR_ROOT"
         fi
