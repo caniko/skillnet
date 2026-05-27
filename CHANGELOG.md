@@ -58,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   setting.
 - Forgejo CI and publish workflows were refreshed from simit's generated
   release infrastructure before tagging.
+- Release tests no longer depend on chmod-denied fixture reads, which can vary
+  by CI container user.
 
 ## [0.5.1] - 2026-05-25
 

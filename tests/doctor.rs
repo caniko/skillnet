@@ -1,6 +1,8 @@
 use std::{
+    ffi::OsString,
     fs,
-    os::unix::fs::{self as unix_fs, PermissionsExt},
+    os::unix::ffi::OsStringExt,
+    os::unix::fs as unix_fs,
     path::{Path, PathBuf},
 };
 
@@ -215,7 +217,11 @@ fn doctor_handles_classify_io_error_gracefully() {
     let config = fixture.write_config();
     write_skill(&fixture.canonical(), "unreadable", "canonical", 100);
     let view = write_skill(&fixture.view(), "unreadable", "view", 200);
-    fs::set_permissions(&view, fs::Permissions::from_mode(0o000)).unwrap();
+    fs::write(
+        view.join(OsString::from_vec(vec![0xff])),
+        "invalid utf-8 path",
+    )
+    .unwrap();
 
     fixture
         .command(&config)
@@ -226,6 +232,4 @@ fn doctor_handles_classify_io_error_gracefully() {
         .stderr(predicate::str::contains(
             "rerun doctor or check permissions",
         ));
-
-    fs::set_permissions(&view, fs::Permissions::from_mode(0o755)).unwrap();
 }
