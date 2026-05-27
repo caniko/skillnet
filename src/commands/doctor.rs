@@ -8,10 +8,14 @@ use anyhow::{Context as AnyhowContext, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 
 use super::Context;
-use crate::model::{Target, TargetScope, ViewTarget};
+use crate::{
+    model::{Target, TargetScope, ViewTarget},
+    view::{compare_view_entry, ReconcileOutcome},
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
+    Info,
     Warn,
     Error,
 }
@@ -19,6 +23,7 @@ pub enum Severity {
 impl fmt::Display for Severity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Info => f.write_str("info"),
             Self::Warn => f.write_str("warn"),
             Self::Error => f.write_str("error"),
         }
@@ -42,7 +47,10 @@ pub fn run(ctx: &Context) -> Result<()> {
     for issue in &issues {
         eprintln!("{}: [{}] {}", issue.severity, issue.scope, issue.message);
     }
-    std::process::exit(1);
+    if issues.iter().any(|issue| issue.severity != Severity::Info) {
+        std::process::exit(1);
+    }
+    Ok(())
 }
 
 pub fn lint(ctx: &Context) -> Result<Vec<Issue>> {
@@ -111,10 +119,11 @@ fn check_global_view(
         let metadata = fs::symlink_metadata(&entry)
             .with_context(|| format!("failed to inspect view entry {entry}"))?;
         if !metadata.file_type().is_symlink() {
-            issue(
+            issue_non_symlink(
                 issues,
                 target,
-                Severity::Error,
+                &target.canonical_path.join(&name),
+                &entry,
                 format!(
                     "view `{}` entry `{name}` is not a symlink: {entry}",
                     view.label
@@ -267,10 +276,11 @@ fn check_project_view(
         let metadata = fs::symlink_metadata(&entry)
             .with_context(|| format!("failed to inspect project view entry {entry}"))?;
         if !metadata.file_type().is_symlink() {
-            issue(
+            issue_non_symlink(
                 issues,
                 target,
-                Severity::Error,
+                &target.canonical_path.join(&name),
+                &entry,
                 format!(
                     "project view `{}` entry `{name}` is not a symlink: {entry}",
                     view.label
@@ -412,6 +422,65 @@ fn issue(issues: &mut Vec<Issue>, target: &Target, severity: Severity, message: 
         message,
         scope: target.name.clone(),
     });
+}
+
+fn issue_non_symlink(
+    issues: &mut Vec<Issue>,
+    target: &Target,
+    canonical_skill: &Utf8Path,
+    view_entry: &Utf8Path,
+    prefix: String,
+) {
+    let (severity, hint) = match compare_view_entry(canonical_skill, view_entry) {
+        Ok(outcome) => {
+            let (severity, hint) = classify_non_symlink(&outcome);
+            (severity, hint.to_string())
+        }
+        Err(err) => {
+            let hint =
+                format!("could not classify entry: {err}; rerun doctor or check permissions");
+            (Severity::Error, hint)
+        }
+    };
+    issue(issues, target, severity, format!("{prefix}; {hint}"));
+}
+
+fn classify_non_symlink(outcome: &ReconcileOutcome) -> (Severity, &'static str) {
+    match outcome {
+        ReconcileOutcome::Identical => {
+            (Severity::Info, "`skillnet sync` will silently demote to symlink")
+        }
+        ReconcileOutcome::ViewNewer { .. } => {
+            (
+                Severity::Warn,
+                "`skillnet sync --apply-promote` will pull view → canonical and re-link",
+            )
+        }
+        ReconcileOutcome::CanonicalNewer { .. } => {
+            (
+                Severity::Error,
+                "`skillnet sync --force` will destroy view-side edits; review before running",
+            )
+        }
+        ReconcileOutcome::EqualMtimeDifferentContent { .. } => {
+            (
+                Severity::Error,
+                "`skillnet sync --apply-promote --prefer view|canonical` required",
+            )
+        }
+        ReconcileOutcome::BothAdvanced { .. } => {
+            (
+                Severity::Error,
+                "`skillnet sync --apply-promote --prefer view|canonical` required; per-file merge is not supported",
+            )
+        }
+        ReconcileOutcome::AdoptCandidate => {
+            (
+                Severity::Info,
+                "view-only skill; `skillnet sync --apply-promote --adopt-new` to promote",
+            )
+        }
+    }
 }
 
 fn read_dir_utf8(path: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
