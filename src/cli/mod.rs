@@ -31,6 +31,10 @@ pub fn run() -> Result<()> {
         allow_dirty_destination,
         command,
     } = Cli::parse();
+    if let Some(Command::Config { command }) = command {
+        return commands::config::run(command, dry_run);
+    }
+
     let config = resolve_config_path(config)?;
     let catalog_config = resolve_catalog_config_path(catalog_config)?;
     let command = command.unwrap_or(Command::Status {
@@ -113,6 +117,7 @@ pub fn run() -> Result<()> {
         Command::Scope { command } => run_scope_command(&ctx, command),
         Command::Project { command } => run_project_command(&ctx, command),
         Command::Catalog { command } => run_catalog_command(&ctx, command),
+        Command::Config { .. } => unreachable!("handled before config loading"),
         Command::Calibration(_) => unreachable!("handled before config loading"),
         Command::Hook(_) => unreachable!("handled before config loading"),
         Command::Completions { .. } => unreachable!("handled before config loading"),
@@ -130,6 +135,7 @@ fn resolve_config_path(flag_or_env: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> 
 
             let legacy = legacy_config_path();
             if legacy.exists() {
+                warn_legacy_config_path(&legacy);
                 return Ok(legacy);
             }
 
@@ -149,12 +155,21 @@ fn resolve_catalog_config_path(flag_or_env: Option<Utf8PathBuf>) -> Result<Utf8P
 
             let legacy = legacy_catalog_config_path();
             if legacy.exists() {
+                warn_legacy_config_path(&legacy);
                 return Ok(legacy);
             }
 
             Ok(xdg)
         }
     }
+}
+
+fn warn_legacy_config_path(path: &Utf8PathBuf) {
+    eprintln!(
+        "warning: using legacy working-directory config at {path};\n\
+         this discovery path is deprecated and will be removed in skillnet 0.7.0.\n\
+         Run `skillnet config migrate` to move it to $XDG_CONFIG_HOME/skillnet/."
+    );
 }
 
 pub(crate) fn resolve_mirror_root(

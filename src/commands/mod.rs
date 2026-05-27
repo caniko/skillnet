@@ -1,4 +1,5 @@
 pub mod calibration;
+pub mod config;
 mod context;
 pub mod doctor;
 pub mod hook;

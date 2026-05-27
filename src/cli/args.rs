@@ -89,6 +89,11 @@ pub(super) enum Command {
         #[arg(long)]
         allow_delete: bool,
     },
+    /// Manage skillnet's configuration files.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
     /// Manage configured project roots.
     Project {
         #[command(subcommand)]
@@ -298,6 +303,26 @@ pub(crate) enum CalibrationCommand {
         since: Option<String>,
     },
     // PHASE 04 commands here
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(crate) enum ConfigCommand {
+    /// Move cwd skillnet.toml and skillnet.catalog.toml to $XDG_CONFIG_HOME/skillnet/.
+    ///
+    /// This command operates on the current working directory and ignores --config
+    /// and --catalog-config overrides.
+    Migrate {
+        /// Print decisions without touching the filesystem.
+        #[arg(long)]
+        dry_run: bool,
+        /// Overwrite XDG when both locations exist and differ.
+        #[arg(long)]
+        force: bool,
+        /// Delete .skillnet.toml.moved-to-xdg breadcrumb files at the rank-4 discovery location, if present, then exit.
+        #[arg(long, conflicts_with_all = ["dry_run", "force"])]
+        remove_breadcrumbs: bool,
+    },
 }
 
 #[derive(Debug, Args)]
