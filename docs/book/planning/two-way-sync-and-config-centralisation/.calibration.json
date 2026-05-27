@@ -204,17 +204,17 @@
     "scope": "cross-org"
   },
   "verify": {
-    "verified_at": 1779904038,
+    "verified_at": 1779903577,
     "elapsed_seconds": null,
-    "outcome": "shipped",
+    "outcome": "partial",
     "phase_outcomes": {
       "1": "passed",
       "2": "passed",
       "3": "passed",
       "4": "passed",
-      "5": "passed"
+      "5": "partial"
     },
     "emergency_changes": null,
-    "surprises": "Clean verify after two follow-up fixes landed in commit 92c1705: snapshot test isolates skillnet env vars to keep clap --help rendering stable across shells; literal <path> placeholder in design dossier wrapped in backticks so mdbook stops emitting an unclosed-HTML-tag warning. Whole-set: 158 tests pass, cargo fmt clean, cargo clippy clean, mdbook 0 warnings, nix flake check passed."
+    "surprises": "Phase 05 acceptance criterion \"mdbook build docs clean\" met only modulo one warning about an unclosed <path> tag in the design dossier (literal placeholder inside a TOML snippet misparsed as HTML). Snapshot test for sync --help passes in clean envs but fails when SKILLNET_MIRROR_ROOT is set, which is the default in any HM-managed shell.\nmissed-signal: no-integrated-verification: Phase 05 plan asked for a snapshot test pinning sync --help but did not specify hermeticity. The test was written without sanitizing the env vars that clap inlines into help output (SKILLNET_MIRROR_ROOT, SKILLNET_CONFIG, SKILLNET_CATALOG_CONFIG). The pattern temp_env::with_var(_, None, ...) already in tests/cli.rs would have caught this.\nmissed-signal: hidden-prerequisite: Phase 05 plan said \"mdbook build docs is clean\" but did not check whether existing planning docs contained literal angle-bracket placeholders that mdbook treats as HTML. The design dossier itself (a Phase 05 read-only input) had this latent issue."
   }
 }

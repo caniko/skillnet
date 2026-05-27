@@ -1,0 +1,774 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>01 Library primitives - skillnet</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../../css/general-2459343d.css">
+        <link rel="stylesheet" href="../../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex-2ee62a9d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc-19427bed.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">skillnet</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="phase-01--library-primitives-and-canonical-side-write"><a class="header" href="#phase-01--library-primitives-and-canonical-side-write">Phase 01 — Library primitives and canonical-side write</a></h1>
+<blockquote>
+<p><strong>Recommended Codex model: GPT 5.5 high</strong></p>
+<p>Two coupled bodies of work in one phase: extending <code>src/view.rs</code> with a
+per-entry comparator over <code>NonSymlink</code> drift, and adding the per-target
+dirty-destination gate so writes into project canonicals are validated
+against that project’s own git working tree. The atomicity contract
+(stage + atomic rename, mtime preservation, symlink-safe walking) is
+subtle — a smaller model can write code that builds and passes shallow
+tests but corrupts canonical content on a partial failure or pings
+mtimes back and forth on each sync. The phase is leaf-ish in the plan
+(no orchestration of other phases) but the library code itself is
+complex enough to warrant <code>high</code> reasoning.</p>
+</blockquote>
+<h2 id="working-tree"><a class="header" href="#working-tree">Working tree</a></h2>
+<p><code>/data/nvme0/can/Projects/skillnet</code> (skillnet <code>main</code>, working tree must
+be clean before starting; see Pitfall P1). All edits land in this repo.</p>
+<h2 id="goal"><a class="header" href="#goal">Goal</a></h2>
+<p><code>skillnet</code>’s library layer exposes the comparator outcomes, the per-skill
+atomic canonical-write primitive, and the per-target dirty-destination
+gate that Phases 02–04 consume. No CLI surface changes yet — all new
+behaviour is reachable only through library calls and existing test
+fixtures. Running <code>cargo test --workspace</code> is clean at the end of the
+phase; <code>skillnet sync</code> from the CLI behaves exactly as it does on
+<code>0.5.1</code> today.</p>
+<h2 id="why-this-matters-now"><a class="header" href="#why-this-matters-now">Why this matters now</a></h2>
+<p>This is the foundation every other phase depends on:</p>
+<ul>
+<li>Phase 02 wires <code>--apply-promote</code> / <code>--no-promote</code> / <code>--prefer</code> /
+<code>--adopt-new</code> to the comparator outcomes this phase defines.</li>
+<li>Phase 02 wires <code>skillnet doctor</code> to classify <code>NonSymlink</code> entries by
+the same comparator.</li>
+<li>Phase 04 wires the HM activation script to call <code>skillnet sync --apply-promote</code>, which only does anything once Phase 02 + Phase 01
+are both landed.</li>
+</ul>
+<p>Without this phase, every later phase has to either reinvent the
+comparator or fork the library. The design dossier
+<a href="../two-way-sync-and-config-centralisation-research.html#2-comparator-outcomes-and-action-matrix">§ Final Design § 2 Comparator outcomes</a>
+defines the surface; this phase implements it.</p>
+<p>The originating symptom that drives the whole plan: an external tool
+(typically a shell pipeline or a stray <code>cp -r</code>) replaces a view symlink
+at <code>~/.claude/skills/&lt;skill&gt;/</code> with a real directory, the user edits
+inside it for a few days, then <code>skillnet sync</code> either refuses to run
+(today’s behaviour) or destroys the edits with <code>--force</code> (today’s
+escape hatch). Promotion is the recovery path for the “view became a
+silent writer” failure mode that the prior research dossier
+<a href="../reconcile-pull-research.html#L94-L106">reconcile-pull-research.md § Today’s failure modes</a>
+documents.</p>
+<h2 id="out-of-scope"><a class="header" href="#out-of-scope">Out of scope</a></h2>
+<ul>
+<li>Any new CLI flag, subcommand, or argument parsing. Phase 02 owns
+every change to <code>src/cli/args.rs</code> and <code>src/cli/mod.rs</code>.</li>
+<li>Any change to <code>src/commands/doctor.rs</code>. The doctor classification
+table is Phase 02’s sub-layer <code>sub-02-doctor-wiring</code>.</li>
+<li>Any change to <code>src/commands/view.rs</code> or <code>src/commands/project.rs</code>
+except as needed to keep them compiling. The user-facing wiring is
+Phase 02’s sub-layer <code>sub-01-cli-surface</code>.</li>
+<li>Status JSON additions (<code>would_promote</code>, <code>needs_tie_break</code>, per-entry
+mtime/sha). Phase 02 owns the JSON shape; this phase only adds the
+data on <code>DriftEntry</code> as optional fields so Phase 02 can populate
+them.</li>
+<li>Three-way file-level merge. <code>BothAdvanced</code> always returns the outcome
+unresolved; the resolver lives in Phase 02 behind <code>--prefer</code>.</li>
+<li>Catalog rule recomputation after promotion. The design notes
+(<a href="../two-way-sync-and-config-centralisation-research.html#11-catalog-rule-fallout-from-promotion">§ 11</a>)
+document the implicit fallout; no code change is needed here.</li>
+<li><code>RECONCILIATION.md</code> manifest revival. Not happening.</li>
+</ul>
+<h2 id="plan"><a class="header" href="#plan">Plan</a></h2>
+<ol>
+<li>
+<p><strong>Read the relevant design sections.</strong> Open
+<a href="../two-way-sync-and-config-centralisation-research.html">two-way-sync-and-config-centralisation-research.md</a>
+and skim § 2 (comparator outcomes), § 5 (per-target dirty gate),
+§ 10 (mtime-spoof mitigation; the <code>view_mtime &gt; now()</code> downgrade
+rule lives in this phase’s comparator), § 14 (out of scope).
+Also skim the prior dossier
+<a href="../reconcile-pull-research.html#L238-L286">reconcile-pull-research.md § Candidate Next Steps Phase A and B</a>
+for the library shape and the deleted <code>write_skill_set</code> template.</p>
+</li>
+<li>
+<p><strong>Add the comparator outcome enum.</strong> In <code>src/view.rs</code>, add a public
+<code>ReconcileOutcome</code> enum exactly matching the design § 2:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum ReconcileOutcome {
+    Identical,
+    ViewNewer            { view_mtime: u128, canonical_mtime: u128 },
+    CanonicalNewer       { view_mtime: u128, canonical_mtime: u128 },
+    EqualMtimeDifferentContent { view_sha: String, canonical_sha: String, mtime: u128 },
+    BothAdvanced         { view_only: Vec&lt;Utf8PathBuf&gt;, canonical_only: Vec&lt;Utf8PathBuf&gt; },
+    AdoptCandidate,
+}
+<span class="boring">}</span></code></pre>
+<p>Place it alongside the existing <code>DriftKind</code> and <code>FileDelta</code> types.
+Derive <code>Debug, Clone, PartialEq, Eq, Serialize</code> to match the
+conventions of the surrounding types. Keep the <code>view_mtime</code> and
+<code>canonical_mtime</code> as <code>u128</code> nanoseconds so they round-trip cleanly
+through JSON without loss.</p>
+</li>
+<li>
+<p><strong>Add the comparator function.</strong> Add a public
+<code>compare_view_entry(canonical_skill: &amp;Utf8Path, view_entry: &amp;Utf8Path) -&gt; Result&lt;ReconcileOutcome&gt;</code> to <code>src/view.rs</code>. The
+function:</p>
+<ul>
+<li>Asserts the view entry exists, is not a symlink (<code>fs::symlink_metadata</code>,
+<code>!metadata.file_type().is_symlink()</code>). If the view entry is a
+symlink, return an error — callers must filter to <code>NonSymlink</code>
+drift first.</li>
+<li>If <code>canonical_skill</code> does not exist: return <code>AdoptCandidate</code>.</li>
+<li>Computes <code>newest_mtime_nanos(view_entry)</code> and
+<code>newest_mtime_nanos(canonical_skill)</code> via the existing
+<code>fs_ops::newest_mtime_nanos</code>.</li>
+<li>Computes <code>content_signature</code> for both sides only when needed
+(see the next bullets). The mtime comparison is cheaper; do it
+first.</li>
+<li><strong>mtime-spoof downgrade:</strong> if <code>view_mtime</code> is greater than
+<code>SystemTime::now()</code> (converted to nanos), downgrade the outcome
+classification to <code>EqualMtimeDifferentContent</code> and use whatever
+shas you have computed. The intent (per design § 10) is to force
+a <code>--prefer</code> decision rather than auto-promote based on a future
+mtime. Use <code>view_sha</code> and <code>canonical_sha</code> populated with the
+shas you computed; the <code>mtime</code> field gets the (possibly bogus)
+view mtime.</li>
+<li>If <code>view_sha == canonical_sha</code>: return <code>Identical</code>.</li>
+<li>If <code>view_mtime &gt; canonical_mtime</code>: check for <code>BothAdvanced</code> by
+enumerating files; if canonical has any file the view does not,
+return <code>BothAdvanced</code> with the lists populated. Otherwise return
+<code>ViewNewer { view_mtime, canonical_mtime }</code>.</li>
+<li>If <code>view_mtime &lt; canonical_mtime</code>: symmetrically check
+<code>BothAdvanced</code> (view has files canonical does not). Otherwise
+return <code>CanonicalNewer { view_mtime, canonical_mtime }</code>.</li>
+<li>If <code>view_mtime == canonical_mtime</code> (already known shas differ at
+this branch): return <code>EqualMtimeDifferentContent { view_sha, canonical_sha, mtime }</code>.</li>
+</ul>
+<p>The file-set comparison for <code>BothAdvanced</code> walks each side once
+via <code>WalkDir::new(...).follow_links(false)</code> and compares relative
+paths. Reuse <code>walkdir</code> directly; no need for a new helper. Skip
+the <code>.skillnet-tmp</code> staging directories — match the existing
+<code>fs_ops::content_signature</code> filter (“file or symlink, no
+directories”). Be careful: the file lists must be of relative
+paths (<code>strip_prefix</code>), sorted, for deterministic test fixtures.</p>
+</li>
+<li>
+<p><strong>Extend <code>DriftEntry</code> with optional reconcile fields.</strong> In
+<code>src/view.rs</code>, add four optional fields to <code>DriftEntry</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub view_mtime_nanos: Option&lt;u128&gt;,
+pub canonical_mtime_nanos: Option&lt;u128&gt;,
+pub view_sha: Option&lt;String&gt;,
+pub canonical_sha: Option&lt;String&gt;,
+<span class="boring">}</span></code></pre>
+<p>These remain <code>None</code> for <code>Missing</code>, <code>WrongTarget</code>, and <code>Stale</code> kinds.
+They are populated by Phase 02’s status classification path; this
+phase only adds the field declarations and ensures they serialise
+to JSON as <code>null</code> when absent. Existing call sites that construct
+<code>DriftEntry</code> literals get the new fields with <code>.. Default::default()</code>
+if <code>Default</code> is derivable, otherwise an explicit <code>None</code> quartet.</p>
+</li>
+<li>
+<p><strong>Add <code>materialize_view_with_promotion</code>.</strong> This is the new entry
+point that Phase 02’s CLI surface will call. Signature:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn materialize_view_with_promotion(
+    canonical_root: &amp;Utf8Path,
+    view: &amp;ViewTarget,
+    options: PromotionOptions,
+) -&gt; Result&lt;PromotionSummary&gt;;
+<span class="boring">}</span></code></pre>
+<p>Where:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct PromotionOptions {
+    pub apply_promote: bool,   // execute ViewNewer + AdoptCandidate (if adopt_new)
+    pub force_demote: bool,    // demote CanonicalNewer (destructive)
+    pub prefer: Option&lt;Preference&gt;,  // resolve EqualMtimeDifferentContent + BothAdvanced
+    pub adopt_new: bool,       // promote AdoptCandidate
+    pub allow_delete: bool,    // passed through to underlying view sync
+    pub relative_links: bool,  // existing knob
+}
+
+pub enum Preference { View, Canonical }
+
+pub struct PromotionSummary {
+    pub view: ViewSyncSummary,           // existing counts
+    pub promoted: Vec&lt;String&gt;,           // skill names actually promoted
+    pub demoted_destructive: Vec&lt;String&gt;,// skill names destructively demoted via force_demote
+    pub adopted: Vec&lt;String&gt;,
+    pub would_promote: Vec&lt;WouldEntry&gt;,
+    pub would_demote_destructive: Vec&lt;WouldEntry&gt;,
+    pub needs_tie_break: Vec&lt;WouldEntry&gt;,
+}
+
+pub struct WouldEntry {
+    pub skill: String,
+    pub outcome: ReconcileOutcome,
+}
+<span class="boring">}</span></code></pre>
+<p>The function:</p>
+<ul>
+<li>Enumerates view entries via the existing <code>expected_skill_links</code>
+<ul>
+<li>view directory read.</li>
+</ul>
+</li>
+<li>For each entry that is a symlink with correct target or that is
+missing, defers to the existing <code>materialize_view_with_options</code>
+code path (so the no-conflict case is unchanged).</li>
+<li>For each <code>NonSymlink</code> entry, calls <code>compare_view_entry</code>. Maps
+the outcome to an action via the matrix in design § 2:
+<ul>
+<li><code>Identical</code> → atomic-demote-to-symlink (replace view dir with
+symlink to canonical, no canonical write).</li>
+<li><code>ViewNewer</code> with <code>apply_promote == true</code> → promote (call new
+<code>promote_view_to_canonical</code> from step 6), then demote.</li>
+<li><code>ViewNewer</code> with <code>apply_promote == false</code> → record in
+<code>would_promote</code>, no mutation.</li>
+<li><code>CanonicalNewer</code> with <code>force_demote == true</code> → atomic-demote-
+to-symlink (destroys view content).</li>
+<li><code>CanonicalNewer</code> with <code>force_demote == false</code> → record in
+<code>would_demote_destructive</code>, no mutation.</li>
+<li><code>EqualMtimeDifferentContent</code> / <code>BothAdvanced</code> with
+<code>prefer == Some(Preference::View)</code> and <code>apply_promote</code> →
+promote view → canonical, demote.</li>
+<li>… with <code>prefer == Some(Preference::Canonical)</code> and
+<code>force_demote</code> → demote (destroys view edits).</li>
+<li>… without resolution → record in <code>needs_tie_break</code>.</li>
+<li><code>AdoptCandidate</code> with <code>adopt_new &amp;&amp; apply_promote</code> → promote
+(no demote — there is nothing to demote since canonical did
+not exist).</li>
+<li><code>AdoptCandidate</code> otherwise → no-op (the entry stays visible in
+status / doctor).</li>
+</ul>
+</li>
+</ul>
+<p>The function must be deterministic and per-skill atomic: a panic
+or IO error on skill N leaves skills 0..N in their final state
+and skills N+1..end untouched. Bail with the per-skill error;
+match the existing <code>materialize_view_with_options</code> contract
+(<a href="../../../src/view.rs#L8-L14">src/view.rs:8-14</a>).</p>
+</li>
+<li>
+<p><strong>Add <code>promote_view_to_canonical</code>.</strong> Internal helper called from
+<code>materialize_view_with_promotion</code>. Signature:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn promote_view_to_canonical(
+    view_entry: &amp;Utf8Path,
+    canonical_skill: &amp;Utf8Path,
+) -&gt; Result&lt;()&gt;;
+<span class="boring">}</span></code></pre>
+<p>The function:</p>
+<ul>
+<li>Computes the staging directory:
+<code>&lt;canonical_parent&gt;/.skillnet-tmp/&lt;skill&gt;-&lt;pid&gt;</code>. Use the same
+<code>process::id()</code> pattern as <code>view::atomic_symlink</code>
+(<a href="../../../src/view.rs#L434-L445">src/view.rs:434-445</a>).</li>
+<li>Removes any stale staging dir of the same name (best-effort,
+no error if absent).</li>
+<li>Calls <code>fs_ops::copy_dir(view_entry, staging)</code>. The existing
+<code>copy_dir</code> preserves mtimes via <code>filetime::set_file_times</code>
+(<a href="../../../src/fs_ops.rs#L114-L145">src/fs_ops.rs:114-145</a>),
+which is load-bearing — the canonical side ends up with the
+same mtime as the winning view so the next sync sees
+<code>Identical</code> rather than ping-ponging
+(<a href="../reconcile-pull-research.html#L157-L160">reconcile-pull-research.md L157-160</a>).</li>
+<li>If <code>canonical_skill</code> exists, removes it (<code>fs::remove_dir_all</code>).
+This must succeed before the rename to avoid a “rename onto
+existing dir” failure on some filesystems.</li>
+<li><code>fs::rename(staging, canonical_skill)</code>. Same-filesystem rename
+is atomic; cross-filesystem will fail loudly, which is the
+right behaviour given canonical and its parent are always on
+one filesystem.</li>
+</ul>
+<p>Wrap every step in <code>with_context(|| ...)</code> so partial failures
+produce a useful error.</p>
+</li>
+<li>
+<p><strong>Generalise <code>ensure_destination_clean</code> to per-target.</strong> In
+<code>src/commands/context.rs</code>, add:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>impl Context {
+    pub fn ensure_target_clean(&amp;self, target: &amp;Utf8Path) -&gt; Result&lt;()&gt;;
+}
+<span class="boring">}</span></code></pre>
+<p>The existing <code>ensure_destination_clean</code> becomes a thin wrapper
+that calls <code>ensure_target_clean(&amp;self.mirror_root)</code>. The new
+function:</p>
+<ul>
+<li>Skips the check entirely if <code>self.allow_dirty_destination</code> is
+<code>true</code>.</li>
+<li>Calls <code>vcs::ensure_clean(target)</code>, which already returns
+<code>Ok(())</code> for non-git paths
+(<a href="../../../src/vcs.rs#L51-L64">src/vcs.rs:51-64</a>).</li>
+<li>On failure, includes the target path in the error message so
+the user knows <em>which</em> repo is dirty.</li>
+</ul>
+<p>Keep the existing call site that uses <code>ensure_destination_clean</code>
+working unchanged. Do <strong>not</strong> add new call sites in this phase —
+Phase 02’s CLI surface adds them when wiring promotion to
+<code>materialize_view_with_promotion</code>.</p>
+</li>
+<li>
+<p><strong>Wire <code>ensure_target_clean</code> from <code>materialize_view_with_promotion</code>.</strong>
+Actually, the better split: the library function should <em>not</em>
+call <code>Context</code> methods (libraries don’t know about <code>Context</code>).
+Take a closure parameter:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn materialize_view_with_promotion(
+    canonical_root: &amp;Utf8Path,
+    view: &amp;ViewTarget,
+    options: PromotionOptions,
+    ensure_clean: impl Fn(&amp;Utf8Path) -&gt; Result&lt;()&gt;,
+) -&gt; Result&lt;PromotionSummary&gt;;
+<span class="boring">}</span></code></pre>
+<p>The CLI surface in Phase 02 will pass <code>|target| ctx.ensure_target_clean(target)</code>.
+Library tests pass <code>|_| Ok(())</code> (the in-memory tempdir is not a
+git repo, so the gate would no-op anyway, but the closure shape
+keeps the library decoupled).</p>
+<p>Call <code>ensure_clean(canonical_root)</code> once at the start of the
+function (mirror-side gate); plus, when promotion targets a
+per-project canonical, call it on the project root path. The
+<code>ViewTarget</code> does not carry the project root — extend
+<code>PromotionOptions</code> with <code>project_root: Option&lt;Utf8PathBuf&gt;</code> so
+the caller (which knows whether this is global or project view)
+passes the right value. <code>None</code> skips the per-project call.</p>
+</li>
+<li>
+<p><strong>Add a parallel <code>materialize_project_with_promotion</code>.</strong> In
+<code>src/view.rs</code>, alongside the existing
+<code>materialize_project_with_options</code>. Takes a <code>Target</code> and
+<code>PromotionOptions</code>, iterates <code>target.views</code>, calls
+<code>materialize_view_with_promotion</code> on each with
+<code>project_root: target.project_root.clone()</code>, then handles the
+aggregator symlink as today. Returns a
+<code>ProjectPromotionSummary</code> analogous to <code>ProjectSyncSummary</code> but
+carrying per-view <code>PromotionSummary</code>s.</p>
+</li>
+<li>
+<p><strong>Tests.</strong> Add <code>tests/view_sync.rs</code> if it does not exist, or
+extend it. One fixture per <code>ReconcileOutcome</code> variant. Use
+<code>tempfile::tempdir</code> for canonical + view trees, populate them
+with files via <code>std::fs::write</code>, set mtimes via
+<code>filetime::set_file_times</code> to bypass test flake from <code>sleep</code>.</p>
+<p>Required fixtures (each is one <code>#[test]</code>):</p>
+<ul>
+<li><code>identical_demotes_to_symlink</code>: canonical and view have
+identical content + mtime; <code>materialize_view_with_promotion</code>
+with default <code>PromotionOptions</code> demotes view to symlink;
+<code>PromotionSummary.promoted</code> is empty.</li>
+<li><code>view_newer_default_records_would_promote</code>: view content
+differs and is newer; default options leave canonical
+untouched and append to <code>would_promote</code>.</li>
+<li><code>view_newer_apply_promote_pulls_and_demotes</code>: same fixture
+with <code>apply_promote: true</code> and <code>prefer: None</code> (none required);
+canonical is updated, view becomes symlink, mtimes match.</li>
+<li><code>canonical_newer_default_records_would_demote_destructive</code>.</li>
+<li><code>canonical_newer_force_demote_destroys_view_content</code>.</li>
+<li><code>equal_mtime_different_content_needs_tie_break</code>.</li>
+<li><code>equal_mtime_with_prefer_view_promotes</code>.</li>
+<li><code>equal_mtime_with_prefer_canonical_demotes</code>.</li>
+<li><code>both_advanced_default_needs_tie_break</code>.</li>
+<li><code>adopt_candidate_default_noops</code> (view-only skill stays
+non-symlink, status reports it).</li>
+<li><code>adopt_candidate_with_adopt_new_promotes</code>.</li>
+<li><code>future_mtime_downgrades_to_tie_break</code>: view mtime set to
+<code>SystemTime::now() + Duration::from_secs(3600)</code>; outcome
+classifies as <code>EqualMtimeDifferentContent</code> not <code>ViewNewer</code>.</li>
+<li><code>promote_preserves_mtimes</code>: after promotion, canonical’s
+<code>newest_mtime_nanos</code> equals the pre-promotion view’s
+<code>newest_mtime_nanos</code> (within the precision the host
+filesystem supports — match the existing <code>copy_dir</code> test
+shape).</li>
+<li><code>partial_failure_leaves_per_skill_atomicity</code>: induce a
+failure on the second of three skills by making its canonical
+parent read-only; assert the first skill promoted and the
+third was untouched.</li>
+</ul>
+<p>Plus add <code>tests/dirty_gate.rs</code>:</p>
+<ul>
+<li><code>per_project_dirty_gate_refuses_promotion</code>: init a tempdir
+project as a git repo, leave the working tree dirty, set
+<code>allow_dirty: false</code>, assert <code>materialize_view_with_promotion</code>
+bails with the project path in the error.</li>
+<li><code>per_project_dirty_gate_bypassed_with_allow_dirty</code>: same
+fixture with <code>allow_dirty: true</code> succeeds.</li>
+<li><code>non_git_target_skips_gate</code>: tempdir that is not a git repo,
+<code>allow_dirty: false</code>, promotion succeeds (the gate is a
+no-op for non-git paths per <code>vcs::ensure_clean</code>).</li>
+</ul>
+<p>The library tests do <strong>not</strong> import <code>Context</code>; they pass closures
+directly. Use <code>assert_cmd</code> only if a test needs to exercise the
+full CLI — and in this phase, no test needs to.</p>
+</li>
+<li>
+<p><strong>Run <code>cargo fmt</code>, <code>cargo clippy --all-targets -- -D warnings</code>,
+<code>cargo test --workspace</code>.</strong> Fix any complaints before committing.
+Pay particular attention to <code>clippy::redundant_clone</code> and
+<code>clippy::too_many_arguments</code> on the new public functions — the
+<code>PromotionOptions</code> struct is the right escape hatch for the
+argument count; do not let clippy push you toward inlining its
+fields.</p>
+</li>
+<li>
+<p><strong>Commit.</strong> One commit, message:
+<code>feat: promotion-aware reconcile primitives + per-target dirty gate</code></p>
+</li>
+</ol>
+<h2 id="acceptance-criteria"><a class="header" href="#acceptance-criteria">Acceptance criteria</a></h2>
+<ul>
+<li><input disabled="" type="checkbox"> <code>src/view.rs</code> exports <code>ReconcileOutcome</code>, <code>Preference</code>,
+<code>PromotionOptions</code>, <code>PromotionSummary</code>, <code>WouldEntry</code>,
+<code>ProjectPromotionSummary</code>, <code>materialize_view_with_promotion</code>,
+<code>materialize_project_with_promotion</code>, <code>promote_view_to_canonical</code>,
+<code>compare_view_entry</code>. <code>cargo doc --no-deps</code> succeeds.</li>
+<li><input disabled="" type="checkbox"> <code>src/commands/context.rs</code> exports <code>Context::ensure_target_clean</code>.
+The existing <code>ensure_destination_clean</code> is preserved as a wrapper
+and its existing call sites are unchanged.</li>
+<li><input disabled="" type="checkbox"> <code>DriftEntry</code> has four new optional fields:
+<code>view_mtime_nanos</code>, <code>canonical_mtime_nanos</code>, <code>view_sha</code>,
+<code>canonical_sha</code>. <code>serde_json::to_string(&amp;DriftEntry { ... })</code>
+on a <code>Missing</code> entry emits <code>null</code> for all four.</li>
+<li><input disabled="" type="checkbox"> All 17 new tests listed in step 10 pass.</li>
+<li><input disabled="" type="checkbox"> <code>cargo test --workspace</code>, <code>cargo clippy --all-targets -- -D     warnings</code>, <code>cargo fmt --check</code> all clean.</li>
+<li><input disabled="" type="checkbox"> <code>skillnet sync</code> (CLI, unchanged in this phase) behaves
+identically to <code>0.5.1</code> against any fixture — non-symlink view
+entries still error without <code>--force</code>. Verifiable by running
+the existing <code>tests/cli.rs</code> suite which must remain green.</li>
+<li><input disabled="" type="checkbox"> <code>git log -1</code> shows the single phase commit with the message
+above.</li>
+</ul>
+<h2 id="files-likely-touched"><a class="header" href="#files-likely-touched">Files likely touched</a></h2>
+<ul>
+<li><code>src/view.rs</code> — comparator, outcome enum, promotion primitives,
+<code>DriftEntry</code> field additions.</li>
+<li><code>src/fs_ops.rs</code> — no edits expected; existing <code>newest_mtime_nanos</code>,
+<code>content_signature</code>, <code>copy_dir</code> are reused. If anything needs
+tightening (e.g., adding a <code>WalkDir</code> filter to skip
+<code>.skillnet-tmp</code> directories), it goes here.</li>
+<li><code>src/commands/context.rs</code> — <code>ensure_target_clean</code> addition.</li>
+<li><code>tests/view_sync.rs</code> — new or extended; 14 fixtures per step 10.</li>
+<li><code>tests/dirty_gate.rs</code> — new; 3 fixtures per step 10.</li>
+<li><code>Cargo.toml</code> — no new dependencies; <code>filetime</code> and <code>walkdir</code> are
+already in tree.</li>
+</ul>
+<h2 id="pitfalls"><a class="header" href="#pitfalls">Pitfalls</a></h2>
+<ul>
+<li><strong>P1: Phase starts with a dirty working tree.</strong> The existing
+<code>Context::ensure_destination_clean</code> would reject the initial test
+runs against <code>mirror_root</code> if <code>ai-skills</code> is dirty. This phase
+edits the skillnet repo, not <code>ai-skills</code>, so it should not trip
+the live gate; but if you test against the live mirror by
+accident, the dirty-state check will mask real failures. Use a
+tempdir mirror in every test (the existing tests already do
+this).</li>
+<li><strong>P2: <code>fs::rename</code> onto an existing directory fails on Linux.</strong>
+Linux’s <code>rename(2)</code> errors with <code>ENOTEMPTY</code> when renaming a dir
+onto a non-empty dir. The <code>promote_view_to_canonical</code> flow must
+<code>remove_dir_all</code> the destination before the rename, not the
+reverse. Symptom: promotion test fails with <code>rename: Directory not empty</code>. Recovery: re-order the steps in step 6.</li>
+<li><strong>P3: Cross-filesystem rename.</strong> If a tempdir test ends up on a
+different filesystem than its parent (rare but possible with
+<code>/tmp</code> on <code>tmpfs</code> and <code>cargo target</code> on disk), <code>fs::rename</code> fails
+with <code>EXDEV</code>. Symptom: test fails with <code>Invalid cross-device link</code>. Recovery: stage <em>inside</em> the canonical’s parent directory
+(the design specifies <code>&lt;canonical_parent&gt;/.skillnet-tmp/&lt;skill&gt;</code>
+for exactly this reason); double-check the staging path is a
+sibling of the destination, not in <code>/tmp/...</code>.</li>
+<li><strong>P4: mtime nanosecond truncation.</strong> Some filesystems (notably
+ext4 with old kernels) round mtimes to second precision.
+Tests that compare <code>view_mtime_nanos == canonical_mtime_nanos</code>
+after a <code>copy_dir</code> round-trip may fail on the runner’s <code>/tmp</code>
+even though they pass locally. The existing <code>fs_ops::copy_dir</code>
+uses <code>filetime::set_file_times</code>, which handles the precision
+the host supports. Tests should compare with the same precision
+the host filesystem produces; use the helper pattern from
+existing tests in <code>tests/</code> rather than hand-rolling timestamps.</li>
+<li><strong>P5: <code>WalkDir</code> and symlinks.</strong> The comparator walks both sides
+with <code>follow_links(false)</code>. If a canonical skill legitimately
+contains a symlink (e.g., a relative <code>references -&gt; ../shared</code>),
+<code>content_signature</code> already hashes the link target as the
+symlink body. Make sure <code>BothAdvanced</code> enumeration uses
+<code>symlink_metadata</code>, not <code>metadata</code>, so a broken symlink doesn’t
+cause the comparator to bail.</li>
+<li><strong>P6: <code>process::id()</code> collision in parallel test runs.</strong> Cargo
+runs tests in threads of the same process; <code>process::id()</code> is
+identical across all of them. If two tests stage to
+<code>&lt;canonical_parent&gt;/.skillnet-tmp/&lt;skill&gt;-&lt;pid&gt;</code> concurrently
+with the same skill name, one wins and the other gets an
+<code>EEXIST</code>. The skill names in fixtures must be unique per test
+(or each test uses its own tempdir, which already isolates).
+Use unique skill names per test to be safe.</li>
+<li><strong>P7: <code>clippy::too_many_arguments</code> on <code>materialize_view_with_promotion</code>.</strong>
+The closure parameter pushes the arg count above clippy’s
+threshold. The struct-of-options pattern fixes this; do not
+flatten <code>PromotionOptions</code> back into positional arguments to
+silence clippy.</li>
+<li><strong>P8: Promotion summary fields leak through CLI prematurely.</strong>
+Phase 02 owns the CLI wiring. This phase exposes the
+<code>PromotionSummary</code> shape but no CLI surface consumes it yet.
+Make sure the new exports are <code>pub</code> from <code>src/view.rs</code> but the
+existing <code>commands::view::sync</code> and <code>commands::project_sync</code>
+continue to call the <em>old</em> <code>materialize_view_with_options</code>
+function path. Symptom: Phase 02 sub-layers can’t both run in
+parallel because they each have to re-do the CLI wiring this
+phase already did. Recovery: leave CLI wiring entirely to
+Phase 02.</li>
+</ul>
+<h2 id="reference"><a class="header" href="#reference">Reference</a></h2>
+<ul>
+<li>Design dossier sections this phase implements:
+<ul>
+<li><a href="../two-way-sync-and-config-centralisation-research.html#2-comparator-outcomes-and-action-matrix">§ 2 Comparator outcomes and action matrix</a></li>
+<li><a href="../two-way-sync-and-config-centralisation-research.html#5-per-target-dirty-destination-gate">§ 5 Per-target dirty-destination gate</a></li>
+<li><a href="../two-way-sync-and-config-centralisation-research.html#10-mtime-spoof-mitigation">§ 10 mtime-spoof mitigation</a></li>
+<li><a href="../two-way-sync-and-config-centralisation-research.html#14-out-of-scope-deliberately">§ 14 Out of scope</a></li>
+</ul>
+</li>
+<li>Prior research dossier:
+<ul>
+<li><a href="../reconcile-pull-research.html#L238-L267">reconcile-pull-research.md § Library primitives</a></li>
+<li><a href="../reconcile-pull-research.html#L269-L286">reconcile-pull-research.md § Canonical-side write</a></li>
+</ul>
+</li>
+<li>Existing code to read before starting:
+<ul>
+<li><a href="../../../src/view.rs">src/view.rs</a> — the chokepoint
+<code>ensure_symlink</code>, <code>materialize_view_with_options</code>, <code>view_status</code>.</li>
+<li><a href="../../../src/fs_ops.rs">src/fs_ops.rs</a> —
+<code>newest_mtime_nanos</code>, <code>content_signature</code>, <code>copy_dir</code>.</li>
+<li><a href="../../../src/commands/context.rs">src/commands/context.rs</a> —
+existing <code>ensure_destination_clean</code>.</li>
+<li><a href="../../../src/vcs.rs">src/vcs.rs</a> — <code>ensure_clean</code> for git
+paths, no-op for non-git.</li>
+</ul>
+</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../planning/two-way-sync-and-config-centralisation/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../../planning/two-way-sync-and-config-centralisation/02-cli-surface-and-doctor/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../planning/two-way-sync-and-config-centralisation/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../../planning/two-way-sync-and-config-centralisation/02-cli-surface-and-doctor/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../../mark-09e88c2c.min.js"></script>
+        <script src="../../searcher-c2a407aa.js"></script>
+
+        <script src="../../clipboard-1626706a.min.js"></script>
+        <script src="../../highlight-abc7f01d.js"></script>
+        <script src="../../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

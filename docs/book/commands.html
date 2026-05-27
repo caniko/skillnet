@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bd5d4365.js";
+            window.path_to_searchindex_js = "searchindex-2ee62a9d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-7bb5235c.js"></script>
+        <script src="toc-19427bed.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -180,6 +180,9 @@
 <li><code>status</code>: show canonical store, view drift, destination, and catalog health.</li>
 <li><code>doctor</code>: check configured views for invariant violations.</li>
 <li><code>completions</code>: generate shell completion scripts.</li>
+<li><code>sync</code>: materialise every configured view, promoting view to canonical when
+a view entry is a real directory newer than canonical and promotion is
+explicitly applied.</li>
 <li><code>view</code>: materialise and inspect global view symlinks.</li>
 <li><code>skill</code>: list, inspect, and edit canonical skill directories.</li>
 <li><code>scope</code>: inspect configured canonical scopes.</li>
@@ -190,7 +193,8 @@ calibration data.</li>
 <li><code>hook</code>: install, remove, check, and run managed Claude Code hook ingestion.</li>
 </ul>
 <p>Examples:</p>
-<pre><code class="language-sh">skillnet view sync --all
+<pre><code class="language-sh">skillnet sync
+skillnet view sync --all
 skillnet project sync --all
 skillnet doctor
 skillnet view status --all
@@ -203,6 +207,67 @@ skillnet calibration walkthrough --dry-run
 skillnet hook status
 </code></pre>
 <h2 id="view-and-project-commands"><a class="header" href="#view-and-project-commands">View And Project Commands</a></h2>
+<p><code>skillnet sync</code> is the top-level materialisation command. It resolves every
+configured global view and project view from <code>skillnet.toml</code>, materialises the
+view symlinks, and reports real-directory view entries that may need
+promotion back into canonical.</p>
+<p>When a view entry is already a symlink, <code>sync</code> keeps the normal generated-view
+behaviour. When a view entry is a real directory, <code>sync</code> compares that content
+with the canonical skill of the same name. A view entry whose content is newer
+than canonical is reported as a would-promote candidate by default; pass
+<code>--apply-promote</code> to copy that view content into canonical and then replace the
+view entry with a symlink.</p>
+<p>Promotion flags:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Flag</th><th>Default</th><th>Behaviour</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--apply-promote</code></td><td>off</td><td>Executes pending <code>ViewNewer</code> outcomes and any <code>--prefer</code>-resolved or <code>--adopt-new</code>-promoted outcomes. Without this flag, those outcomes are reported as would-promote/would-adopt only.</td></tr>
+<tr><td><code>--no-promote</code></td><td>off</td><td>Hard-disables the promotion path entirely. Non-symlink view entries error as in <code>0.5.x</code>. Use this for CI and consumer-only hosts.</td></tr>
+<tr><td><code>--force</code></td><td>off</td><td>Demotes <code>CanonicalNewer</code> entries, destroying view-side content. In <code>0.6.0</code>, this is the destructive demote branch rather than the promotion branch.</td></tr>
+<tr><td><code>--prefer &lt;view|canonical&gt;</code></td><td>unset</td><td>Tie-breaker for <code>EqualMtimeDifferentContent</code> and <code>BothAdvanced</code>. Only consulted when <code>--apply-promote</code> is also passed.</td></tr>
+<tr><td><code>--adopt-new</code></td><td>off</td><td>Treats <code>AdoptCandidate</code> outcomes as promotion candidates. Only acts when <code>--apply-promote</code> is also passed.</td></tr>
+<tr><td><code>--allow-delete</code></td><td>off</td><td>Existing pruning semantics. Removes view entries with no canonical sibling and no <code>--adopt-new</code>.</td></tr>
+<tr><td><code>--dry-run</code></td><td>off</td><td>Global flag. Never mutates and never escalates would-promote work to exit code <code>2</code>; prints would-* lines and exits <code>0</code>.</td></tr>
+<tr><td><code>--allow-dirty-destination</code></td><td>off</td><td>Global flag. Allows canonical writes even when the destination Git working tree is dirty. This now gates every canonical write site, not just <code>mirror_root</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>--apply-promote</code> conflicts with <code>--no-promote</code>. <code>--force</code> also conflicts with
+<code>--no-promote</code>, so a destructive demote must be requested as its own explicit
+mode.</p>
+<p>Exit codes:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>0</code></td><td>All outcomes were created, updated, unchanged, removed, identical, auto-demoted, or adopt candidates left visible but not promoted.</td></tr>
+<tr><td><code>2</code></td><td>At least one would-promote, would-demote-destructive, or needs-tie-break outcome was reported and not actioned.</td></tr>
+<tr><td><code>1</code></td><td>Any other error, including IO errors, parse errors, dirty destinations, or parse-time flag conflicts.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>--dry-run</code> collapses exit code <code>2</code> to <code>0</code> because it is an explicit preview.</p>
+<p>Example:</p>
+<pre><code class="language-sh">skillnet sync
+# global:claude  /home/alice/.claude/skills (+0 ~0 =1 -0)
+# would promote /home/alice/.claude/skills/rust-project-flake -&gt; /home/alice/skills/global/rust-project-flake (view_mtime=..., canonical_mtime=...)
+# exits 2
+
+skillnet sync --apply-promote
+# promotes the view-side skill into canonical, then re-links the view
+# exits 0
+</code></pre>
+<p>Use <code>skillnet doctor</code> before a promotion run when you want a read-only
+classification of non-symlink entries. Doctor reports <code>Identical</code>,
+<code>ViewNewer</code>, <code>CanonicalNewer</code>, <code>EqualMtimeDifferentContent</code>, <code>BothAdvanced</code>,
+and <code>AdoptCandidate</code> with hints for the matching <code>sync</code> flag. For the
+centralised XDG config migration and Home Manager pattern, see
+<a href="migration/centralised-config.html">Centralised config (0.6.0)</a>.</p>
 <p><code>skillnet view sync --all</code> materialises configured global views from the
 canonical global store.</p>
 <p><code>skillnet project sync --all</code> materialises configured project views and the
@@ -214,8 +279,8 @@ disk. Use <code>--dry-run</code> to print intended clones without invoking Git. 
 default, HTTPS origins are refused; pass <code>--ssh-strict=false</code> only when HTTPS
 clones are intended.</p>
 <p>Use <code>view status|diff</code> and <code>project status|diff</code> to inspect derived view drift
-without mutating files. <code>skillnet sync</code> was removed in <code>0.5.0</code>; each scope now
-has one canonical store and every other location is a generated view.</p>
+without mutating files. <code>skillnet sync</code> is the preferred one-shot command when
+you want all configured views materialised from the same config.</p>
 <h2 id="status-json-schema"><a class="header" href="#status-json-schema">Status JSON Schema</a></h2>
 <p><code>skillnet status --format json --scope &lt;SCOPE&gt;</code> emits a pretty JSON array:</p>
 <pre><code class="language-json">[
@@ -224,10 +289,16 @@ has one canonical store and every other location is a generated view.</p>
     "kind": "global",
     "canonical_path": "/home/alice/skills/global",
     "skill_count": 42,
-    "drift_entries": 0
+    "drift_entries": 0,
+    "would_promote": 0,
+    "needs_tie_break": 0
   }
 ]
 </code></pre>
+<p>Rows include <code>would_promote</code> and <code>needs_tie_break</code> counts. Individual
+non-symlink drift entries may also include <code>view_mtime_nanos</code>,
+<code>canonical_mtime_nanos</code>, <code>view_sha</code>, and <code>canonical_sha</code> so promotion
+decisions can be inspected without mutating the filesystem.</p>
 <h2 id="doctor"><a class="header" href="#doctor">Doctor</a></h2>
 <p><code>skillnet doctor</code> checks the Option B canonical/view/aggregator invariants:</p>
 <ul>
@@ -238,7 +309,10 @@ aggregator symlinks;</li>
 <li>broken or unexpected symlink targets.</li>
 </ul>
 <p>Missing configured project repositories are warnings because a fresh host may
-not have cloned every project yet. Other invariant violations are errors.</p>
+not have cloned every project yet. Non-symlink view entries are classified by
+the same comparator used by <code>skillnet sync</code>: <code>Identical</code>, <code>ViewNewer</code>,
+<code>CanonicalNewer</code>, <code>EqualMtimeDifferentContent</code>, <code>BothAdvanced</code>, or
+<code>AdoptCandidate</code>. Other invariant violations are errors.</p>
 <h2 id="config-file-location"><a class="header" href="#config-file-location">Config File Location</a></h2>
 <p><code>skillnet --config &lt;path&gt;</code> is the highest-precedence source. When the flag is
 omitted, the binary reads:</p>
@@ -264,8 +338,9 @@ omitted, the binary reads:</p>
 <code>skillnet status</code> reports branch, origin, and dirty state. Commands that write
 to the mirror destination refuse to run when that repository is dirty unless
 <code>--allow-dirty-destination</code> is passed.</p>
-<p>The removed <code>sync pull</code> auto-commit flow has no replacement in <code>0.5.0</code>; commit
-canonical store changes with Git directly.</p>
+<p>The removed <code>sync pull</code> auto-commit flow still has no replacement in <code>0.6.0</code>.
+Promotion writes canonical content when explicitly applied, but the user still
+commits canonical store changes with Git directly.</p>
 <h2 id="calibration-database"><a class="header" href="#calibration-database">Calibration Database</a></h2>
 <p>Calibration commands use Postgres by default. The backend can be selected in
 <code>skillnet.toml</code>:</p>

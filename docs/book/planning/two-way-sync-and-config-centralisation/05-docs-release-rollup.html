@@ -1,0 +1,643 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>05 Docs release rollup - skillnet</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../../css/general-2459343d.css">
+        <link rel="stylesheet" href="../../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex-2ee62a9d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc-19427bed.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">skillnet</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="phase-05--docs-changelog-snapshot-release-rollup"><a class="header" href="#phase-05--docs-changelog-snapshot-release-rollup">Phase 05 — Docs, CHANGELOG, snapshot, release rollup</a></h1>
+<blockquote>
+<p><strong>Recommended Codex model: GPT 5.5 medium</strong></p>
+<p>Five-file rewrite plus a new mdBook page plus a snapshot test
+pinning <code>skillnet sync --help</code>. The wording must accurately
+capture the new flag matrix and the <code>0.6.0</code> framing of the
+partial reversal of <code>0.5.0</code>’s “no reconcile” stance, which is the
+one decision in this phase that needs design judgement (and the
+dossier pre-makes it). The snapshot test must be written after
+the flag table is final, which is why this phase serialises after
+02–04. Otherwise mostly mechanical docs work. 5.5 medium is the
+right tier.</p>
+</blockquote>
+<h2 id="working-tree"><a class="header" href="#working-tree">Working tree</a></h2>
+<p><code>/data/nvme0/can/Projects/skillnet</code>. <strong>Must start after Phases 02,
+03, and 04 have landed on <code>main</code>.</strong> Final convergence phase.</p>
+<h2 id="goal"><a class="header" href="#goal">Goal</a></h2>
+<p>The repo is release-ready for <code>0.6.0</code>:</p>
+<ul>
+<li><code>docs/src/commands.md</code>’s <code>sync</code> section documents the full flag
+table from design § 1, the exit-code semantics from § 3, and
+cross-references doctor’s classification (§ 9).</li>
+<li>A new <code>docs/src/migration/centralised-config.md</code> walks users
+through <code>skillnet config migrate</code> and the HM-module declarative
+pattern.</li>
+<li><code>docs/src/migration/option-b.md</code> gains a one-paragraph note
+pointing at the new doc.</li>
+<li><code>docs/src/SUMMARY.md</code> lists the new migration page and this
+plan set’s README.</li>
+<li><code>CHANGELOG.md</code> has a <code>## [0.6.0]</code> block at the top describing
+the partial reversal of <code>0.5.0</code>’s “no reconcile” stance, the
+new flag set, the centralised config story, and the HM module
+additions, in the project’s existing CHANGELOG style.</li>
+<li><code>README.md</code> (project root) is updated if any user-visible
+behaviour mentioned in it changed.</li>
+<li>A snapshot test in <code>tests/cli.rs</code> pins <code>skillnet sync --help</code>
+output so the flag table cannot drift silently.</li>
+<li><code>Cargo.toml</code> version bumped to <code>0.6.0</code>.</li>
+</ul>
+<h2 id="why-this-matters-now"><a class="header" href="#why-this-matters-now">Why this matters now</a></h2>
+<p>Phase 02 ships the flag surface but no user can find it without
+docs. Phase 03 ships <code>skillnet config migrate</code> but the migration
+narrative lives only in the design dossier (which is a planning
+artifact, not a user doc). Phase 04 ships the HM toggles but no
+HM quickstart shows how to use them. The <code>0.6.0</code> cut is the single
+shipping boundary — without this phase, the work lands silently
+under <code>0.5.2-dev</code> and nobody migrates.</p>
+<h2 id="out-of-scope"><a class="header" href="#out-of-scope">Out of scope</a></h2>
+<ul>
+<li>Tagging and publishing the <code>0.6.0</code> release. That is a separate
+<code>cargo release</code>-style step the user runs by hand after this
+plan completes. The version bump lands here; the actual tag +
+publish does not.</li>
+<li>The <code>0.7.0</code> removal of legacy-cwd discovery. Tracked in design
+§ 12; lands in a separate plan.</li>
+<li>Migrating the user’s actual ai-skills <code>skillnet.toml</code> /
+<code>skillnet.catalog.toml</code> into their HM config. Phase 05 shows
+the pattern in the quickstart; the user executes it in their
+own canix repo.</li>
+<li>Rewriting the <code>docs/src/release.md</code> process doc beyond a
+one-line cross-reference to the new migration page if useful.</li>
+</ul>
+<h2 id="plan"><a class="header" href="#plan">Plan</a></h2>
+<ol>
+<li>
+<p><strong>Read inputs.</strong> Open the entire design dossier
+<a href="../two-way-sync-and-config-centralisation-research.html">two-way-sync-and-config-centralisation-research.md</a>
+one more time to ensure the docs faithfully describe the
+landed behaviour. Open
+<a href="../../commands.html">docs/src/commands.md</a>,
+<a href="../../migration/option-b.html">docs/src/migration/option-b.md</a>,
+<a href="../../SUMMARY.html">docs/src/SUMMARY.md</a>,
+<a href="../../../CHANGELOG.html">CHANGELOG.md</a>,
+<a href="../../../README.html">README.md</a>, and
+<a href="../../../Cargo.toml">Cargo.toml</a> to know what is being
+rewritten.</p>
+<p>Verify Phase 02 / 03 / 04 are landed by running:</p>
+<pre><code class="language-sh">skillnet sync --help
+skillnet config --help
+nix flake check
+</code></pre>
+<p>If any of those errors out or shows an unexpected flag set,
+stop and report back — this phase depends on the predecessor
+phases.</p>
+</li>
+<li>
+<p><strong>Rewrite the <code>sync</code> section in <code>docs/src/commands.md</code>.</strong>
+Replace the existing <code>sync</code> bullet and any subsequent
+<code>## View And Project Commands</code> section text that mentions
+<code>sync</code> with content covering:</p>
+<ul>
+<li>One-line summary: “Top-level sync that materialises every
+configured view, promoting view → canonical when a view
+entry is a real directory newer than canonical”.</li>
+<li>A flag table matching design § 1 exactly. Format the table
+identically to how the existing config-precedence tables
+are formatted (<a href="../../commands.html#L94-L100">commands.md:94-100</a>)
+for consistency.</li>
+<li>The exit-code table from design § 3. Same formatting.</li>
+<li>A short worked example: a fixture with a <code>ViewNewer</code> entry,
+<code>skillnet sync</code> exits <code>2</code> and prints would-promote; rerun
+with <code>--apply-promote</code> succeeds.</li>
+<li>A pointer to <code>skillnet doctor</code> for pre-sync inspection and
+to the new migration doc for the centralised-config story.</li>
+</ul>
+</li>
+<li>
+<p><strong>Create <code>docs/src/migration/centralised-config.md</code>.</strong> New
+mdBook page covering:</p>
+<ul>
+<li>Why centralisation matters (the legacy cwd pickup is
+deprecated; XDG is the standard).</li>
+<li>The one-shot migration: <code>skillnet config migrate</code> —
+reproduce the design § 6 decision table here in user-doc
+form (not the verbatim spec — a friendly explanation).</li>
+<li>The deprecation warning users will see on legacy-cwd
+pickup and the <code>0.7.0</code> removal timeline.</li>
+<li>The Home Manager declarative pattern: a worked example
+of <code>programs.skillnet.settings = { ... }</code> and
+<code>programs.skillnet.catalogSettings = { ... }</code> with the
+user’s actual two existing TOML files translated to Nix
+syntax. <strong>Use only the schema fields that already exist;
+do not invent new ones.</strong></li>
+<li>The HM activation toggles from Phase 04 — when to set
+<code>programs.skillnet.activation.promote = true</code> (owner host
+only) and <code>failOnConflict = false</code> (rarely; for transition
+periods).</li>
+<li>The HM-managed config caveat from design § 7:
+<code>skillnet project add</code> / <code>project remove</code> will refuse
+against an HM-managed config; instructions to edit the Nix
+expression instead.</li>
+<li>The catalog rule fallout caveat from design § 11:
+promotion changes canonical content; <code>skillnet catalog lint</code> may re-classify skills based on promoted frontmatter
+status.</li>
+<li>A short troubleshooting section: what to do if the
+deprecation warning fires after a successful migration
+(check breadcrumb files; ensure cwd is no longer picking
+up rank 4).</li>
+</ul>
+<p>Page length: aim for the same scale as
+<a href="../../migration/option-b.html">docs/src/migration/option-b.md</a>
+(~150-300 lines). The page is the user-facing
+counterpart to the design dossier; it does not replace the
+dossier, just translates the parts users need.</p>
+</li>
+<li>
+<p><strong>Update <code>docs/src/migration/option-b.md</code>.</strong> Append a short
+“Reconcile-pull and centralised config (<code>0.6.0</code>)” section at
+the end, two paragraphs:</p>
+<ul>
+<li>Acknowledge that <code>0.5.0</code>’s “no reconcile” stance is
+partially reversed in <code>0.6.0</code>. The reversal is narrow:
+promotion happens only on user-visible non-symlink view
+entries that newer than canonical, only when the user
+opts in via <code>--apply-promote</code>, and never silently from
+HM activation by default.</li>
+<li>Link to the new <code>centralised-config.md</code> page.</li>
+</ul>
+</li>
+<li>
+<p><strong>Update <code>docs/src/SUMMARY.md</code>.</strong> Add:</p>
+<pre><code class="language-markdown">- [Migration](migration/option-b.md)
+  - [Centralised config (0.6.0)](migration/centralised-config.md)
+</code></pre>
+<p>And at the bottom (after the existing entries), add a
+“Planning” section if not already present:</p>
+<pre><code class="language-markdown">- [Planning](planning/index.md)
+  - [Reconcile-pull research](planning/reconcile-pull-research.md)
+  - [Two-way sync and config centralisation design](planning/two-way-sync-and-config-centralisation-research.md)
+  - [Two-way sync plan set](planning/two-way-sync-and-config-centralisation/README.md)
+    - [01 Library primitives](planning/two-way-sync-and-config-centralisation/01-library-primitives.md)
+    - [02 CLI surface and doctor](planning/two-way-sync-and-config-centralisation/02-cli-surface-and-doctor/README.md)
+    - [03 Config centralisation](planning/two-way-sync-and-config-centralisation/03-config-centralisation.md)
+    - [04 HM module](planning/two-way-sync-and-config-centralisation/04-hm-module.md)
+    - [05 Docs release rollup](planning/two-way-sync-and-config-centralisation/05-docs-release-rollup.md)
+</code></pre>
+<p>Create <code>docs/src/planning/index.md</code> if SUMMARY references it
+— a single-line page is fine, mdBook just needs a target.
+The planning section in SUMMARY is informational; users
+ignore it unless they care about plan history. <strong>If a
+<code>Planning</code> section already exists in SUMMARY (from earlier
+plan work), append rows instead of duplicating the section.</strong></p>
+</li>
+<li>
+<p><strong>Write the <code>CHANGELOG.md</code> entry.</strong> At the top of the file,
+under any unreleased section, add:</p>
+<pre><code class="language-markdown">## [0.6.0] — &lt;YYYY-MM-DD on the day the user tags&gt;
+
+### Added
+- `skillnet sync` promotes a view entry's content into the
+  canonical store when the view entry is a real directory
+  newer than canonical. Promotion is dry-run-by-default; the
+  command prints `would promote ...` lines and exits 2.
+  Pass `--apply-promote` to perform the promotion; pass
+  `--no-promote` to keep `0.5.x` behaviour. Tie-breaks via
+  `--prefer view|canonical`; promotion of view-only skills
+  via `--adopt-new`.
+- `skillnet config migrate` moves `skillnet.toml` and
+  `skillnet.catalog.toml` from the legacy working-directory
+  pickup to `$XDG_CONFIG_HOME/skillnet/`.
+- `skillnet doctor` classifies non-symlink view entries by
+  comparator outcome (Identical / ViewNewer / CanonicalNewer
+  / EqualMtimeDifferentContent / BothAdvanced / AdoptCandidate)
+  with hint strings pointing at the appropriate sync flag.
+- `skillnet status --format json` rows expose
+  `would_promote` and `needs_tie_break` counts; per-entry
+  `view_mtime_nanos`, `canonical_mtime_nanos`, `view_sha`,
+  `canonical_sha` populated for non-symlink entries.
+- HM module: `programs.skillnet.activation.{promote,
+  failOnConflict, allowDelete}` toggle activation behaviour.
+  Default `promote = false`, `failOnConflict = true`,
+  `allowDelete = true`. Consumer hosts upgrading from
+  `0.5.x` see the same behaviour they had, except activation
+  now fails loudly on drift (was: silently masked via
+  `|| true`).
+- Per-target `--allow-dirty-destination`: the gate now
+  covers every canonical write, not just `mirror_root`.
+
+### Changed
+- HM activation script collapses `view sync` + `project sync`
+  calls into a single `skillnet sync` invocation.
+- `skillnet project add` / `project remove` refuse to mutate
+  a config managed by Home Manager (resolved path under
+  `/nix/store/`). Edit `programs.skillnet.settings` in your
+  HM config instead.
+
+### Deprecated
+- Legacy working-directory config discovery (`./skillnet.toml`,
+  `./skillnet.catalog.toml`). The CLI prints a deprecation
+  warning when it falls through to this path and will remove
+  it in `0.7.0`. Run `skillnet config migrate` to move
+  existing configs.
+
+### Notes
+- The `0.5.0` design stance "no reconcile, canonical is the
+  only writer" is partially reversed. Promotion is opt-in
+  per invocation (`--apply-promote`), opt-in per host via
+  the HM toggle, and dry-run-by-default in every other
+  setting.
+</code></pre>
+<p>Match the existing CHANGELOG’s date format and section
+structure. Read the previous <code>## [0.5.x]</code> blocks first.</p>
+</li>
+<li>
+<p><strong>Update root <code>README.md</code> if needed.</strong> Search for any
+mention of <code>skillnet sync</code>, <code>0.5</code>, or the legacy-cwd config
+path. If the README’s quickstart shows <code>skillnet sync</code>,
+it should still work as documented (the no-flag case is
+unchanged for clean-symlink configurations); add a one-line
+note pointing at <code>docs/src/commands.md</code> for the full flag
+table. If the README does not mention any of these, skip.</p>
+</li>
+<li>
+<p><strong>Add the snapshot test in <code>tests/cli.rs</code>.</strong> Append:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[test]
+fn sync_help_output_matches_snapshot() {
+    let help = Cli::command()
+        .find_subcommand("sync")
+        .expect("sync subcommand")
+        .clone()
+        .render_long_help()
+        .to_string();
+    insta::assert_snapshot!(help);
+}
+<span class="boring">}</span></code></pre>
+<p>This requires <code>insta</code> as a dev-dependency. If <code>insta</code> is not
+already in <code>Cargo.toml</code> <code>[dev-dependencies]</code>, add it (current
+stable version, no special features). On first run, accept
+the snapshot via <code>cargo insta accept</code> (or <code>cargo insta review</code> to inspect).</p>
+<p>The snapshot file lives at
+<code>tests/snapshots/cli__sync_help_output_matches_snapshot.snap</code>.
+Commit the <code>.snap</code> file alongside the test.</p>
+<p><strong>Why this matters</strong>: any future PR that adds, removes, or
+reorders a sync flag will fail this test and require an
+explicit snapshot update. That makes flag drift visible in
+code review.</p>
+</li>
+<li>
+<p><strong>Bump the version.</strong> In <code>Cargo.toml</code>, change
+<code>version = "0.5.1"</code> to <code>version = "0.6.0"</code>. Run
+<code>cargo update --package skillnet</code> to refresh <code>Cargo.lock</code>’s
+<code>skillnet</code> entry, <em>not</em> <code>cargo update</code> (which churns
+everything).</p>
+</li>
+<li>
+<p><strong>Run the full check loop.</strong></p>
+<pre><code class="language-sh">cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test --workspace
+cargo doc --no-deps
+nix flake check
+mdbook build docs
+</code></pre>
+<p>Fix every error. The snapshot test requires running
+<code>cargo insta accept</code> once after the snapshot exists. The
+mdbook build catches broken links in the new doc pages and
+SUMMARY entries.</p>
+</li>
+<li>
+<p><strong>Verify the whole-set acceptance criteria from the plan
+README.</strong> This is the integrated test: a tempdir fixture
+with mixed drift, run <code>skillnet sync</code> end-to-end and
+confirm every behaviour in the plan README’s
+acceptance criteria table.</p>
+</li>
+<li>
+<p><strong>Commit.</strong> One commit, message:
+<code>release: 0.6.0 — promotion-aware sync and centralised config</code></p>
+</li>
+</ol>
+<h2 id="acceptance-criteria"><a class="header" href="#acceptance-criteria">Acceptance criteria</a></h2>
+<ul>
+<li><input disabled="" type="checkbox"> <code>docs/src/commands.md</code> <code>sync</code> section documents every
+flag from design § 1 in the same order, the exit-code
+table from § 3, a worked example, and pointers to doctor
++ the migration doc.</li>
+<li><input disabled="" type="checkbox"> <code>docs/src/migration/centralised-config.md</code> exists and
+covers: rationale, <code>skillnet config migrate</code> walk-through,
+deprecation timeline, HM declarative pattern with an
+example translation of the user’s two TOML files,
+activation toggles, HM-managed config caveat, catalog
+fallout caveat, troubleshooting.</li>
+<li><input disabled="" type="checkbox"> <code>docs/src/migration/option-b.md</code> has an appended section
+acknowledging the <code>0.6.0</code> partial reversal and linking
+the new page.</li>
+<li><input disabled="" type="checkbox"> <code>docs/src/SUMMARY.md</code> lists the new migration page and
+the plan-set entries.</li>
+<li><input disabled="" type="checkbox"> <code>CHANGELOG.md</code> has a <code>## [0.6.0]</code> block matching step 6.</li>
+<li><input disabled="" type="checkbox"> <code>Cargo.toml</code> version is <code>0.6.0</code>. <code>Cargo.lock</code> reflects
+the bump.</li>
+<li><input disabled="" type="checkbox"> <code>tests/cli.rs</code> has a snapshot test for <code>sync --help</code> and
+the snapshot file is committed.</li>
+<li><input disabled="" type="checkbox"> <code>cargo fmt --check</code>, <code>cargo clippy --all-targets -- -D     warnings</code>, <code>cargo test --workspace</code>, <code>cargo doc --no-deps</code>,
+<code>nix flake check</code>, <code>mdbook build docs</code> all clean.</li>
+<li><input disabled="" type="checkbox"> Whole-set acceptance criteria from the plan README all
+verified against a fresh tempdir fixture.</li>
+<li><input disabled="" type="checkbox"> <code>git log -1</code> shows the single phase commit.</li>
+</ul>
+<h2 id="files-likely-touched"><a class="header" href="#files-likely-touched">Files likely touched</a></h2>
+<ul>
+<li><code>docs/src/commands.md</code> — <code>sync</code> section rewrite.</li>
+<li><code>docs/src/migration/centralised-config.md</code> — <strong>new file</strong>.</li>
+<li><code>docs/src/migration/option-b.md</code> — appended section.</li>
+<li><code>docs/src/SUMMARY.md</code> — new entries.</li>
+<li><code>docs/src/planning/index.md</code> — <strong>new file</strong>, if SUMMARY
+references it.</li>
+<li><code>CHANGELOG.md</code> — new <code>[0.6.0]</code> block.</li>
+<li><code>README.md</code> — possibly one-line addition.</li>
+<li><code>Cargo.toml</code> — version bump.</li>
+<li><code>Cargo.lock</code> — bump propagation.</li>
+<li><code>tests/cli.rs</code> — snapshot test.</li>
+<li><code>tests/snapshots/cli__sync_help_output_matches_snapshot.snap</code>
+— <strong>new file</strong>, the snapshot.</li>
+</ul>
+<h2 id="pitfalls"><a class="header" href="#pitfalls">Pitfalls</a></h2>
+<ul>
+<li><strong>U1: <code>mdbook build</code> fails on broken links.</strong> New SUMMARY
+entries that reference non-existent files break the build.
+Verify every link in SUMMARY points to an existing file
+before committing. Recovery: <code>mdbook build docs 2&gt;&amp;1 | grep ERROR</code> lists broken links.</li>
+<li><strong>U2: <code>insta</code> requires accepting the snapshot.</strong> On first
+CI run, the snapshot test will fail because the snapshot
+file doesn’t exist. Either create the snapshot locally
+(<code>cargo insta accept</code>) and commit it, or use
+<code>insta::assert_snapshot!</code> with explicit inline content
+(less ergonomic but no <code>.snap</code> file). Prefer the file-based
+approach — it surfaces diffs in code review.</li>
+<li><strong>U3: <code>clap</code>’s help text formatting changes between
+versions.</strong> A <code>cargo update</code> that bumps <code>clap</code> could change
+the rendered help output and break the snapshot. Pin <code>clap</code>
+in <code>Cargo.toml</code> if it isn’t already (it is; check the
+existing pin). Recovery: re-accept the snapshot if the diff
+is purely cosmetic and add a note to the test.</li>
+<li><strong>U4: CHANGELOG date format mismatch.</strong> The existing
+CHANGELOG may use a different date convention. Read the
+existing entries first and match exactly. If unsure, use
+<code>YYYY-MM-DD</code>.</li>
+<li><strong>U5: HM module test in <code>nix flake check</code> may rely on a
+network fetch.</strong> <code>nix flake check</code> evaluates the flake and
+may try to download dependencies. Ensure the user has the
+flake’s inputs cached. Recovery: run <code>nix flake update</code>
+first if the cache is stale, but be aware that updates
+<code>flake.lock</code> and should be its own commit.</li>
+<li><strong>U6: <code>cargo doc --no-deps</code> may fail on the new public
+items from Phase 01.</strong> Phase 01 added <code>ReconcileOutcome</code>,
+<code>PromotionOptions</code>, etc. as <code>pub</code>. If any are missing
+doc comments, <code>#![deny(missing_docs)]</code> (if set) will fail.
+Recovery: add a one-line <code>///</code> to every new public item.
+Check <code>lib.rs</code> for <code>deny(missing_docs)</code> first.</li>
+<li><strong>U7: Plan-set entries in SUMMARY persist after retirement.</strong>
+When the user runs <code>verify</code> and the plan retires (via
+<code>retire-docs-planning</code>), the SUMMARY entries here will
+dangle. That is the verify-mode skill’s responsibility to
+clean up, not this phase’s. Just note it.</li>
+<li><strong>U8: The 0.6.0 tag is not part of this phase.</strong> This phase
+bumps the version in <code>Cargo.toml</code> but does not run <code>git tag</code> or <code>cargo publish</code>. The user runs those after
+verification. Do not auto-tag.</li>
+</ul>
+<h2 id="reference"><a class="header" href="#reference">Reference</a></h2>
+<ul>
+<li>Design dossier (entire document is reference here):
+<a href="../two-way-sync-and-config-centralisation-research.html">two-way-sync-and-config-centralisation-research.md</a>.</li>
+<li>Plan-set README (acceptance criteria source):
+<a href="./README.html">README.md</a>.</li>
+<li>Existing docs to model the new pages on:
+<ul>
+<li><a href="../../commands.html">docs/src/commands.md</a></li>
+<li><a href="../../migration/option-b.html">docs/src/migration/option-b.md</a></li>
+<li><a href="../../release.html">docs/src/release.md</a></li>
+<li><a href="../../../CHANGELOG.html">CHANGELOG.md</a></li>
+</ul>
+</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../planning/two-way-sync-and-config-centralisation/04-hm-module.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../planning/two-way-sync-and-config-centralisation/04-hm-module.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../../mark-09e88c2c.min.js"></script>
+        <script src="../../searcher-c2a407aa.js"></script>
+
+        <script src="../../clipboard-1626706a.min.js"></script>
+        <script src="../../highlight-abc7f01d.js"></script>
+        <script src="../../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

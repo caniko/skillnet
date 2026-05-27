@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Migration - skillnet</title>
+        <title>Planning - skillnet</title>
 
 
         <!-- Custom HTML head -->
@@ -174,97 +174,18 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="option-b-migration"><a class="header" href="#option-b-migration">Option B Migration</a></h1>
-<p><code>skillnet 0.5.0</code> removed reconcile source arbitration. <code>skillnet 0.5.1</code>
-finishes the migration by making <code>doctor</code> validate the new canonical/view
-layout and by adding a fresh-host clone helper.</p>
-<h2 id="schema"><a class="header" href="#schema">Schema</a></h2>
-<p>Removed legacy fields:</p>
-<ul>
-<li><code>[global].sources</code></li>
-<li><code>[global].sync_paths</code></li>
-<li><code>[global].stale_codex_skill_paths</code></li>
-<li><code>project_source_rules</code></li>
-<li><code>extra_sources</code></li>
-</ul>
-<p>Replacement global schema:</p>
-<pre><code class="language-toml">[global]
-views = [
-  { label = "claude", path = "/home/alice/.claude/skills", scope = "global" },
-  { label = "agents", path = "/home/alice/.agents/skills", scope = "global" },
-]
-</code></pre>
-<p>Replacement project schema:</p>
-<pre><code class="language-toml">[[projects]]
-name = "demo"
-path = "/home/alice/Projects/demo"
-origin = "git@codeberg.org:alice/demo.git"
-canonical_rel = ".skills"
-views = [
-  { rel = ".claude/skills", label = "claude" },
-  { rel = ".agents/skills", label = "agents" },
-]
-</code></pre>
-<p><code>origin</code> is optional and is used only by <code>skillnet project clone --all</code>.
-<code>canonical_rel</code> defaults to <code>.skills</code>; project views default to
-<code>.claude/skills</code> and <code>.agents/skills</code>.</p>
-<h2 id="layout"><a class="header" href="#layout">Layout</a></h2>
-<ul>
-<li>Global canonical store: <code>&lt;mirror_root&gt;/global/</code></li>
-<li>Global views: configured <code>[global].views[*].path</code></li>
-<li>Project canonical store: <code>&lt;project&gt;/&lt;canonical_rel&gt;/</code></li>
-<li>Project committed views: <code>&lt;project&gt;/&lt;view.rel&gt;/</code></li>
-<li>Project mirror aggregator: <code>&lt;mirror_root&gt;/projects/&lt;project-name&gt;</code> symlink
-to <code>&lt;project&gt;/&lt;canonical_rel&gt;/</code></li>
-</ul>
-<p>Global views use absolute symlinks to canonical skills. Project views use
-relative symlinks so they can be committed to project repositories.</p>
-<h2 id="fresh-host-bootstrap"><a class="header" href="#fresh-host-bootstrap">Fresh Host Bootstrap</a></h2>
-<p>On a new host:</p>
-<pre><code class="language-sh">git clone git@codeberg.org:caniko/ai-skills.git /path/to/ai-skills
-skillnet project clone --all --dry-run
-skillnet project clone --all
-home-manager switch
-skillnet doctor
-</code></pre>
-<p><code>project clone --all</code> skips existing project paths, warns for projects without
-<code>origin</code>, clones missing projects with configured origins, then runs
-<code>skillnet project sync --all</code> to materialise in-repo views and mirror
-aggregator symlinks.</p>
-<p>By default, HTTPS origins are refused. Use <code>--ssh-strict=false</code> only when an
-HTTPS clone is intentional.</p>
-<h2 id="doctor"><a class="header" href="#doctor">Doctor</a></h2>
-<p><code>skillnet doctor</code> now reports:</p>
-<ul>
-<li>missing canonical stores;</li>
-<li>view entries that are not symlinks;</li>
-<li>view symlinks that are broken or point outside the canonical store;</li>
-<li>canonical skills missing from a configured view;</li>
-<li>orphan view entries not matching any canonical skill name;</li>
-<li>missing, non-symlink, broken, or unexpected project aggregator symlinks.</li>
-</ul>
-<p>Missing project repository paths are warnings, not errors, because a host may
-be partially bootstrapped before all project repositories are cloned.</p>
-<h2 id="reconcile-pull-and-centralised-config-060"><a class="header" href="#reconcile-pull-and-centralised-config-060">Reconcile-Pull And Centralised Config (<code>0.6.0</code>)</a></h2>
-<p><code>0.6.0</code> partially reverses <code>0.5.0</code>’s “no reconcile” stance, but only in a
-narrow promotion path. <code>skillnet sync</code> can promote a user-visible non-symlink
-view entry back into canonical when the view content is newer, but the default
-run only reports would-promote work and exits <code>2</code>. Mutation requires
-<code>--apply-promote</code>; <code>--no-promote</code> keeps <code>0.5.x</code> behaviour; Home Manager
-activation never promotes by default.</p>
-<p>For the XDG migration, <code>skillnet config migrate</code>, and the Home Manager
-declarative pattern, see
-<a href="centralised-config.html">Centralised config (0.6.0)</a>.</p>
+                        <h1 id="planning"><a class="header" href="#planning">Planning</a></h1>
+<p>Historical planning and design documents for skillnet.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../hook-ingestion.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../release.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../migration/centralised-config.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../planning/reconcile-pull-research.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -274,11 +195,11 @@ declarative pattern, see
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../hook-ingestion.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../release.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../migration/centralised-config.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../planning/reconcile-pull-research.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

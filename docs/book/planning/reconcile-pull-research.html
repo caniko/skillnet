@@ -1,0 +1,602 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Reconcile-pull research - skillnet</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-2ee62a9d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-19427bed.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">skillnet</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="reconcile-pull-research-dossier"><a class="header" href="#reconcile-pull-research-dossier">Reconcile-Pull Research Dossier</a></h1>
+<h2 id="goal-and-trigger"><a class="header" href="#goal-and-trigger">Goal And Trigger</a></h2>
+<p>User asked: “pull from target projects and global, meaning we only overwrite local
+[canonical] if they are older than our version, we might’ve diverged. This is in
+case there is no symlink, broken for some reason and overwritten by another
+source.”</p>
+<p>In Option B (skillnet 0.5.x), every view is a generated symlink into a single
+canonical store. The current sync logic assumes the only legitimate writer of
+content is the canonical store; views are either correct symlinks, broken
+symlinks, missing entries, or surprise non-symlinks (<code>DriftKind::NonSymlink</code> in
+<a href="../../../src/view.rs#L59">src/view.rs:59</a>). The only resolutions today are
+<code>--force</code> (blindly replace the surprise content with a symlink, destroying any
+unique edits) or <code>--allow-delete</code> (prune stale entries). Neither preserves
+divergent content that may have landed inside a view by accident.</p>
+<p>The user wants a third resolution path: when a view entry is a real directory
+whose content is newer than its canonical sibling (because some other tool
+clobbered the symlink and edits happened against the resulting copy), pull the
+view content back into canonical before re-materialising the symlink. This is
+the recovery path for the failure mode “symlink got overwritten by another
+source and we kept working in the copy.”</p>
+<p>This dossier feeds a multi-phase plan to modify skillnet itself (across
+<code>/data/nvme0/can/Projects/skillnet</code> source + the Nix HM module + the
+documentation). The change set spans Rust library code, CLI surface, tests,
+docs/mdBook, and the Home Manager activation flow.</p>
+<h2 id="current-reality"><a class="header" href="#current-reality">Current Reality</a></h2>
+<h3 id="what-skillnet-does-today"><a class="header" href="#what-skillnet-does-today">What skillnet does today</a></h3>
+<ul>
+<li><code>skillnet sync</code> (<a href="../../../src/cli/args.rs#L71-L79">src/cli/args.rs:71-79</a>,
+<a href="../../../src/cli/mod.rs#L85-L91">src/cli/mod.rs:85-91</a>) calls
+<code>commands::view::sync</code> then <code>commands::project_sync</code> with the same
+<code>allow_delete</code> / <code>force</code> flags.</li>
+<li><code>materialize_view_with_options</code>
+(<a href="../../../src/view.rs#L82-L113">src/view.rs:82-113</a>) walks canonical skills,
+computes the desired symlink target for each, and calls <code>ensure_symlink</code>
+(<a href="../../../src/view.rs#L337-L359">src/view.rs:337-359</a>).</li>
+<li><code>ensure_symlink</code> on a non-symlink entry returns
+<code>"{link} exists and is not a symlink; pass --force to replace it"</code>
+(<a href="../../../src/view.rs#L352">src/view.rs:352</a>). With <code>--force</code>,
+<code>remove_view_entry</code> deletes the entry and a fresh symlink is created
+(<a href="../../../src/view.rs#L424-L432">src/view.rs:424-432</a>) — any unique edits
+the entry held are gone forever.</li>
+<li><code>view_status</code> already enumerates <code>DriftKind::NonSymlink</code> entries
+(<a href="../../../src/view.rs#L143-L150">src/view.rs:143-150</a>), so the new logic
+already has a precise list of recovery candidates without re-scanning.</li>
+</ul>
+<h3 id="the-primitives-we-still-have"><a class="header" href="#the-primitives-we-still-have">The primitives we still have</a></h3>
+<p>The pre-<code>0.5.0</code> reconciler is gone (deleted in <code>15a1352</code>), but its
+content-and-time primitives survive in <a href="../../../src/fs_ops.rs">src/fs_ops.rs</a>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Function</th><th>Location</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>newest_mtime_nanos(path)</code></td><td><a href="../../../src/fs_ops.rs#L15-L32">fs_ops.rs:15-32</a></td><td>Walks every file + symlink under the skill dir, returns max mtime in nanos</td></tr>
+<tr><td><code>content_signature(path)</code></td><td><a href="../../../src/fs_ops.rs#L34-L70">fs_ops.rs:34-70</a></td><td>sha256 of (sorted relative path + 0x00 + kind + bytes/target + 0x00) per entry — covers files and symlinks but not executable-bit-only diffs</td></tr>
+<tr><td><code>copy_dir(src, dest)</code></td><td><a href="../../../src/fs_ops.rs#L72-L112">fs_ops.rs:72-112</a></td><td>Recursive copy preserving permissions and mtimes (files, symlinks, and dirs) via <code>filetime</code></td></tr>
+<tr><td><code>ensure_skill_dir(path)</code></td><td><a href="../../../src/fs_ops.rs#L166-L171">fs_ops.rs:166-171</a></td><td>Validates a skill dir by <code>SKILL.md</code> presence</td></tr>
+</tbody>
+</table>
+</div>
+<p>The deleted <code>reconcile::overwrite_action</code> had the exact selection ladder we
+need (reversed direction: we want view → canonical):</p>
+<blockquote>
+<p>if <code>allow_older</code> → take incoming; else compare mtimes; if equal mtimes
+compare content_signature; if equal both → no-op; else bail with
+“equal-mtime conflicting skill content” and require an explicit override.
+(Git history: <code>git show 15a1352^:src/reconcile.rs</code> lines 272-296.)</p>
+</blockquote>
+<p>The deleted <code>write_skill_set</code> (<a href="#">reconcile.rs lines 197-264 in <code>15a1352^</code></a>)
+used a <code>.skillnet-tmp</code> staging dir + <code>replace_dir</code> for atomic per-target
+writes — same pattern we need on the canonical side.</p>
+<h3 id="source-of-truth-and-dirty-state-gating"><a class="header" href="#source-of-truth-and-dirty-state-gating">Source of truth and dirty-state gating</a></h3>
+<ul>
+<li>Canonical store lives at <code>&lt;mirror_root&gt;/global/</code> and
+<code>&lt;project&gt;/&lt;canonical_rel&gt;/</code> (per
+<a href="../migration/option-b.html#L46-L52">docs/src/migration/option-b.md:46-52</a>).</li>
+<li>Writes to canonical are gated by <code>Context::ensure_destination_clean</code>
+(<a href="../../../src/commands/context.rs#L40-L45">src/commands/context.rs:40-45</a>),
+which calls <code>vcs::ensure_clean</code> and refuses unless <code>--dry-run</code> or
+<code>--allow-dirty-destination</code> is set
+(<a href="../../../src/vcs.rs#L51-L64">src/vcs.rs:51-64</a>). Reconcile-pull must use
+the same gate when its target is the global canonical (which lives in the
+<code>ai-skills</code> repo) <strong>or</strong> when a project canonical is itself a git checkout.</li>
+<li>Per-project canonical roots live under each project repo, so each project
+has its own git working tree to consult — the existing code only checks
+<code>ctx.mirror_root</code>, so a per-target git check needs to be added.</li>
+</ul>
+<h3 id="todays-failure-modes-that-motivated-the-request"><a class="header" href="#todays-failure-modes-that-motivated-the-request">Today’s failure modes that motivated the request</a></h3>
+<p><code>skillnet status --all</code> and <code>skillnet doctor</code> against the live host currently
+report <strong>no drift</strong> across 12 scopes and 163 skills — there is no extant
+corruption to inspect. The user is pre-empting the case that has happened
+before (the deleted
+<a href="#">docs/planning/reconciliation-anomalies-research.md</a> — staged for delete on
+<code>main</code>, recoverable via <code>git show HEAD:docs/planning/reconciliation-anomalies-research.md</code>)
+documented a related symptom: when multiple writable sources existed, edits
+landed in one source but were silently invisible to the manifest.
+Reconcile-pull is the narrower successor: only one writable source remains
+(canonical), but a view can become an accidental writable source when an
+external tool replaces the symlink with a directory.</p>
+<h2 id="evidence-inventory"><a class="header" href="#evidence-inventory">Evidence Inventory</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source</th><th>Lines</th><th>What it proves</th></tr>
+</thead>
+<tbody>
+<tr><td><code>which skillnet &amp;&amp; readlink -f $(which skillnet)</code></td><td>n/a</td><td>Installed binary is <code>skillnet-0.5.1</code> from a Nix store path; source matches local repo at HEAD</td></tr>
+<tr><td><code>cd /data/nvme0/can/Projects/skillnet &amp;&amp; git log --oneline -20</code></td><td>n/a</td><td>Recent commits show <code>21f1f83 Add top-level sync command</code> (current <code>sync</code>), <code>15a1352 feat!: delete reconcile, sync pull/roundtrip; release 0.5.0</code> (the deletion this dossier partially reverses), <code>00ada1a feat!: Option B config schema</code></td></tr>
+<tr><td><code>git show 15a1352 --stat</code></td><td>n/a</td><td>Shows <code>src/reconcile.rs</code> (534 lines), <code>src/commands/sync.rs</code> (787 lines), <code>src/cache.rs</code>, <code>src/codex.rs</code> were the major deletions</td></tr>
+<tr><td><code>git show 15a1352^:src/reconcile.rs</code></td><td>full file</td><td>Recovers the prior reconcile model — <code>Candidate</code>, <code>Choice</code>, <code>choose_latest</code>, <code>overwrite_action</code>, <code>write_skill_set</code>, <code>RECONCILIATION.md</code> manifest writer</td></tr>
+<tr><td><a href="../../../src/view.rs#L32-L76">src/view.rs:32-76</a></td><td>DriftKind enum + structs</td><td>Confirms <code>NonSymlink</code> is already a first-class drift class</td></tr>
+<tr><td><a href="../../../src/view.rs#L337-L359">src/view.rs:337-359</a></td><td><code>ensure_symlink</code></td><td>Confirms <code>--force</code> is the only existing escape hatch for non-symlinks</td></tr>
+<tr><td><a href="../../../src/fs_ops.rs#L15-L70">src/fs_ops.rs:15-70</a></td><td>mtime + sha primitives</td><td>The exact comparators reconcile-pull needs are present</td></tr>
+<tr><td><a href="../../../src/commands/context.rs#L40-L45">src/commands/context.rs:40-45</a></td><td>dirty-destination gate</td><td>Confirms the gate exists for mirror_root but not per-project canonical roots</td></tr>
+<tr><td><a href="../../../src/cli/args.rs#L686-L718">src/cli/args.rs:686-718</a></td><td>sync defaults tests</td><td>Pins current default flag shape; new flag must keep <code>allow_delete: false, force: false</code> as defaults</td></tr>
+<tr><td><code>skillnet status --all</code> on the live host</td><td>n/a</td><td>All 12 scopes report <code>clean</code>, so testing must rely on fixtures, not live drift</td></tr>
+<tr><td><code>skillnet doctor</code></td><td>“doctor: no issues”</td><td>Confirms no current invariant violations to anchor reconcile against</td></tr>
+<tr><td><a href="../migration/option-b.html#L78-L89">docs/src/migration/option-b.md:78-89</a></td><td>doctor invariants list</td><td>Reconcile-pull must keep these invariants; a partial pull is a doctor-correctable state, not a permanent one</td></tr>
+<tr><td><a href="../commands.html#L111-L113">docs/src/commands.md:111-113</a></td><td>“The removed <code>sync pull</code> auto-commit flow has no replacement in <code>0.5.0</code>”</td><td>Confirms the user is asking for a deliberate (partial) revert of a documented decision</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="existing-plan-status"><a class="header" href="#existing-plan-status">Existing Plan Status</a></h2>
+<p>Only one prior plan set is materially related, and it has been retired:</p>
+<ul>
+<li><code>docs/planning/mirror-canonical-store/</code> and <code>docs/planning/mirror-canonical-store-research.md</code>
+in the <code>ai-skills</code> repo. All staged for deletion on <code>main</code>
+(<code>git status</code> in <code>/data/nvme0/can/Projects/ai-skills</code> shows 22 <code>D</code> rows
+under <code>docs/planning/</code>). The plan that originally drove the v0.5.0 removal
+of reconcile is <strong>done and being garbage-collected</strong> — its premise was
+“canonical is the only writer, reconcile is unnecessary.” This dossier
+amends that premise: canonical is the only <em>intended</em> writer, but external
+tools can accidentally promote a view to a writer, so we need a one-way
+recovery path.</li>
+<li><code>docs/planning/reconciliation-anomalies-research.md</code> in <code>ai-skills</code>. Also
+staged for delete. Its findings (mtime-tie tie-break, manifest staleness)
+are not directly relevant to reconcile-pull, which is a one-way pull rather
+than multi-source arbitration. Cite it for context only.</li>
+</ul>
+<p>No existing plan covers the reconcile-pull workflow. Nothing to carry forward.</p>
+<h2 id="work-that-should-survive"><a class="header" href="#work-that-should-survive">Work That Should Survive</a></h2>
+<p>These constraints from the audit must shape the new implementation:</p>
+<ol>
+<li><strong>Canonical remains the only intentional writer.</strong> Reconcile-pull is a
+recovery path, not a return to multi-source arbitration. The default
+behaviour of <code>skillnet sync</code> must remain “treat view drift as an error
+that requires opt-in resolution”; reconcile-pull must be opt-in.</li>
+<li><strong>Per-skill atomicity, mirroring the existing view materialisation
+contract.</strong> <a href="../../../src/view.rs#L7-L14">src/view.rs:7-14</a> documents that
+“Atomicity is per skill”; the pull-side must match that boundary.</li>
+<li><strong>mtime-preserving copies stay.</strong> <code>copy_dir</code>’s
+<code>set_file_times</code>/<code>set_symlink_file_times</code> calls are load-bearing — they
+prevent endless ping-pong after a successful pull, because the canonical
+side ends up with the same mtime as the view that just won. The new code
+must not regress that.</li>
+<li><strong><code>--allow-dirty-destination</code> gate must extend to project canonicals.</strong>
+Today <code>ensure_destination_clean</code> checks only <code>ctx.mirror_root</code>. Pulling
+into <code>&lt;project&gt;/.skills</code> mutates a different repo; the gate must check the
+project’s own git working tree.</li>
+<li><strong>Doctor stays the source of truth for invariants.</strong> A partially pulled
+state (view → canonical succeeded but symlink not re-established yet)
+should be a doctor error, not silent.</li>
+<li><strong>The deleted <code>RECONCILIATION.md</code> manifest pattern should NOT be revived.</strong>
+The committed v0.5.0 CHANGELOG removed it deliberately; per-pull telemetry
+should live in dry-run output and the calibration database, not in a file
+that drifts.</li>
+</ol>
+<h2 id="blockers-and-missing-artifacts"><a class="header" href="#blockers-and-missing-artifacts">Blockers And Missing Artifacts</a></h2>
+<p>None blocking. Two soft inputs deserve a decision before phase 1 starts:</p>
+<ul>
+<li><strong>Adoption policy for unknown skills in a view.</strong> If a view directory
+contains a non-symlink whose name has no canonical counterpart at all (e.g.
+<code>~/.claude/skills/some-new-thing/</code> with no <code>global/some-new-thing/</code>), is
+this a <em>new skill to promote</em> or <em>foreign content to leave alone</em>? Today
+<code>view_status</code> would classify it as <code>Stale</code> and <code>--allow-delete</code> would prune
+it. Recommendation: keep “Stale” semantics by default; add a separate
+<code>--adopt-new</code> flag (or refuse) so promotion is always explicit. Open
+decision below.</li>
+<li><strong>Project repo dirty-state policy.</strong> When pulling into a project canonical
+whose own repo is dirty, default behaviour should match the
+<code>ai-skills</code>-side gate (refuse, require <code>--allow-dirty-destination</code>). The
+flag is currently global; whether to allow per-target dirty overrides is
+also an open decision below.</li>
+</ul>
+<h2 id="risks-and-constraints"><a class="header" href="#risks-and-constraints">Risks And Constraints</a></h2>
+<ul>
+<li><strong>Architectural reversal risk.</strong> v0.5.0 advertised “no reconcile”. Even a
+narrow reconcile-pull will surprise users who relied on the simpler mental
+model. Mitigations: ship behind explicit subcommand/flag (no default
+behaviour change for <code>skillnet sync</code>); document clearly in
+CHANGELOG/MIGRATION; keep the comparator strictly one-way (view → canonical
+on pull, never the reverse).</li>
+<li><strong>mtime-spoof risk.</strong> A malicious or buggy tool can <code>touch -t</code> future
+mtimes on a view copy. Reconcile-pull would treat it as newer and overwrite
+canonical with attacker content. Mitigations: (a) document that pull-mode
+trusts filesystem mtimes; (b) <code>--dry-run</code> always available; (c) <code>doctor</code>
+warns about NonSymlink-with-newer-mtime before sync ever pulls.</li>
+<li><strong>Symlink resolution hazard.</strong> A reconcile-pull walker must use
+<code>fs::symlink_metadata</code>, never <code>fs::metadata</code>. <code>content_signature</code> and
+<code>newest_mtime_nanos</code> already do this, but the new code that decides
+“should I attempt pull on this view entry?” must check <code>is_symlink()</code> first
+to avoid pulling a perfectly valid symlink’s target into itself.</li>
+<li><strong>Cross-filesystem rename.</strong> Reconcile-pull’s atomic write should mirror
+the deleted <code>write_skill_set</code>: write to a <code>.skillnet-tmp</code> staging dir
+inside the canonical’s parent, then <code>rename</code>/<code>replace_dir</code> over the
+existing canonical skill dir. Same filesystem guarantee that already holds
+for <code>ai-skills</code> and per-project repos.</li>
+<li><strong>Permission preservation.</strong> <code>copy_dir</code> already preserves modes
+(<a href="../../../src/fs_ops.rs#L88-L105">fs_ops.rs:88-105</a>). Reconcile-pull must
+reuse it, not roll its own copy.</li>
+<li><strong>Ambiguous additive change.</strong> If canonical gained a new file
+(e.g. <code>references/new.md</code>) while the view also gained edits, per-skill
+“view newer wins” loses the new canonical file. The deleted reconciler
+bailed on this case at the mtime-tie boundary only. Recommendation: keep
+the per-skill atomicity but require <code>--prefer view|canonical</code> on a true
+three-way diff (both sides advanced). Most real cases will be unambiguous
+(one side untouched since the symlink broke), so the bail path is rare.</li>
+<li><strong>Catalog implications.</strong> <a href="../../../../ai-skills/skillnet.catalog.toml">skillnet.catalog.toml</a>
+rules apply to canonical paths; reconcile-pull writes into canonical, so
+any rule status changes (e.g. <code>status = "active"</code> based on <code>path_prefix</code>)
+apply automatically post-pull. No catalog change is needed in this phase.</li>
+<li><strong>HM module surface.</strong> <a href="../../../nix/hm-module.nix">nix/hm-module.nix</a>
+drives the install on the host; if reconcile-pull becomes part of the HM
+activation script (e.g., a default <code>sync</code> extended with <code>--reconcile</code>),
+it must be opt-in to avoid silent canonical mutation on every
+<code>home-manager switch</code>.</li>
+</ul>
+<h2 id="candidate-next-steps"><a class="header" href="#candidate-next-steps">Candidate Next Steps</a></h2>
+<p>A natural decomposition for the planner, in dependency order:</p>
+<h3 id="phase-a--library-primitives-skillnetsrcviewrs--fs_opsrs"><a class="header" href="#phase-a--library-primitives-skillnetsrcviewrs--fs_opsrs">Phase A — Library primitives (skillnet/src/view.rs + fs_ops.rs)</a></h3>
+<p>Introduce a <code>reconcile_view</code> primitive parallel to <code>materialize_view</code>. It
+should:</p>
+<ol>
+<li>Compute the set of view entries that are <code>DriftKind::NonSymlink</code> (already
+available via <code>view_status_with_options</code>).</li>
+<li>For each such entry, decide an outcome:
+<ul>
+<li><code>NoView</code> (entry missing): nothing to pull.</li>
+<li><code>Identical</code> (sha matches canonical): safe to demote to symlink without
+pulling.</li>
+<li><code>ViewNewer</code> (view newest_mtime &gt; canonical newest_mtime): pull view →
+canonical via <code>copy_dir</code> into staging + atomic rename.</li>
+<li><code>CanonicalNewer</code>: leave canonical; report; require <code>--force</code> to demote.</li>
+<li><code>EqualMtimeDifferentContent</code>: bail with <code>--prefer view|canonical</code>
+required.</li>
+<li><code>BothAdvanced</code> (view newer + canonical has files view does not): bail
+with <code>--prefer view|canonical</code> required.</li>
+<li><code>AdoptCandidate</code> (skill name has no canonical sibling): no-op unless
+<code>--adopt-new</code>; then promote.</li>
+</ul>
+</li>
+</ol>
+<p>Return a <code>ReconcileReport</code> per view, with per-entry outcomes and per-entry
+sha+mtime evidence so the CLI can print and dry-run cleanly. Per-file
+granularity is <strong>not</strong> worth pursuing: skills are authored as a unit; the
+catalog treats them as units; the existing materialisation atomicity is
+per-skill. Per-file granularity would also explode the conflict matrix.</p>
+<p>Tests in <a href="../../../tests/view_sync.rs">tests/view_sync.rs</a> should grow
+fixtures for each outcome class — tempdir-based, mtime-controlled with
+<code>filetime::set_file_times</code> to avoid sleep-based flake.</p>
+<h3 id="phase-b--canonical-side-write-with-extended-dirty-gating"><a class="header" href="#phase-b--canonical-side-write-with-extended-dirty-gating">Phase B — Canonical-side write with extended dirty gating</a></h3>
+<ol>
+<li>Generalise <code>ensure_destination_clean</code> to accept a target directory (so it
+can be pointed at <code>&lt;project&gt;/&lt;canonical_rel&gt;</code> as well as <code>mirror_root</code>).</li>
+<li>Add <code>ensure_target_clean(&amp;Utf8Path)</code> to
+<a href="../../../src/commands/context.rs">src/commands/context.rs</a>; existing
+call sites switch to use it with <code>ctx.mirror_root</code>.</li>
+<li>Reuse the deleted <code>write_skill_set</code> shape:
+stage in <code>&lt;canonical&gt;/.skillnet-tmp/&lt;skill&gt;</code>, then <code>fs_ops::replace_dir</code>
+atomically. The old code in <code>git show 15a1352^:src/reconcile.rs</code> lines
+197-264 is a template — copy the structure, drop the multi-source
+<code>Choice</code> machinery, keep the staging + atomic-rename + manifest-omission
+parts.</li>
+<li>After a successful pull, re-run <code>materialize_view_with_options</code> with
+<code>force = true</code> for the affected skill only — the entry was already a
+real dir, demotion to symlink is unambiguous now that canonical holds
+identical content.</li>
+</ol>
+<h3 id="phase-c--cli-surface"><a class="header" href="#phase-c--cli-surface">Phase C — CLI surface</a></h3>
+<p>Two-tier surface, no breaking changes:</p>
+<ol>
+<li><strong>New per-scope subcommand</strong> <code>skillnet view reconcile</code> and
+<code>skillnet project reconcile</code> (parallel to <code>sync</code>/<code>status</code>/<code>diff</code>):
+<pre><code>skillnet view reconcile --all
+    [--allow-delete] [--force-canonical] [--prefer view|canonical]
+    [--adopt-new]
+</code></pre>
+<ul>
+<li>Default (no flags): pull <code>ViewNewer</code> outcomes only; bail on anything
+that needs a decision; print a status table for the rest.</li>
+<li><code>--prefer view</code> / <code>--prefer canonical</code>: resolve <code>EqualMtimeDifferentContent</code>
+and <code>BothAdvanced</code> deterministically.</li>
+<li><code>--force-canonical</code>: existing <code>--force</code> is a footgun (destroys view);
+rename it to <code>--force-canonical</code> here for clarity and accept the old
+name as a deprecated alias for one release.</li>
+<li><code>--adopt-new</code>: promote unknown view skills into canonical.</li>
+</ul>
+</li>
+<li><strong>Top-level convenience</strong> <code>skillnet sync --pull</code>: runs <code>view reconcile --all</code> then <code>project reconcile --all</code> then the existing
+<code>materialize_view</code>/<code>materialize_project</code> pass. Default of
+<code>skillnet sync</code> (no flag) stays exactly as today.</li>
+<li>Standard JSON output via <code>--format json</code> for the report, matching the
+existing <code>view_status_with_options</code> pattern.</li>
+<li>Honour <code>--dry-run</code> and <code>--allow-dirty-destination</code> from the global flag
+set already in
+<a href="../../../src/cli/args.rs#L32-L38">src/cli/args.rs:32-38</a>.</li>
+</ol>
+<h3 id="phase-d--doctor-wiring"><a class="header" href="#phase-d--doctor-wiring">Phase D — Doctor wiring</a></h3>
+<p>In <a href="../../../src/commands/doctor.rs">src/commands/doctor.rs</a>, extend
+<code>check_global_view</code> and the project-view check to upgrade a <code>NonSymlink</code>
+entry’s severity when it would be a pull candidate:</p>
+<ul>
+<li><code>NonSymlink</code> with <code>view newer mtime</code> → <code>Severity::Warn</code> with hint
+<code>"run skillnet view reconcile --scope &lt;scope&gt; to pull view-side edits before sync"</code>.</li>
+<li><code>NonSymlink</code> with <code>canonical newer mtime</code> or <code>Identical</code> → keep
+<code>Severity::Error</code> (today’s behaviour); these are unambiguously
+reproducible by <code>sync --force</code>.</li>
+</ul>
+<p>This way the new behaviour is <em>discoverable</em> without changing default
+mutation.</p>
+<h3 id="phase-e--docs-tests-release"><a class="header" href="#phase-e--docs-tests-release">Phase E — Docs, tests, release</a></h3>
+<ul>
+<li><a href="../commands.html">docs/src/commands.md</a>: add a <code>reconcile</code> section
+explaining the comparator ladder, the conflict outcomes, and the
+intentional asymmetry (view → canonical only).</li>
+<li><a href="../migration/option-b.html">docs/src/migration/option-b.md</a>: append a
+“Reconcile-pull (post-0.5.x)” note clarifying that this is <em>not</em> a return
+to multi-source arbitration.</li>
+<li><a href="../../../CHANGELOG.html">CHANGELOG.md</a>: record the new commands and flag
+defaults under <code>[Unreleased]</code>; cut a <code>0.6.0</code> release because the new
+behaviour rewords the v0.5.0 advertised “no reconcile” stance.</li>
+<li><a href="../../../nix/hm-module.nix">nix/hm-module.nix</a>: expose an opt-in
+<code>programs.skillnet.activation.reconcile = true|false</code> so users can wire
+reconcile-pull into <code>home-manager switch</code> activation if desired. Default
+must be <code>false</code>.</li>
+<li><a href="../../../tests/">tests/</a>: add <code>tests/reconcile_pull.rs</code> covering each
+outcome class; extend <code>tests/cli.rs</code> to assert the new <code>--pull</code> flag is
+parsed; add a CLI default-shape test analogous to
+<code>sync_command_defaults_to_safe_flags</code> to pin the new subcommand defaults.</li>
+</ul>
+<h3 id="sequencing"><a class="header" href="#sequencing">Sequencing</a></h3>
+<p>A → B can be done in one cohesive phase (both touch the library). C and D
+depend on A+B. E ships alongside C/D. No parallelism is needed; one
+implementer end-to-end is the cheapest path.</p>
+<h2 id="open-decisions-for-the-user"><a class="header" href="#open-decisions-for-the-user">Open Decisions For The User</a></h2>
+<ol>
+<li><strong>Adoption policy for unknown view skills.</strong> Recommended default: never
+adopt without <code>--adopt-new</code>. Alternative: refuse (<code>--allow-delete</code> and
+nothing else). Pick one — it shapes Phase A’s outcome enum.</li>
+<li><strong>CLI shape for the new behaviour.</strong> Recommended: per-scope
+<code>skillnet view reconcile</code> + <code>skillnet project reconcile</code> and top-level
+<code>skillnet sync --pull</code>. Alternative: a top-level <code>skillnet pull</code>
+subcommand. The recommended path keeps the per-scope verbs aligned with
+the existing <code>sync</code>/<code>status</code>/<code>diff</code> triad.</li>
+<li><strong><code>--force</code> rename.</strong> Recommended: rename current <code>--force</code> to
+<code>--force-canonical</code> on the new reconcile commands (kept as
+<code>--force</code> on the existing <code>sync</code> commands to avoid breaking). Reject if
+you prefer flag stability over clarity.</li>
+<li><strong>HM activation behaviour.</strong> Recommended: ship the HM toggle in Phase E
+but leave it <code>false</code> by default. Confirm or pick “do not expose at all
+until requested”.</li>
+<li><strong>Per-target dirty-destination policy.</strong> Recommended: extend the global
+<code>--allow-dirty-destination</code> flag to gate <em>every</em> canonical write,
+including project canonicals. Alternative: per-scope flag like
+<code>--allow-dirty &lt;scope&gt;</code>. The recommended path keeps the flag surface
+minimal.</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../planning/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../planning/two-way-sync-and-config-centralisation-research.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../planning/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../planning/two-way-sync-and-config-centralisation-research.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

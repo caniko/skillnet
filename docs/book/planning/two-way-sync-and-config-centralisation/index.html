@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Migration - skillnet</title>
+        <title>Two-way sync plan set - skillnet</title>
 
 
         <!-- Custom HTML head -->
@@ -12,33 +12,33 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
-        <link rel="stylesheet" href="../css/variables-8adf115d.css">
-        <link rel="stylesheet" href="../css/general-2459343d.css">
-        <link rel="stylesheet" href="../css/chrome-ae938929.css">
-        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../../css/general-2459343d.css">
+        <link rel="stylesheet" href="../../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "../";
+            const path_to_root = "../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2ee62a9d.js";
+            window.path_to_searchindex_js = "../../searchindex-2ee62a9d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-19427bed.js"></script>
+        <script src="../../toc-19427bed.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -105,7 +105,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -140,7 +140,7 @@
                     <h1 class="menu-title">skillnet</h1>
 
                     <div class="right-buttons">
-                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
 
@@ -174,97 +174,205 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="option-b-migration"><a class="header" href="#option-b-migration">Option B Migration</a></h1>
-<p><code>skillnet 0.5.0</code> removed reconcile source arbitration. <code>skillnet 0.5.1</code>
-finishes the migration by making <code>doctor</code> validate the new canonical/view
-layout and by adding a fresh-host clone helper.</p>
-<h2 id="schema"><a class="header" href="#schema">Schema</a></h2>
-<p>Removed legacy fields:</p>
+                        <h1 id="plan--two-way-sync-and-config-centralisation"><a class="header" href="#plan--two-way-sync-and-config-centralisation">Plan — Two-way sync and config centralisation</a></h1>
+<blockquote>
+<p><strong>Recommended Codex model for plan-set orchestration: GPT 5.5 high</strong></p>
+<p>Five phases spanning a Rust library refactor with atomicity primitives,
+a CLI/UX surface change with new flags + exit-code semantics + JSON schema
+additions, a new subcommand for config file migration, a Nix module
+extension, and a docs/release rollup. Multiple file-level overlaps require
+sequencing judgement; an orchestrator that confuses the dependency edges
+will either serialise too aggressively (slow) or overlap phases that touch
+the same <code>src/cli/args.rs</code> (merge pain). 5.5 high holds that quality bar
+without paying for <code>xhigh</code> on a 5-phase plan that has been pre-designed.</p>
+</blockquote>
+<h2 id="scope-and-current-state"><a class="header" href="#scope-and-current-state">Scope and current state</a></h2>
+<p>This plan turns the design in
+<a href="../two-way-sync-and-config-centralisation-research.html">two-way-sync-and-config-centralisation-research.md</a>
+into executable phases. It implements:</p>
+<ol>
+<li>Promotion-on-newer for <code>skillnet sync</code> (view → canonical when a view entry
+is a real directory whose content is newer than canonical), with dry-run-
+on-conflict as the default and explicit <code>--apply-promote</code> / <code>--no-promote</code>
+/ <code>--force</code> / <code>--prefer</code> / <code>--adopt-new</code> opt-ins.</li>
+<li>Per-target <code>--allow-dirty-destination</code> gating, so promotion into a project
+canonical is gated by <em>that project’s</em> git working tree.</li>
+<li>New <code>skillnet config migrate</code> subcommand that moves
+<code>skillnet.toml</code> and <code>skillnet.catalog.toml</code> from a working-directory
+pickup to <code>$XDG_CONFIG_HOME/skillnet/</code>.</li>
+<li>Legacy-cwd config discovery deprecation warning (rank 4 of the discovery
+ladder), to be removed in <code>0.7.0</code>.</li>
+<li>HM module additions exposing <code>programs.skillnet.activation.{promote, failOnConflict, allowDelete}</code>, with activation defaulting to
+<code>--no-promote</code> so HM switches never silently mutate canonical.</li>
+<li>Doctor severity classification for <code>NonSymlink</code> entries that distinguishes
+<code>Identical</code>, <code>ViewNewer</code>, <code>CanonicalNewer</code>, <code>EqualMtimeDifferentContent</code>,
+<code>BothAdvanced</code>, and <code>AdoptCandidate</code> outcomes with appropriate
+hint messages.</li>
+<li>Status JSON additions exposing <code>would_promote</code> and <code>needs_tie_break</code>
+counts plus the per-<code>DriftEntry</code> mtime / sha fields.</li>
+<li>Docs + CHANGELOG + a help-output snapshot test pinning the new flag table.</li>
+</ol>
+<p>Current repo state (skillnet <code>main</code>, working tree clean except this plan
+set + the dossier): <code>0.5.1</code> baseline with <code>skillnet sync</code> already chaining
+<code>view sync --all</code> and <code>project sync --all</code> but erroring on non-symlink view
+entries unless <code>--force</code> is passed.
+<a href="../reconcile-pull-research.html">reconcile-pull-research.md</a> is the prior
+research that this design builds on.</p>
+<h2 id="phase-table"><a class="header" href="#phase-table">Phase table</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Phase</th><th>File</th><th>Model</th><th>Depends on</th><th>Blocks</th><th>Touches</th><th>Parallel with</th></tr>
+</thead>
+<tbody>
+<tr><td>01</td><td><a href="./01-library-primitives.html">01-library-primitives.md</a></td><td>5.5 high</td><td>—</td><td>02, 04</td><td><code>src/fs_ops.rs</code>, <code>src/view.rs</code>, <code>src/commands/context.rs</code>, new fixtures</td><td>—</td></tr>
+<tr><td>02</td><td><a href="./02-cli-surface-and-doctor/README.html">02-cli-surface-and-doctor/</a></td><td>5.5 medium (orchestration)</td><td>01</td><td>03, 04, 05</td><td><code>src/cli/args.rs</code>, <code>src/cli/mod.rs</code>, <code>src/commands/{view,project,status,doctor}.rs</code>, <code>tests/cli.rs</code></td><td>sub-01 and sub-02 in parallel</td></tr>
+<tr><td>03</td><td><a href="./03-config-centralisation.html">03-config-centralisation.md</a></td><td>5.5 medium</td><td>02 (file-level conflict on <code>src/cli/args.rs</code>)</td><td>05</td><td><code>src/config.rs</code>, <code>src/cli/args.rs</code>, <code>src/cli/mod.rs</code>, new <code>src/commands/config.rs</code>, new <code>tests/config_migrate.rs</code></td><td>—</td></tr>
+<tr><td>04</td><td><a href="./04-hm-module.html">04-hm-module.md</a></td><td>5.5 medium</td><td>02</td><td>05</td><td><code>nix/hm-module.nix</code>, <code>nix/test-hm-module.nix</code></td><td>03</td></tr>
+<tr><td>05</td><td><a href="./05-docs-release-rollup.html">05-docs-release-rollup.md</a></td><td>5.5 medium</td><td>02, 03, 04</td><td>—</td><td><code>docs/src/commands.md</code>, new <code>docs/src/migration/centralised-config.md</code>, <code>docs/src/SUMMARY.md</code>, <code>CHANGELOG.md</code>, <code>README.md</code>, <code>tests/cli.rs</code> (snapshot)</td><td>—</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="parallelism-layer"><a class="header" href="#parallelism-layer">Parallelism layer</a></h2>
+<h3 id="wave-0--start-of-plan"><a class="header" href="#wave-0--start-of-plan">Wave 0 — start of plan</a></h3>
 <ul>
-<li><code>[global].sources</code></li>
-<li><code>[global].sync_paths</code></li>
-<li><code>[global].stale_codex_skill_paths</code></li>
-<li><code>project_source_rules</code></li>
-<li><code>extra_sources</code></li>
+<li><strong>Phase 01</strong> (library primitives + canonical write + per-target dirty
+gate). Only one phase can start because everything else either needs the
+comparator types or the per-target gate function it introduces.</li>
 </ul>
-<p>Replacement global schema:</p>
-<pre><code class="language-toml">[global]
-views = [
-  { label = "claude", path = "/home/alice/.claude/skills", scope = "global" },
-  { label = "agents", path = "/home/alice/.agents/skills", scope = "global" },
-]
-</code></pre>
-<p>Replacement project schema:</p>
-<pre><code class="language-toml">[[projects]]
-name = "demo"
-path = "/home/alice/Projects/demo"
-origin = "git@codeberg.org:alice/demo.git"
-canonical_rel = ".skills"
-views = [
-  { rel = ".claude/skills", label = "claude" },
-  { rel = ".agents/skills", label = "agents" },
-]
-</code></pre>
-<p><code>origin</code> is optional and is used only by <code>skillnet project clone --all</code>.
-<code>canonical_rel</code> defaults to <code>.skills</code>; project views default to
-<code>.claude/skills</code> and <code>.agents/skills</code>.</p>
-<h2 id="layout"><a class="header" href="#layout">Layout</a></h2>
+<h3 id="wave-1--after-phase-01-lands"><a class="header" href="#wave-1--after-phase-01-lands">Wave 1 — after Phase 01 lands</a></h3>
 <ul>
-<li>Global canonical store: <code>&lt;mirror_root&gt;/global/</code></li>
-<li>Global views: configured <code>[global].views[*].path</code></li>
-<li>Project canonical store: <code>&lt;project&gt;/&lt;canonical_rel&gt;/</code></li>
-<li>Project committed views: <code>&lt;project&gt;/&lt;view.rel&gt;/</code></li>
-<li>Project mirror aggregator: <code>&lt;mirror_root&gt;/projects/&lt;project-name&gt;</code> symlink
-to <code>&lt;project&gt;/&lt;canonical_rel&gt;/</code></li>
+<li><strong>Phase 02</strong> is the only phase that can start. It has two parallel
+sub-layers inside (<code>sub-01-cli-surface</code>, <code>sub-02-doctor-wiring</code>) — the
+user can dispatch both to fresh sessions concurrently and merge after.
+See the phase <code>README.md</code> for the merge plan.</li>
 </ul>
-<p>Global views use absolute symlinks to canonical skills. Project views use
-relative symlinks so they can be committed to project repositories.</p>
-<h2 id="fresh-host-bootstrap"><a class="header" href="#fresh-host-bootstrap">Fresh Host Bootstrap</a></h2>
-<p>On a new host:</p>
-<pre><code class="language-sh">git clone git@codeberg.org:caniko/ai-skills.git /path/to/ai-skills
-skillnet project clone --all --dry-run
-skillnet project clone --all
-home-manager switch
-skillnet doctor
-</code></pre>
-<p><code>project clone --all</code> skips existing project paths, warns for projects without
-<code>origin</code>, clones missing projects with configured origins, then runs
-<code>skillnet project sync --all</code> to materialise in-repo views and mirror
-aggregator symlinks.</p>
-<p>By default, HTTPS origins are refused. Use <code>--ssh-strict=false</code> only when an
-HTTPS clone is intentional.</p>
-<h2 id="doctor"><a class="header" href="#doctor">Doctor</a></h2>
-<p><code>skillnet doctor</code> now reports:</p>
+<p>Phases 03 and 04 <em>cannot</em> start in Wave 1:</p>
 <ul>
-<li>missing canonical stores;</li>
-<li>view entries that are not symlinks;</li>
-<li>view symlinks that are broken or point outside the canonical store;</li>
-<li>canonical skills missing from a configured view;</li>
-<li>orphan view entries not matching any canonical skill name;</li>
-<li>missing, non-symlink, broken, or unexpected project aggregator symlinks.</li>
+<li>Phase 03 touches <code>src/cli/args.rs</code> and <code>src/cli/mod.rs</code>, which Phase 02
+also rewrites. Parallelising creates merge pain on a file that is the
+CLI’s single source of truth — serialise.</li>
+<li>Phase 04 wires the HM activation script to call <code>skillnet sync --apply-promote</code> / <code>--no-promote</code>, which Phase 02 introduces. Drafting
+the Nix code earlier is possible, but the snapshot tests in
+<code>nix/test-hm-module.nix</code> cannot pass until Phase 02 ships the flags.
+Serialise.</li>
 </ul>
-<p>Missing project repository paths are warnings, not errors, because a host may
-be partially bootstrapped before all project repositories are cloned.</p>
-<h2 id="reconcile-pull-and-centralised-config-060"><a class="header" href="#reconcile-pull-and-centralised-config-060">Reconcile-Pull And Centralised Config (<code>0.6.0</code>)</a></h2>
-<p><code>0.6.0</code> partially reverses <code>0.5.0</code>’s “no reconcile” stance, but only in a
-narrow promotion path. <code>skillnet sync</code> can promote a user-visible non-symlink
-view entry back into canonical when the view content is newer, but the default
-run only reports would-promote work and exits <code>2</code>. Mutation requires
-<code>--apply-promote</code>; <code>--no-promote</code> keeps <code>0.5.x</code> behaviour; Home Manager
-activation never promotes by default.</p>
-<p>For the XDG migration, <code>skillnet config migrate</code>, and the Home Manager
-declarative pattern, see
-<a href="centralised-config.html">Centralised config (0.6.0)</a>.</p>
+<h3 id="wave-2--after-phase-02-lands"><a class="header" href="#wave-2--after-phase-02-lands">Wave 2 — after Phase 02 lands</a></h3>
+<ul>
+<li><strong>Phase 03</strong> and <strong>Phase 04</strong> are independent of each other and can run
+in parallel. Phase 03 is pure Rust (<code>src/commands/config.rs</code>,
+<code>src/config.rs</code> deprecation warning, <code>src/cli/args.rs</code> subcommand
+addition). Phase 04 is pure Nix. No file conflict.</li>
+</ul>
+<h3 id="wave-3--after-phase-03-and-phase-04-land"><a class="header" href="#wave-3--after-phase-03-and-phase-04-land">Wave 3 — after Phase 03 and Phase 04 land</a></h3>
+<ul>
+<li><strong>Phase 05</strong> consolidates docs, CHANGELOG framing, SUMMARY entry, and
+the <code>skillnet sync --help</code> snapshot test. The snapshot needs the final
+flag table, so it cannot land before Phase 02; the migration doc cannot
+finalise before Phase 03; the HM quickstart cannot finalise before
+Phase 04. End-of-plan rollup.</li>
+</ul>
+<h3 id="wave-4--plan-exhausted"><a class="header" href="#wave-4--plan-exhausted">Wave 4 — plan exhausted</a></h3>
+<p>All five phases landed; <code>cargo test</code>, <code>cargo clippy --all-targets -- -D warnings</code>, <code>nix flake check</code>, <code>mdbook build docs</code> all clean.
+Version bump to <code>0.6.0</code> lives in Phase 05’s plan steps; the tag and
+release notes are a separate <code>cargo release</code>-style hand-off and not part
+of this plan.</p>
+<h2 id="whole-set-acceptance-criteria"><a class="header" href="#whole-set-acceptance-criteria">Whole-set acceptance criteria</a></h2>
+<ul>
+<li><input disabled="" type="checkbox"> <code>skillnet sync</code> (no flags) on a fixture where every view entry is
+either a clean symlink or a <code>ViewNewer</code> non-symlink prints would-
+promote lines and exits <code>2</code>; reruns are idempotent.</li>
+<li><input disabled="" type="checkbox"> <code>skillnet sync --apply-promote</code> on the same fixture promotes view
+→ canonical (preserving mtimes) and demotes to symlink in one shot.
+Rerun returns code <code>0</code>.</li>
+<li><input disabled="" type="checkbox"> <code>skillnet sync --no-promote</code> errors on the same fixture without
+mutating canonical (parity with <code>0.5.x</code> behaviour).</li>
+<li><input disabled="" type="checkbox"> <code>skillnet sync</code> against a fixture with a non-clean per-project git
+working tree refuses to promote into that project’s canonical and
+reports the gate, even when <code>mirror_root</code> is clean.
+<code>--allow-dirty-destination</code> bypasses it.</li>
+<li><input disabled="" type="checkbox"> <code>skillnet config migrate</code> against a fixture with both legacy-cwd
+and XDG config files present and content-equal deletes the cwd file
+and writes a breadcrumb. With content-different, exits <code>1</code> unless
+<code>--force</code> is passed.</li>
+<li><input disabled="" type="checkbox"> Running <code>skillnet</code> from a directory that contains a legacy-cwd
+config but no XDG config emits a deprecation warning to stderr (one
+per invocation) on the discovery fallthrough path.</li>
+<li><input disabled="" type="checkbox"> <code>skillnet doctor</code> against a fixture with one <code>ViewNewer</code> and one
+<code>CanonicalNewer</code> entry classifies them at <code>Warn</code> and <code>Error</code>
+respectively with the documented hint messages.</li>
+<li><input disabled="" type="checkbox"> <code>skillnet status --format json</code> emits non-null <code>would_promote</code> and
+<code>needs_tie_break</code> fields on every row and populates per-<code>DriftEntry</code>
+mtime / sha fields when the entry is a <code>NonSymlink</code>.</li>
+<li><input disabled="" type="checkbox"> <code>nix flake check</code> evaluates the HM module with
+<code>programs.skillnet.activation.promote = true</code> and <code>false</code>, and the
+activation script snapshot matches the expected flag set for each.</li>
+<li><input disabled="" type="checkbox"> <code>docs/src/commands.md</code> documents every flag in the §1 table from
+the design dossier, in the same order. <code>mdbook build docs</code> is
+clean.</li>
+<li><input disabled="" type="checkbox"> <code>cargo test --workspace</code>, <code>cargo clippy --all-targets -- -D     warnings</code>, and <code>cargo fmt --check</code> all pass at HEAD of the final
+phase.</li>
+</ul>
+<h2 id="global-constraints"><a class="header" href="#global-constraints">Global constraints</a></h2>
+<ul>
+<li>The plan ships under <code>0.6.0</code>. No <code>0.5.x</code> patch release. The CHANGELOG
+framing in Phase 05 must own the partial reversal of the <code>0.5.0</code> “no
+reconcile” stance — see the design dossier
+<a href="../two-way-sync-and-config-centralisation-research.html#12-migration-and-release-sequencing">§ Migration and release sequencing</a>.</li>
+<li>Legacy-cwd config discovery (rank 4 of the discovery ladder in
+<code>src/config.rs</code>) is <strong>not</strong> removed in this plan. The deprecation
+warning lands in <code>0.6.0</code>; the removal is <code>0.7.0</code> work, deliberately
+out of scope.</li>
+<li>Per-skill atomicity is non-negotiable. No phase should introduce
+per-file three-way merge logic. <code>BothAdvanced</code> always defers to
+<code>--prefer view|canonical</code>.</li>
+<li>The <code>RECONCILIATION.md</code> manifest pattern from pre-<code>0.5.0</code> reconcile is
+not revived. Telemetry stays in sync summary lines, dry-run output,
+and the calibration DB (untouched here).</li>
+<li><code>--allow-dirty-destination</code> keeps its name and global-flag shape. Per-
+scope variants (<code>--allow-dirty &lt;scope&gt;</code>) are explicitly out of scope.</li>
+</ul>
+<h2 id="shared-file-lockstep"><a class="header" href="#shared-file-lockstep">Shared-file lockstep</a></h2>
+<p>Two files are touched by multiple phases. Both phases below must take
+explicit care:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>File</th><th>Phases</th><th>Coordination</th></tr>
+</thead>
+<tbody>
+<tr><td><code>src/cli/args.rs</code></td><td>02, 03</td><td>Phase 03 starts only after Phase 02 lands. Phase 03 adds a <code>Config { command: ConfigCommand }</code> variant to the existing <code>Command</code> enum and a <code>ConfigCommand::Migrate { ... }</code> subcommand. Phase 02 owns the <code>Sync { ... }</code> variant edits. Both phases must keep <code>disable_help_subcommand = true</code> on the enum.</td></tr>
+<tr><td><code>src/cli/mod.rs</code></td><td>02, 03</td><td>Same sequencing. Phase 02 expands the <code>Command::Sync</code> arm in <code>run()</code>; Phase 03 adds a <code>Command::Config</code> arm. Both reuse <code>Context::load</code> for read paths, but Phase 03’s <code>Migrate</code> subcommand operates on raw paths and does not require a full <code>Context</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="reference"><a class="header" href="#reference">Reference</a></h2>
+<ul>
+<li>Design dossier (load-bearing input for every phase):
+<a href="../two-way-sync-and-config-centralisation-research.html">two-way-sync-and-config-centralisation-research.md</a>.
+Each phase file cross-references the dossier section it implements.</li>
+<li>Prior research dossier (background and primitives recovery):
+<a href="../reconcile-pull-research.html">reconcile-pull-research.md</a>.</li>
+<li>Migration source (the <code>0.5.0</code> “no reconcile” stance that 0.6.0
+partially reverses): <a href="../../migration/option-b.html">docs/src/migration/option-b.md</a>.</li>
+<li>Current command surface: <a href="../../commands.html">docs/src/commands.md</a>.</li>
+</ul>
+<h2 id="dispatch-reminder"><a class="header" href="#dispatch-reminder">Dispatch reminder</a></h2>
+<p>Run each phase in a fresh Codex session pointed at its markdown file. For
+Phase 02, you can fan the two sub-layers out to two concurrent sessions
+and merge after — see the phase <code>README.md</code> for the merge plan. Prompt
+<code>verify</code> when the plan is done to audit acceptance criteria against the
+repo state.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../hook-ingestion.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../planning/two-way-sync-and-config-centralisation-research.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../migration/centralised-config.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../planning/two-way-sync-and-config-centralisation/01-library-primitives.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -274,11 +382,11 @@ declarative pattern, see
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../hook-ingestion.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../planning/two-way-sync-and-config-centralisation-research.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../migration/centralised-config.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../planning/two-way-sync-and-config-centralisation/01-library-primitives.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -298,13 +406,13 @@ declarative pattern, see
         </script>
 
 
-        <script src="../elasticlunr-ef4e11c1.min.js"></script>
-        <script src="../mark-09e88c2c.min.js"></script>
-        <script src="../searcher-c2a407aa.js"></script>
+        <script src="../../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../../mark-09e88c2c.min.js"></script>
+        <script src="../../searcher-c2a407aa.js"></script>
 
-        <script src="../clipboard-1626706a.min.js"></script>
-        <script src="../highlight-abc7f01d.js"></script>
-        <script src="../book-a0b12cfe.js"></script>
+        <script src="../../clipboard-1626706a.min.js"></script>
+        <script src="../../highlight-abc7f01d.js"></script>
+        <script src="../../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
 

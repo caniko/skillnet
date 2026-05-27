@@ -1,0 +1,628 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>03 Config centralisation - skillnet</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../../css/general-2459343d.css">
+        <link rel="stylesheet" href="../../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex-2ee62a9d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc-19427bed.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">skillnet</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="phase-03--config-centralisation-skillnet-config-migrate--deprecation"><a class="header" href="#phase-03--config-centralisation-skillnet-config-migrate--deprecation">Phase 03 — Config centralisation (<code>skillnet config migrate</code> + deprecation)</a></h1>
+<blockquote>
+<p><strong>Recommended Codex model: GPT 5.5 medium</strong></p>
+<p>New subcommand with a six-row decision table over (legacy-cwd present
+× XDG present × content equal) plus a small deprecation warning at
+the discovery fallthrough point. The decision table is pinned by
+design § 6 and the discovery ladder already exists in
+<code>src/config.rs</code>. Sub-agent role: implements a contained workflow
+(read paths, classify state, mutate files, write breadcrumb) without
+touching the rest of the CLI. Moderate complexity from the matrix
+over file-state combinations, but no architectural decisions.
+5.5 medium is the right tier.</p>
+</blockquote>
+<h2 id="working-tree"><a class="header" href="#working-tree">Working tree</a></h2>
+<p><code>/data/nvme0/can/Projects/skillnet</code>. <strong>Must start after Phase 02 has
+landed on <code>main</code></strong> because both phases edit <code>src/cli/args.rs</code> and
+<code>src/cli/mod.rs</code>. Rebase before starting.</p>
+<h2 id="goal"><a class="header" href="#goal">Goal</a></h2>
+<p><code>skillnet config migrate</code> exists and implements the design § 6
+decision table. The legacy-cwd config discovery rank (rank 4 of the
+ladder in <code>src/config.rs</code>) prints a deprecation warning to stderr
+exactly once per invocation when it fires.</p>
+<h2 id="why-this-matters-now"><a class="header" href="#why-this-matters-now">Why this matters now</a></h2>
+<p>The user’s live configs at
+<code>/data/nvme0/can/Projects/ai-skills/skillnet.toml</code> and
+<code>/data/nvme0/can/Projects/ai-skills/skillnet.catalog.toml</code> only
+resolve when <code>skillnet</code> is invoked from inside that directory. After
+the user runs <code>skillnet config migrate</code>, the configs live at
+<code>$XDG_CONFIG_HOME/skillnet/</code> and resolve from any cwd. This unlocks
+the HM module work in Phase 04: declaring
+<code>programs.skillnet.settings</code> writes the same content under the same
+XDG path, and the CLI picks it up.</p>
+<p>The deprecation warning is the announcement vector for the <code>0.7.0</code>
+removal. Without it, users on <code>0.6.0</code> who keep using the cwd
+fallthrough get no warning that their workflow is about to break.</p>
+<h2 id="out-of-scope"><a class="header" href="#out-of-scope">Out of scope</a></h2>
+<ul>
+<li>Removing the legacy-cwd rank from the discovery ladder. That is
+<code>0.7.0</code> work, explicitly per design § 12.</li>
+<li>Auto-running <code>skillnet config migrate</code> from any other command.
+The user runs it once, deliberately.</li>
+<li>Detection of HM-managed configs as “do not migrate”. Phase 04
+documents this in the HM quickstart; the CLI’s HM-managed
+detection (design § 7) is in Phase 04, not here.</li>
+<li>Migration of any file other than <code>skillnet.toml</code> and
+<code>skillnet.catalog.toml</code>. Calibration databases, hook settings,
+etc. are not in scope.</li>
+<li>Changes to other CLI subcommands. This phase adds one new
+subcommand variant; the existing variants are untouched.</li>
+</ul>
+<h2 id="plan"><a class="header" href="#plan">Plan</a></h2>
+<ol>
+<li>
+<p><strong>Read inputs.</strong> Open
+<a href="../two-way-sync-and-config-centralisation-research.html#6-skillnet-config-migrate">design § 6 <code>skillnet config migrate</code></a>
+and <a href="../two-way-sync-and-config-centralisation-research.html#12-migration-and-release-sequencing">§ 12 Migration and release sequencing</a>.
+Open <a href="../../../src/config.rs">src/config.rs</a>, specifically:</p>
+<ul>
+<li><code>default_config_path</code> / <code>default_catalog_config_path</code> / <code>legacy_config_path</code> / <code>legacy_catalog_config_path</code> (lines 440-462).</li>
+<li><code>default_xdg_config_path</code> (lines 456-462).</li>
+</ul>
+<p>Open <a href="../../../src/cli/args.rs">src/cli/args.rs</a> and re-read the
+<code>Command</code> enum to understand the existing subcommand pattern
+(e.g., <code>Project { command: ProjectCommand }</code>).</p>
+<p>Open <a href="../../../src/cli/mod.rs">src/cli/mod.rs</a> and re-read
+<code>resolve_config_path</code> / <code>resolve_catalog_config_path</code> (lines
+102-138). The deprecation warning hooks into the rank-4 branch
+of those functions.</p>
+</li>
+<li>
+<p><strong>Add the <code>Config</code> subcommand to <code>Command</code>.</strong> In
+<code>src/cli/args.rs</code>, add a new variant after <code>Sync</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Manage skillnet's configuration files.
+Config {
+    #[command(subcommand)]
+    command: ConfigCommand,
+},
+<span class="boring">}</span></code></pre>
+<p>Add the subcommand enum:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum ConfigCommand {
+    /// Move skillnet.toml and skillnet.catalog.toml from the
+    /// legacy working-directory location to $XDG_CONFIG_HOME/skillnet/.
+    Migrate {
+        /// Print decisions without touching the filesystem.
+        #[arg(long)]
+        dry_run: bool,
+        /// Overwrite XDG when both locations exist and differ.
+        #[arg(long)]
+        force: bool,
+        /// Delete .skillnet.toml.moved-to-xdg breadcrumb files at the
+        /// rank-4 discovery location, if present, then exit.
+        #[arg(long)]
+        remove_breadcrumbs: bool,
+    },
+}
+<span class="boring">}</span></code></pre>
+<p>Notes:</p>
+<ul>
+<li><code>--remove-breadcrumbs</code> is mutually exclusive with the actual
+migrate behaviour. Use <code>conflicts_with_all = ["dry_run", "force"]</code>
+on it.</li>
+<li>The subcommand operates on cwd, not on <code>--config</code> / <code>--catalog-config</code>
+overrides. Document this in the help string for <code>Migrate</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Add <code>Command::Config</code> arm to <code>cli::run</code>.</strong> In <code>src/cli/mod.rs</code>,
+add the arm after <code>Command::Sync</code>:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>Command::Config { command } =&gt; {
+    commands::config::run(command, dry_run)
+}
+<span class="boring">}</span></code></pre>
+<p>The <code>Config</code> subcommand does <strong>not</strong> need a full <code>Context</code> — it
+operates on raw paths and does not load the skillnet config (it
+<em>is</em> the skillnet config). Bypass <code>Context::load</code>.</p>
+</li>
+<li>
+<p><strong>Create <code>src/commands/config.rs</code>.</strong> Module skeleton:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::fs;
+use anyhow::{bail, Context as AnyhowContext, Result};
+use camino::{Utf8Path, Utf8PathBuf};
+use crate::cli::args::ConfigCommand;
+use crate::config::{
+    default_config_path, default_catalog_config_path,
+    legacy_config_path, legacy_catalog_config_path,
+};
+
+pub fn run(command: ConfigCommand, global_dry_run: bool) -&gt; Result&lt;()&gt; {
+    match command {
+        ConfigCommand::Migrate { dry_run, force, remove_breadcrumbs } =&gt; {
+            let dry_run = dry_run || global_dry_run;
+            if remove_breadcrumbs {
+                return remove_breadcrumb_files(dry_run);
+            }
+            migrate_one("skillnet.toml", &amp;legacy_config_path(), &amp;default_config_path()?, dry_run, force)?;
+            migrate_one("skillnet.catalog.toml", &amp;legacy_catalog_config_path(), &amp;default_catalog_config_path()?, dry_run, force)?;
+            Ok(())
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<p>The <code>migrate_one</code> function implements the design § 6 decision
+table for one file at a time:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum MigrateAction {
+    NoLegacyAbsent,            // legacy absent, XDG absent — no-op
+    AlreadyCentralised,        // legacy absent, XDG present — no-op
+    MoveLegacyToXdg,           // legacy present, XDG absent — move
+    DeleteLegacyEqualContent,  // both present, content equal — delete cwd
+    RefuseDifferent,           // both present, content differs — error unless --force
+    ForceOverwrite,            // both present, content differs, --force — overwrite
+}
+
+fn classify(legacy: &amp;Utf8Path, xdg: &amp;Utf8Path, force: bool) -&gt; Result&lt;MigrateAction&gt;;
+fn migrate_one(file_name: &amp;str, legacy: &amp;Utf8Path, xdg: &amp;Utf8Path, dry_run: bool, force: bool) -&gt; Result&lt;()&gt;;
+<span class="boring">}</span></code></pre>
+<p>In <code>classify</code>:</p>
+<ul>
+<li>Use <code>fs::read</code> for both files when both exist; compare with
+<code>sha2::Sha256</code> (already a dep) or raw byte comparison
+(cheaper). Raw byte comparison is fine; configs are small.</li>
+<li>The “content equal” check must be byte-equal, not “parsed
+TOML semantically equal”. Two whitespace-different files are
+not equal; the user can re-run after normalising.</li>
+</ul>
+<p>In <code>migrate_one</code>:</p>
+<ul>
+<li>On <code>NoLegacyAbsent</code>: print
+<code>"&lt;file_name&gt;: no config to migrate"</code> and return <code>Ok(())</code>.</li>
+<li>On <code>AlreadyCentralised</code>: print
+<code>"&lt;file_name&gt;: already centralised at &lt;xdg&gt;"</code> and return.</li>
+<li>On <code>MoveLegacyToXdg</code>:
+<ul>
+<li>If <code>dry_run</code>: print
+<code>"&lt;file_name&gt;: would move &lt;legacy&gt; -&gt; &lt;xdg&gt;"</code> and return.</li>
+<li>Otherwise: <code>fs::create_dir_all(xdg.parent().unwrap())</code>,
+<code>fs::rename(legacy, xdg)</code> (atomic if same filesystem),
+then write the breadcrumb at
+<code>&lt;legacy_parent&gt;/.&lt;file_name&gt;.moved-to-xdg</code> with content
+<code>&lt;xdg&gt;\n</code>. Print <code>"&lt;file_name&gt;: moved to &lt;xdg&gt;"</code>.</li>
+</ul>
+</li>
+<li>On <code>DeleteLegacyEqualContent</code>:
+<ul>
+<li>If <code>dry_run</code>: print
+<code>"&lt;file_name&gt;: would delete &lt;legacy&gt; (XDG copy is byte-identical)"</code>.</li>
+<li>Otherwise: <code>fs::remove_file(legacy)</code>, then write the
+breadcrumb. Print
+<code>"&lt;file_name&gt;: deleted &lt;legacy&gt;; XDG copy retained at &lt;xdg&gt;"</code>.</li>
+</ul>
+</li>
+<li>On <code>RefuseDifferent</code>:
+<ul>
+<li><code>bail!("&lt;file_name&gt;: both &lt;legacy&gt; and &lt;xdg&gt; exist and differ; pass --force to overwrite XDG with legacy contents")</code>.</li>
+<li>Exit code 1.</li>
+</ul>
+</li>
+<li>On <code>ForceOverwrite</code>:
+<ul>
+<li>If <code>dry_run</code>: print
+<code>"&lt;file_name&gt;: would overwrite &lt;xdg&gt; with &lt;legacy&gt; contents (--force)"</code>.</li>
+<li>Otherwise: <code>fs::create_dir_all(xdg.parent().unwrap())</code>,
+<code>fs::rename(legacy, xdg)</code>, write breadcrumb.</li>
+</ul>
+</li>
+</ul>
+<p><code>remove_breadcrumb_files</code>:</p>
+<ul>
+<li>For each of the two breadcrumb paths
+(<code>&lt;legacy_parent&gt;/.skillnet.toml.moved-to-xdg</code> and
+<code>&lt;legacy_parent&gt;/.skillnet.catalog.toml.moved-to-xdg</code>):
+<ul>
+<li>If absent: no-op (silent or one-line note, your call —
+prefer a one-line note for grep-ability).</li>
+<li>If present and <code>!dry_run</code>: <code>fs::remove_file</code>. Print
+<code>"removed breadcrumb &lt;path&gt;"</code>.</li>
+<li>If present and <code>dry_run</code>: print <code>"would remove breadcrumb &lt;path&gt;"</code>.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Register the new module.</strong> Add <code>pub mod config;</code> to
+<a href="../../../src/commands/mod.rs">src/commands/mod.rs</a>.</p>
+</li>
+<li>
+<p><strong>Add the deprecation warning.</strong> In <code>src/cli/mod.rs</code>, in
+<code>resolve_config_path</code> and <code>resolve_catalog_config_path</code>, when
+the resolver falls through to rank 4 (legacy cwd, found and
+used), print exactly once to stderr:</p>
+<pre><code>warning: using legacy working-directory config at &lt;path&gt;;
+         this discovery path is deprecated and will be removed in skillnet 0.7.0.
+         Run `skillnet config migrate` to move it to $XDG_CONFIG_HOME/skillnet/.
+</code></pre>
+<p>“Exactly once per invocation” — the warning fires once for the
+skillnet config and once for the catalog config if both fall
+through, which is fine. Do not gate behind an env var; the
+warning is the announcement vector and silencing it would
+defeat the purpose.</p>
+<p>Implementation: just add the <code>eprintln!</code> after the
+<code>legacy.exists()</code> branch returns <code>Ok(legacy)</code>. Be careful: the
+resolver currently returns early on the legacy branch only if
+the legacy file exists, so the warning is correctly
+conditioned on “we actually used the legacy path”.</p>
+</li>
+<li>
+<p><strong>Tests.</strong> Add <code>tests/config_migrate.rs</code>:</p>
+<ul>
+<li><code>migrate_noop_when_neither_present</code>: tempdir with neither
+legacy nor XDG; assert stdout contains “no config to migrate”
+for both files; exit <code>0</code>.</li>
+<li><code>migrate_noop_when_only_xdg_present</code>: tempdir with only XDG;
+assert stdout contains “already centralised”; exit <code>0</code>.</li>
+<li><code>migrate_moves_legacy_to_xdg_when_xdg_absent</code>: tempdir with
+legacy only; run migrate; assert legacy is gone, XDG has the
+content, breadcrumb is written; exit <code>0</code>.</li>
+<li><code>migrate_deletes_legacy_when_xdg_equal</code>: tempdir with both
+and identical content; assert legacy gone, XDG unchanged,
+breadcrumb written; exit <code>0</code>.</li>
+<li><code>migrate_refuses_when_xdg_differs_without_force</code>: tempdir
+with both differing; assert exit <code>1</code>, stderr mentions
+<code>--force</code>, neither file mutated.</li>
+<li><code>migrate_overwrites_xdg_with_force</code>: same fixture with
+<code>--force</code>; assert legacy gone, XDG now contains legacy
+content.</li>
+<li><code>migrate_dry_run_makes_no_changes</code>: each of the six rows
+under <code>--dry-run</code>; assert filesystems unchanged.</li>
+<li><code>migrate_remove_breadcrumbs_deletes_them</code>: tempdir with two
+pre-existing breadcrumbs; assert removal.</li>
+<li><code>deprecation_warning_fires_on_legacy_pickup</code>: integration
+test via <code>assert_cmd</code> — run any read-only skillnet command
+(e.g., <code>skillnet scope list</code>) with cwd containing a legacy
+config and no XDG config; assert stderr contains
+<code>"deprecated"</code> and <code>"0.7.0"</code>.</li>
+<li><code>no_deprecation_warning_on_xdg_pickup</code>: same command with
+XDG config present and no legacy; assert stderr does not
+contain <code>"deprecated"</code>.</li>
+</ul>
+<p>Use <code>temp_env</code> (already a dev-dep) to set <code>XDG_CONFIG_HOME</code>
+to a tempdir path per test so the migration target is
+controllable.</p>
+</li>
+<li>
+<p><strong>Run the local check loop.</strong> <code>cargo fmt</code>, <code>cargo clippy --all-targets -- -D warnings</code>, <code>cargo test --workspace</code>.</p>
+</li>
+<li>
+<p><strong>Commit.</strong> One commit, message:
+<code>feat: skillnet config migrate and legacy-cwd deprecation warning</code></p>
+</li>
+</ol>
+<h2 id="acceptance-criteria"><a class="header" href="#acceptance-criteria">Acceptance criteria</a></h2>
+<ul>
+<li><input disabled="" type="checkbox"> <code>skillnet config migrate --help</code> lists <code>--dry-run</code>,
+<code>--force</code>, <code>--remove-breadcrumbs</code> and describes that the
+command moves both <code>skillnet.toml</code> and
+<code>skillnet.catalog.toml</code>.</li>
+<li><input disabled="" type="checkbox"> All 10 tests in <code>tests/config_migrate.rs</code> pass.</li>
+<li><input disabled="" type="checkbox"> Running <code>skillnet scope list</code> with cwd containing a legacy
+<code>skillnet.toml</code> and no XDG <code>skillnet.toml</code> emits the
+deprecation warning to stderr exactly once.</li>
+<li><input disabled="" type="checkbox"> Running <code>skillnet scope list</code> with both XDG and legacy
+present prefers XDG and does <strong>not</strong> emit the warning
+(rank 3 fires; rank 4 never reached).</li>
+<li><input disabled="" type="checkbox"> <code>cargo test --workspace</code>, <code>cargo clippy --all-targets -- -D     warnings</code>, <code>cargo fmt --check</code> clean.</li>
+<li><input disabled="" type="checkbox"> <code>git log -1</code> shows the single phase commit.</li>
+<li><input disabled="" type="checkbox"> No regression in any other CLI subcommand. All existing
+<code>tests/cli.rs</code> cases still pass.</li>
+</ul>
+<h2 id="files-likely-touched"><a class="header" href="#files-likely-touched">Files likely touched</a></h2>
+<ul>
+<li><code>src/cli/args.rs</code> — add <code>Command::Config</code> variant +
+<code>ConfigCommand</code> enum + <code>Migrate</code> subcommand.</li>
+<li><code>src/cli/mod.rs</code> — add <code>Command::Config</code> arm; add deprecation
+<code>eprintln!</code> in <code>resolve_config_path</code> and
+<code>resolve_catalog_config_path</code>.</li>
+<li><code>src/commands/mod.rs</code> — register <code>pub mod config;</code>.</li>
+<li><code>src/commands/config.rs</code> — <strong>new file</strong>.</li>
+<li><code>tests/config_migrate.rs</code> — <strong>new file</strong> with 10 tests.</li>
+</ul>
+<h2 id="pitfalls"><a class="header" href="#pitfalls">Pitfalls</a></h2>
+<ul>
+<li><strong>S1: <code>fs::rename</code> across filesystems.</strong> If <code>$XDG_CONFIG_HOME</code>
+and the legacy cwd are on different filesystems (e.g., <code>/tmp</code>
+and <code>~/.config</code>), <code>fs::rename</code> fails with <code>EXDEV</code>. The user’s
+live setup has both on the same filesystem, but tests in <code>/tmp</code>
+may not. Recovery: catch <code>EXDEV</code> and fall back to
+<code>fs::copy + fs::remove_file</code>. Document the fallback in the
+source comments.</li>
+<li><strong>S2: Breadcrumb in dirty state.</strong> If the move succeeds but the
+breadcrumb write fails (read-only fs, permission issue), the
+migration is complete but the user has no trail. Make breadcrumb
+failure a warning, not an error — the actual migration succeeded.
+Print to stderr: <code>"warning: could not write breadcrumb &lt;path&gt;: &lt;err&gt;"</code>.</li>
+<li><strong>S3: <code>$XDG_CONFIG_HOME</code> not set in tests.</strong> The default falls
+back to <code>$HOME/.config</code> per <code>default_xdg_config_path</code>. In tests
+using <code>temp_env</code>, set <code>XDG_CONFIG_HOME</code> <em>and</em> <code>HOME</code> to tempdir
+paths so the resolver does not write into the user’s real
+<code>~/.config</code>. The existing <code>tests/cli.rs</code> patterns may already do
+this; copy the pattern.</li>
+<li><strong>S4: Deprecation warning at rank 4 of the catalog resolver
+could double-fire.</strong> Both <code>resolve_config_path</code> and
+<code>resolve_catalog_config_path</code> independently emit the warning.
+That is correct (each refers to a different file), but
+read carefully: a user might see two warning lines per
+invocation. That is fine; design accepts it.</li>
+<li><strong>S5: <code>Config</code> subcommand without explicit cwd handling.</strong>
+Some users will run <code>skillnet config migrate</code> from a
+directory that contains neither legacy nor XDG configs (e.g.,
+their home directory). The “noop on neither present” row of the
+table handles this cleanly. Verify in
+<code>migrate_noop_when_neither_present</code>.</li>
+<li><strong>S6: Subcommand collision with existing <code>Command::Completions</code>.</strong>
+Clap’s subcommand resolution is alphabetical in help output; the
+new <code>Config</code> subcommand sorts before <code>Doctor</code>, after <code>Calibration</code>,
+etc. That is fine; just be aware that <code>--help</code> output order
+changes. The Phase 05 snapshot test pins the final order.</li>
+<li><strong>S7: Catalog file not always present.</strong> A skillnet user may
+have <code>skillnet.toml</code> but no <code>skillnet.catalog.toml</code>. The
+per-file decision table runs independently, so the absent
+catalog falls into <code>NoLegacyAbsent</code> for that file — no error.
+Verify by writing a test fixture with only one of the two
+files.</li>
+</ul>
+<h2 id="reference"><a class="header" href="#reference">Reference</a></h2>
+<ul>
+<li>Design dossier:
+<ul>
+<li><a href="../two-way-sync-and-config-centralisation-research.html#6-skillnet-config-migrate">§ 6 <code>skillnet config migrate</code></a></li>
+<li><a href="../two-way-sync-and-config-centralisation-research.html#12-migration-and-release-sequencing">§ 12 Migration and release sequencing</a></li>
+</ul>
+</li>
+<li>Existing code:
+<ul>
+<li><a href="../../../src/config.rs#L440-L462">src/config.rs:440-462</a> for
+path resolution.</li>
+<li><a href="../../../src/cli/mod.rs#L102-L138">src/cli/mod.rs:102-138</a> for
+the rank-4 fallthrough.</li>
+<li><a href="../../../src/commands/project.rs#L22-L77">src/commands/project.rs:22-77</a>
+for the “subcommand mutates files” pattern (project add/remove
+is the closest analogue).</li>
+</ul>
+</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../planning/two-way-sync-and-config-centralisation/02-cli-surface-and-doctor/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../../planning/two-way-sync-and-config-centralisation/04-hm-module.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../planning/two-way-sync-and-config-centralisation/02-cli-surface-and-doctor/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../../planning/two-way-sync-and-config-centralisation/04-hm-module.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../../mark-09e88c2c.min.js"></script>
+        <script src="../../searcher-c2a407aa.js"></script>
+
+        <script src="../../clipboard-1626706a.min.js"></script>
+        <script src="../../highlight-abc7f01d.js"></script>
+        <script src="../../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
