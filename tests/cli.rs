@@ -822,8 +822,17 @@ fn sync_help_lists_command() {
 
 #[test]
 fn sync_help_output_matches_snapshot() {
+    // clap inlines `[env: VAR=<value>]` in --help; isolate the env so the
+    // snapshot is stable across shells that export skillnet's session vars
+    // (the HM module sets SKILLNET_MIRROR_ROOT, for example).
     let output = Command::cargo_bin("skillnet")
         .unwrap()
+        .env_remove("SKILLNET_CONFIG")
+        .env_remove("SKILLNET_CATALOG_CONFIG")
+        .env_remove("SKILLNET_MIRROR_ROOT")
+        .env_remove("SKILLNET_DATABASE_URL")
+        .env_remove("SKILLNET_DB_URL")
+        .env_remove("DATABASE_URL")
         .args(["sync", "--help"])
         .assert()
         .success()

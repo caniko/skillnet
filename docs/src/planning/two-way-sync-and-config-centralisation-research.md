@@ -620,7 +620,7 @@ Per-file decision table (run independently for `skillnet.toml` and
 | Legacy cwd file | XDG file | Default action | Notes |
 |---|---|---|---|
 | absent | absent | no-op | exit code `0`, prints "no config to migrate" |
-| absent | present | no-op | prints "already centralised at <path>" |
+| absent | present | no-op | prints `"already centralised at <path>"` |
 | present | absent | move cwd → XDG, write breadcrumb `<cwd>/.skillnet.toml.moved-to-xdg` containing the XDG path | `mkdir -p $XDG_CONFIG_HOME/skillnet` if missing |
 | present | present, content equal | delete cwd, write breadcrumb | sha256 compare; cheap |
 | present | present, content different | refuse with diff hint, exit `1` | `--force` overwrites XDG with cwd content |
