@@ -108,6 +108,18 @@
       }
     ];
   };
+  promoteConfig = mkHmConfig {
+    database.backend = "sqlite";
+    activation.promote = true;
+  };
+  quietConflictConfig = mkHmConfig {
+    database.backend = "sqlite";
+    activation.failOnConflict = false;
+  };
+  noDeleteConfig = mkHmConfig {
+    database.backend = "sqlite";
+    activation.allowDelete = false;
+  };
 in
   pkgs.runCommand "skillnet-hm-module-test"
   {
@@ -136,12 +148,27 @@ in
     grep -F 'mkdir -p ${dataDir}' ${sqliteConfig.activationPackage}/activate >/dev/null
     grep -F 'Activating %s" "skillnet-skills-root"' ${sqliteConfig.activationPackage}/activate >/dev/null
     grep -F 'Activating %s" "skillnet-views"' ${sqliteConfig.activationPackage}/activate >/dev/null
-    grep -F '${package}/bin/skillnet view sync --all --allow-delete' ${sqliteConfig.activationPackage}/activate >/dev/null
-    grep -F '${package}/bin/skillnet project sync --all --allow-delete || true' ${sqliteConfig.activationPackage}/activate >/dev/null
+    test "$(grep -F '${package}/bin/skillnet sync' ${sqliteConfig.activationPackage}/activate | wc -l)" = 1
+    grep -F '${package}/bin/skillnet sync \' ${sqliteConfig.activationPackage}/activate >/dev/null
+    grep -F -- '--no-promote \' ${sqliteConfig.activationPackage}/activate >/dev/null
+    grep -F -- '--allow-delete' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F -- '--apply-promote' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F '|| true' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F 'skillnet view sync' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F 'skillnet project sync' ${sqliteConfig.activationPackage}/activate >/dev/null
     grep -F 'skipping for now.' ${sqliteConfig.activationPackage}/activate >/dev/null
     grep -F 'mirror not found at' ${sqliteConfig.activationPackage}/activate >/dev/null
     mkdir -p ${dataDir}
     test -d ${dataDir}
+
+    grep -F '${package}/bin/skillnet sync \' ${promoteConfig.activationPackage}/activate >/dev/null
+    grep -F -- '--apply-promote \' ${promoteConfig.activationPackage}/activate >/dev/null
+    ! grep -F -- '--no-promote' ${promoteConfig.activationPackage}/activate >/dev/null
+
+    grep -F -- '--allow-delete || true' ${quietConflictConfig.activationPackage}/activate >/dev/null
+    ! grep -F '|| true' ${sqliteConfig.activationPackage}/activate >/dev/null
+
+    ! grep -F -- '--allow-delete' ${noDeleteConfig.activationPackage}/activate >/dev/null
 
     test -x ${sqliteConfig.activationPackage}/home-path/bin/skillnet
     unset __HM_SESS_VARS_SOURCED
@@ -194,7 +221,7 @@ in
     rm -rf ${skillsRoot}
     DRY_RUN=1 ${declarativeConfig.activationPackage}/activate --driver-version 1 2>activation-stderr.log
     grep -F 'skipping for now.' activation-stderr.log >/dev/null
-    grep -F 'mirror not found at ${skillsRoot}; skipping view materialisation' activation-stderr.log >/dev/null
+    grep -F 'mirror not found at ${skillsRoot}; skipping sync' activation-stderr.log >/dev/null
 
     unset __HM_SESS_VARS_SOURCED
     . ${declarativeConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh

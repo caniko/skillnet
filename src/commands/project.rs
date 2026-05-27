@@ -7,7 +7,7 @@ use toml_edit::{value, ArrayOfTables, DocumentMut, Item, Table};
 
 use super::{status::promotion_status_counts, view::format_view_summary, Context};
 use crate::cli::args::StatusFormat;
-use crate::config::expand_path;
+use crate::config::{config_is_hm_managed, expand_path, hm_managed_error_message};
 use crate::view::{
     materialize_project_with_options, project_diff, project_status, AggregatorStatus, DriftEntry,
     DriftKind, FileDeltaKind, ProjectSyncOptions,
@@ -20,6 +20,10 @@ pub fn project_list(ctx: &Context) {
 }
 
 pub fn project_add(ctx: &Context, name: &str, path: &Utf8Path, allow_missing: bool) -> Result<()> {
+    if config_is_hm_managed(&ctx.config_path) {
+        bail!(hm_managed_error_message(&ctx.config_path, "skillnet.toml"));
+    }
+
     if name.is_empty() || name.contains('/') || name.contains('\\') {
         bail!("project name must be a non-empty scope name, not a path");
     }
@@ -48,6 +52,10 @@ pub fn project_add(ctx: &Context, name: &str, path: &Utf8Path, allow_missing: bo
 }
 
 pub fn project_remove(ctx: &Context, name: &str, prune_mirror: bool) -> Result<()> {
+    if config_is_hm_managed(&ctx.config_path) {
+        bail!(hm_managed_error_message(&ctx.config_path, "skillnet.toml"));
+    }
+
     if prune_mirror {
         ctx.ensure_destination_clean()?;
     }

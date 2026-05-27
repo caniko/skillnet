@@ -191,6 +191,43 @@ in {
         description = "Claude Code hook matchers to install. Multiple matchers produce multiple managed entries.";
       };
     };
+
+    activation = {
+      promote = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Whether `home-manager switch` runs `skillnet sync
+          --apply-promote` (true) or `skillnet sync --no-promote`
+          (false). Set to true only on the host that owns the
+          canonical skill store; consumer-only hosts must leave
+          it false to avoid silently mutating canonical from a
+          routine switch.
+        '';
+      };
+
+      failOnConflict = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Whether a non-zero exit from `skillnet sync` during
+          activation fails the `home-manager switch`. Default
+          true surfaces drift loudly; set false to restore the
+          pre-0.6.0 silent-on-conflict behaviour.
+        '';
+      };
+
+      allowDelete = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Whether activation passes --allow-delete to skillnet
+          sync. Existing default; broken out so a consumer-only
+          host can disable it without rewriting the activation
+          script.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -311,18 +348,20 @@ in {
       home.activation.skillnet-views = lib.hm.dag.entryAfter ["writeBoundary" "skillnet-skills-root"] ''
         if [ -z "''${SKILLNET_MIRROR_ROOT-}" ]; then
           mirror=${lib.escapeShellArg (
-          if cfg.mirrorRoot != null
-          then cfg.mirrorRoot
-          else ""
-        )}
+            if cfg.mirrorRoot != null
+            then cfg.mirrorRoot
+            else ""
+          )}
         else
           mirror="$SKILLNET_MIRROR_ROOT"
         fi
         if [ -z "$mirror" ] || [ ! -d "$mirror/global" ]; then
-          echo "WARNING: skillnet: mirror not found at $mirror; skipping view materialisation" >&2
+          echo "WARNING: skillnet: mirror not found at $mirror; skipping sync" >&2
         else
-          $DRY_RUN_CMD ${cfg.package}/bin/skillnet view sync --all --allow-delete
-          $DRY_RUN_CMD ${cfg.package}/bin/skillnet project sync --all --allow-delete || true
+          $DRY_RUN_CMD ${cfg.package}/bin/skillnet sync \
+            ${lib.optionalString cfg.activation.promote "--apply-promote"} \
+            ${lib.optionalString (!cfg.activation.promote) "--no-promote"} \
+            ${lib.optionalString cfg.activation.allowDelete "--allow-delete"}${lib.optionalString (!cfg.activation.failOnConflict) " || true"}
         fi
       '';
     }

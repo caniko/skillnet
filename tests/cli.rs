@@ -2101,6 +2101,52 @@ path = "{}"
         .stderr(predicate::str::contains("global, demo"));
 }
 
+#[test]
+fn project_add_refuses_when_config_under_nix_store() {
+    let fixture = Fixture::new();
+    let config = fixture.write_config(minimal_config());
+    let Ok(output) = StdCommand::new("nix-store")
+        .args(["--add-fixed", "sha256", config.to_str().unwrap()])
+        .output()
+    else {
+        eprintln!("skipping: nix-store unavailable");
+        return;
+    };
+    if !output.status.success() {
+        eprintln!(
+            "skipping: nix-store --add-fixed failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    let store_config = String::from_utf8(output.stdout).unwrap();
+    let store_config = store_config.trim();
+    assert!(
+        store_config.starts_with("/nix/store/"),
+        "unexpected nix-store path: {store_config}"
+    );
+
+    fixture
+        .command(Path::new(store_config))
+        .args([
+            "project",
+            "add",
+            "future-project",
+            "/tmp/future-project",
+            "--allow-missing",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("skillnet.toml at /nix/store/"))
+        .stderr(predicate::str::contains(
+            "is managed by Home Manager (read-only)",
+        ))
+        .stderr(predicate::str::contains(
+            "hint: edit programs.skillnet.settings in your Home Manager configuration",
+        ))
+        .stderr(predicate::str::contains("then run `home-manager switch`."));
+}
+
 // removed by P4: pre-Option-B reconcile CLI coverage
 #[ignore = "removed by P4: pre-Option-B reconcile CLI coverage"]
 #[test]

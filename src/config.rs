@@ -453,6 +453,21 @@ pub fn legacy_catalog_config_path() -> Utf8PathBuf {
     Utf8PathBuf::from("skillnet.catalog.toml")
 }
 
+pub fn config_is_hm_managed(path: &Utf8Path) -> bool {
+    let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.into());
+    Utf8PathBuf::from_path_buf(canonical)
+        .map(|path| path.as_str().starts_with("/nix/store/"))
+        .unwrap_or(false)
+}
+
+pub fn hm_managed_error_message(path: &Utf8Path, file_name: &str) -> String {
+    format!(
+        "{file_name} at {path} is managed by Home Manager (read-only).\n\
+         hint: edit programs.skillnet.settings in your Home Manager configuration,\n\
+               then run `home-manager switch`."
+    )
+}
+
 fn default_xdg_config_path(file_name: &str) -> Result<Utf8PathBuf> {
     let config_home = match non_empty(env::var("XDG_CONFIG_HOME").ok().as_deref()) {
         Some(path) => Utf8PathBuf::from(path),
@@ -590,6 +605,42 @@ path = "/tmp/demo"
             .views
             .iter()
             .any(|view| view.label == "agents" && view.path == "/tmp/demo/.agents/skills"));
+    }
+
+    #[test]
+    fn detects_hm_managed_config_paths() {
+        assert!(config_is_hm_managed(Utf8Path::new(
+            "/nix/store/abc/skillnet.toml"
+        )));
+        assert!(!config_is_hm_managed(Utf8Path::new(
+            "/home/x/.config/skillnet/skillnet.toml"
+        )));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn detects_hm_managed_config_after_canonicalizing_symlink() {
+        use std::os::unix::fs as unix_fs;
+
+        let temp = tempdir().unwrap();
+        let store_target =
+            Utf8Path::new("/nix/store")
+                .read_dir_utf8()
+                .ok()
+                .and_then(|mut entries| {
+                    entries.find_map(|entry| {
+                        let path = entry.ok()?.path().join("skillnet.toml");
+                        path.is_file().then_some(path)
+                    })
+                });
+        let Some(store_target) = store_target else {
+            return;
+        };
+        let link = temp.path().join("skillnet.toml");
+        unix_fs::symlink(store_target.as_std_path(), &link).unwrap();
+        let link = Utf8PathBuf::from_path_buf(link).unwrap();
+
+        assert!(config_is_hm_managed(&link));
     }
 
     #[test]
