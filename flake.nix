@@ -27,7 +27,6 @@
   };
 
   outputs = {
-    self,
     advisory-db,
     home-manager,
     nixpkgs,
@@ -40,7 +39,7 @@
   }: let
     hmModule = import ./nix/hm-module.nix;
   in
-    flake-utils.lib.eachDefaultSystem (system: let
+    flake-utils.lib.eachSystem ["x86_64-linux"] (system: let
       pkgs = import nixpkgs {
         inherit system;
         overlays = [(import rust-overlay)];
@@ -153,7 +152,6 @@
       };
 
       devShells.default = craneLib.devShell {
-        checks = self.checks.${system};
         packages = with pkgs;
           [
             alejandra

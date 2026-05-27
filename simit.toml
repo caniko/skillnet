@@ -1,0 +1,9 @@
+[flake]
+scope = "hooks-only"
+
+[ci]
+runner = "atlas"
+with_audit = true
+with_deny = true
+with_docs = true
+with_msrv = true

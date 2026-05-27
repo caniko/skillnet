@@ -148,7 +148,8 @@ Initial release.
 
 No stable Rust library API is committed in `0.1.0`; the supported surface is the `skillnet` binary.
 
-[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.5.0...HEAD
+[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.5.1...HEAD
+[0.5.1]: https://codeberg.org/caniko/skillnet/compare/0.4.0...0.5.1
 [0.5.0]: https://codeberg.org/caniko/skillnet/compare/0.4.0...0.5.0
 [0.4.0]: https://codeberg.org/caniko/skillnet/compare/0.3.0...0.4.0
 [0.3.0]: https://codeberg.org/caniko/skillnet/compare/0.2.0...0.3.0
