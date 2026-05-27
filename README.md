@@ -2,7 +2,7 @@
 
 `skillnet` is a CLI for managing canonical AI skill stores, materialising derived agent views, and recording calibration data for `multi-phase-plan`.
 
-The supported interface in `0.5.0` is the `skillnet` binary. This crate does not commit to a stable embeddable Rust API yet.
+The supported interface in `0.6.0` is the `skillnet` binary. This crate does not commit to a stable embeddable Rust API yet.
 
 ## Install
 
@@ -140,6 +140,9 @@ Options:
   `skillnet.toml` and `skillnet.catalog.toml` from Nix.
 - `programs.skillnet.configFile` and `programs.skillnet.catalogConfigFile`
   point the CLI at user-managed TOML files.
+- `programs.skillnet.activation.promote`, `failOnConflict`, and `allowDelete`
+  control Home Manager's activation-time `skillnet sync` invocation. Promotion
+  is off by default for consumer-host safety.
 - `programs.skillnet.hooks.enable` installs skillnet-managed Claude Code hook
   entries in `programs.skillnet.hooks.settingsFile`.
 - `programs.skillnet.hooks.events` and `programs.skillnet.hooks.matchers`
@@ -214,15 +217,15 @@ skillnet scope list
 Materialise derived views and then inspect or regenerate catalog output:
 
 ```sh
-skillnet view sync --all
-skillnet project sync --all
+skillnet sync
 skillnet skill list --scope global
 skillnet catalog generate
 ```
 
-`skillnet sync` was removed in `0.5.0`. Mutate canonical stores with
-`skillnet skill ...`; regenerate derived views with `view sync` and
-`project sync`.
+`skillnet sync` is dry-run-on-conflict for promotion candidates: a real
+view-side directory newer than canonical prints `would promote ...` and exits
+2. Rerun with `--apply-promote` to pull that content into canonical. See
+[docs/src/commands.md](docs/src/commands.md) for the full flag table.
 
 Calibration commands are available under the dedicated command group:
 
@@ -254,10 +257,12 @@ cargo test-pg
 - Project canonical stores live at each project's `canonical_rel`, defaulting to `.skills`.
 - Global and project views such as `.agents/skills` and `.claude/skills` are symlinks generated from canonical stores.
 
-Configuration lives in `$XDG_CONFIG_HOME/skillnet/skillnet.toml`, falling back
-to `./skillnet.toml` for legacy cwd-based usage. Catalog metadata uses
-`$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`, with the same legacy fallback
-to `./skillnet.catalog.toml`.
+Configuration lives in `$XDG_CONFIG_HOME/skillnet/skillnet.toml`. Catalog
+metadata uses `$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`. The legacy
+cwd fallbacks `./skillnet.toml` and `./skillnet.catalog.toml` still work in
+`0.6.x` with a deprecation warning and are scheduled for removal in `0.7.0`.
+Run `skillnet config migrate` from the old config directory to centralise
+existing files.
 
 ## Command Surface
 
@@ -265,6 +270,7 @@ The current top-level commands are:
 
 - `status`
 - `completions`
+- `sync`
 - `view`
 - `skill`
 - `scope`

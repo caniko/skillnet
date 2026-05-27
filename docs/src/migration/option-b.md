@@ -87,3 +87,16 @@ HTTPS clone is intentional.
 
 Missing project repository paths are warnings, not errors, because a host may
 be partially bootstrapped before all project repositories are cloned.
+
+## Reconcile-Pull And Centralised Config (`0.6.0`)
+
+`0.6.0` partially reverses `0.5.0`'s "no reconcile" stance, but only in a
+narrow promotion path. `skillnet sync` can promote a user-visible non-symlink
+view entry back into canonical when the view content is newer, but the default
+run only reports would-promote work and exits `2`. Mutation requires
+`--apply-promote`; `--no-promote` keeps `0.5.x` behaviour; Home Manager
+activation never promotes by default.
+
+For the XDG migration, `skillnet config migrate`, and the Home Manager
+declarative pattern, see
+[Centralised config (0.6.0)](centralised-config.md).

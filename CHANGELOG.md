@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-27
+
+### Added
+
+- `skillnet sync` promotes a view entry's content into the canonical store
+  when the view entry is a real directory newer than canonical. Promotion is
+  dry-run-by-default; the command prints `would promote ...` lines and exits
+  2. Pass `--apply-promote` to perform the promotion; pass `--no-promote` to
+  keep `0.5.x` behaviour. Tie-breaks via `--prefer view|canonical`; promotion
+  of view-only skills via `--adopt-new`.
+- `skillnet config migrate` moves `skillnet.toml` and
+  `skillnet.catalog.toml` from the legacy working-directory pickup to
+  `$XDG_CONFIG_HOME/skillnet/`.
+- `skillnet doctor` classifies non-symlink view entries by comparator outcome
+  (Identical / ViewNewer / CanonicalNewer / EqualMtimeDifferentContent /
+  BothAdvanced / AdoptCandidate) with hint strings pointing at the appropriate
+  sync flag.
+- `skillnet status --format json` rows expose `would_promote` and
+  `needs_tie_break` counts; per-entry `view_mtime_nanos`,
+  `canonical_mtime_nanos`, `view_sha`, `canonical_sha` populated for
+  non-symlink entries.
+- HM module: `programs.skillnet.activation.{promote,failOnConflict,allowDelete}`
+  toggle activation behaviour. Default `promote = false`,
+  `failOnConflict = true`, `allowDelete = true`. Consumer hosts upgrading from
+  `0.5.x` see the same behaviour they had, except activation now fails loudly
+  on drift (was: silently masked via `|| true`).
+- Per-target `--allow-dirty-destination`: the gate now covers every canonical
+  write, not just `mirror_root`.
+
+### Changed
+
+- HM activation script collapses `view sync` + `project sync` calls into a
+  single `skillnet sync` invocation.
+- `skillnet project add` / `project remove` refuse to mutate a config managed
+  by Home Manager (resolved path under `/nix/store/`). Edit
+  `programs.skillnet.settings` in your HM config instead.
+
+### Deprecated
+
+- Legacy working-directory config discovery (`./skillnet.toml`,
+  `./skillnet.catalog.toml`). The CLI prints a deprecation warning when it
+  falls through to this path and will remove it in `0.7.0`. Run
+  `skillnet config migrate` to move existing configs.
+
+### Notes
+
+- The `0.5.0` design stance "no reconcile, canonical is the only writer" is
+  partially reversed. Promotion is opt-in per invocation (`--apply-promote`),
+  opt-in per host via the HM toggle, and dry-run-by-default in every other
+  setting.
+
 ## [0.5.1] - 2026-05-25
 
 ### Added
@@ -148,7 +199,8 @@ Initial release.
 
 No stable Rust library API is committed in `0.1.0`; the supported surface is the `skillnet` binary.
 
-[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.5.1...HEAD
+[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.6.0...HEAD
+[0.6.0]: https://codeberg.org/caniko/skillnet/compare/0.5.1...0.6.0
 [0.5.1]: https://codeberg.org/caniko/skillnet/compare/0.4.0...0.5.1
 [0.5.0]: https://codeberg.org/caniko/skillnet/compare/0.4.0...0.5.0
 [0.4.0]: https://codeberg.org/caniko/skillnet/compare/0.3.0...0.4.0

@@ -1,6 +1,6 @@
 [package]
 name = "skillnet"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.88"
 description = "Manage canonical AI skill stores, derived views, and calibration data for multi-phase-plan."
@@ -55,6 +55,7 @@ walkdir = "2.5"
 
 [dev-dependencies]
 assert_cmd = "2.0"
+insta = "1.47.2"
 predicates = "3.1"
 temp-env = "0.3"
 

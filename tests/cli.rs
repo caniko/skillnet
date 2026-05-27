@@ -821,6 +821,20 @@ fn sync_help_lists_command() {
 }
 
 #[test]
+fn sync_help_output_matches_snapshot() {
+    let output = Command::cargo_bin("skillnet")
+        .unwrap()
+        .args(["sync", "--help"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let help = String::from_utf8(output).unwrap();
+    insta::assert_snapshot!(help);
+}
+
+#[test]
 fn sync_default_on_view_newer_fixture_exits_2_and_does_not_mutate() {
     let promotion = PromotionFixture::global_view_newer();
 

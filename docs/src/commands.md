@@ -5,13 +5,9 @@ Top-level commands:
 - `status`: show canonical store, view drift, destination, and catalog health.
 - `doctor`: check configured views for invariant violations.
 - `completions`: generate shell completion scripts.
-- `sync`: materialise every configured global view and project view in one
-  shot. Runs `view sync --all` first, then `project sync --all`, and
-  short-circuits on the first error (project sync is skipped if view sync
-  fails, because project views may symlink through the global mirror).
-  Accepts `--allow-delete` and `--force`; honours the global `--dry-run`,
-  `--allow-dirty-destination`, `--mirror-root`, `--config`,
-  `--catalog-config`, and `--database-url` flags.
+- `sync`: materialise every configured view, promoting view to canonical when
+  a view entry is a real directory newer than canonical and promotion is
+  explicitly applied.
 - `view`: materialise and inspect global view symlinks.
 - `skill`: list, inspect, and edit canonical skill directories.
 - `scope`: inspect configured canonical scopes.
@@ -40,6 +36,65 @@ skillnet hook status
 
 ## View And Project Commands
 
+`skillnet sync` is the top-level materialisation command. It resolves every
+configured global view and project view from `skillnet.toml`, materialises the
+view symlinks, and reports real-directory view entries that may need
+promotion back into canonical.
+
+When a view entry is already a symlink, `sync` keeps the normal generated-view
+behaviour. When a view entry is a real directory, `sync` compares that content
+with the canonical skill of the same name. A view entry whose content is newer
+than canonical is reported as a would-promote candidate by default; pass
+`--apply-promote` to copy that view content into canonical and then replace the
+view entry with a symlink.
+
+Promotion flags:
+
+| Flag | Default | Behaviour |
+| ---- | ------- | --------- |
+| `--apply-promote` | off | Executes pending `ViewNewer` outcomes and any `--prefer`-resolved or `--adopt-new`-promoted outcomes. Without this flag, those outcomes are reported as would-promote/would-adopt only. |
+| `--no-promote` | off | Hard-disables the promotion path entirely. Non-symlink view entries error as in `0.5.x`. Use this for CI and consumer-only hosts. |
+| `--force` | off | Demotes `CanonicalNewer` entries, destroying view-side content. In `0.6.0`, this is the destructive demote branch rather than the promotion branch. |
+| `--prefer <view\|canonical>` | unset | Tie-breaker for `EqualMtimeDifferentContent` and `BothAdvanced`. Only consulted when `--apply-promote` is also passed. |
+| `--adopt-new` | off | Treats `AdoptCandidate` outcomes as promotion candidates. Only acts when `--apply-promote` is also passed. |
+| `--allow-delete` | off | Existing pruning semantics. Removes view entries with no canonical sibling and no `--adopt-new`. |
+| `--dry-run` | off | Global flag. Never mutates and never escalates would-promote work to exit code `2`; prints would-* lines and exits `0`. |
+| `--allow-dirty-destination` | off | Global flag. Allows canonical writes even when the destination Git working tree is dirty. This now gates every canonical write site, not just `mirror_root`. |
+
+`--apply-promote` conflicts with `--no-promote`. `--force` also conflicts with
+`--no-promote`, so a destructive demote must be requested as its own explicit
+mode.
+
+Exit codes:
+
+| Code | Meaning |
+| ---- | ------- |
+| `0` | All outcomes were created, updated, unchanged, removed, identical, auto-demoted, or adopt candidates left visible but not promoted. |
+| `2` | At least one would-promote, would-demote-destructive, or needs-tie-break outcome was reported and not actioned. |
+| `1` | Any other error, including IO errors, parse errors, dirty destinations, or parse-time flag conflicts. |
+
+`--dry-run` collapses exit code `2` to `0` because it is an explicit preview.
+
+Example:
+
+```sh
+skillnet sync
+# global:claude  /home/alice/.claude/skills (+0 ~0 =1 -0)
+# would promote /home/alice/.claude/skills/rust-project-flake -> /home/alice/skills/global/rust-project-flake (view_mtime=..., canonical_mtime=...)
+# exits 2
+
+skillnet sync --apply-promote
+# promotes the view-side skill into canonical, then re-links the view
+# exits 0
+```
+
+Use `skillnet doctor` before a promotion run when you want a read-only
+classification of non-symlink entries. Doctor reports `Identical`,
+`ViewNewer`, `CanonicalNewer`, `EqualMtimeDifferentContent`, `BothAdvanced`,
+and `AdoptCandidate` with hints for the matching `sync` flag. For the
+centralised XDG config migration and Home Manager pattern, see
+[Centralised config (0.6.0)](migration/centralised-config.md).
+
 `skillnet view sync --all` materialises configured global views from the
 canonical global store.
 
@@ -54,8 +109,8 @@ default, HTTPS origins are refused; pass `--ssh-strict=false` only when HTTPS
 clones are intended.
 
 Use `view status|diff` and `project status|diff` to inspect derived view drift
-without mutating files. `skillnet sync` was removed in `0.5.0`; each scope now
-has one canonical store and every other location is a generated view.
+without mutating files. `skillnet sync` is the preferred one-shot command when
+you want all configured views materialised from the same config.
 
 ## Status JSON Schema
 
@@ -68,10 +123,17 @@ has one canonical store and every other location is a generated view.
     "kind": "global",
     "canonical_path": "/home/alice/skills/global",
     "skill_count": 42,
-    "drift_entries": 0
+    "drift_entries": 0,
+    "would_promote": 0,
+    "needs_tie_break": 0
   }
 ]
 ```
+
+Rows include `would_promote` and `needs_tie_break` counts. Individual
+non-symlink drift entries may also include `view_mtime_nanos`,
+`canonical_mtime_nanos`, `view_sha`, and `canonical_sha` so promotion
+decisions can be inspected without mutating the filesystem.
 
 ## Doctor
 
@@ -84,7 +146,10 @@ has one canonical store and every other location is a generated view.
 - broken or unexpected symlink targets.
 
 Missing configured project repositories are warnings because a fresh host may
-not have cloned every project yet. Other invariant violations are errors.
+not have cloned every project yet. Non-symlink view entries are classified by
+the same comparator used by `skillnet sync`: `Identical`, `ViewNewer`,
+`CanonicalNewer`, `EqualMtimeDifferentContent`, `BothAdvanced`, or
+`AdoptCandidate`. Other invariant violations are errors.
 
 ## Config File Location
 
@@ -109,8 +174,9 @@ The destination root precedence is `--mirror-root`, then
 to the mirror destination refuse to run when that repository is dirty unless
 `--allow-dirty-destination` is passed.
 
-The removed `sync pull` auto-commit flow has no replacement in `0.5.0`; commit
-canonical store changes with Git directly.
+The removed `sync pull` auto-commit flow still has no replacement in `0.6.0`.
+Promotion writes canonical content when explicitly applied, but the user still
+commits canonical store changes with Git directly.
 
 ## Calibration Database
 
