@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `skillnet view sync` now adopts view-only skill directories into the canonical
+  store and back-syncs them as symlinks instead of deleting them. Previously
+  `view sync --allow-delete` removed authored directories that had no canonical
+  counterpart, causing data loss; the command now routes through the promotion
+  path (adopt-and-back-sync), so `--allow-delete` only removes dangling view
+  _symlinks_ and `--force` discards a view copy only when canonical is newer.
+  The internal `--no-promote` path is unchanged.
+
 ## [0.6.0] - 2026-05-27
 
 ### Added

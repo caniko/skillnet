@@ -772,6 +772,42 @@ fn sync_dry_run_does_not_mutate() {
 }
 
 #[test]
+fn view_sync_adopts_loose_dir_instead_of_wiping() {
+    let sync = SyncFixture::new();
+    // An authored skill that lives only in the view, not yet in canonical.
+    write_skill(&sync.global_view, "orphan", "orphan body");
+
+    // `--allow-delete` used to WIPE loose view dirs; it must now adopt them.
+    sync.command()
+        .args(["view", "sync", "--scope", "global", "--allow-delete"])
+        .assert()
+        .success();
+
+    // Adopted into canonical with content preserved (not wiped).
+    assert_eq!(
+        fs::read_to_string(sync.fixture.path("global/orphan/SKILL.md")).unwrap(),
+        "orphan body"
+    );
+    // The loose view entry survived the sync.
+    assert!(fs::symlink_metadata(sync.global_view.join("orphan")).is_ok());
+    // Canonical skills were materialised as symlinks in the view.
+    assert!(fs::symlink_metadata(sync.global_view.join("alpha"))
+        .unwrap()
+        .file_type()
+        .is_symlink());
+
+    // A second pass demotes the adopted dir to a symlink (two-phase convergence).
+    sync.command()
+        .args(["view", "sync", "--scope", "global"])
+        .assert()
+        .success();
+    assert!(fs::symlink_metadata(sync.global_view.join("orphan"))
+        .unwrap()
+        .file_type()
+        .is_symlink());
+}
+
+#[test]
 fn sync_short_circuits_on_view_failure() {
     let sync = SyncFixture::new();
     fs::create_dir_all(&sync.global_view).unwrap();

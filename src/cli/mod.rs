@@ -200,7 +200,7 @@ fn run_view_command(ctx: &Context, command: ViewCommand) -> Result<()> {
             force,
         } => {
             resolve_view_scope(&scope, all)?;
-            commands::view::sync(ctx, allow_delete, force)
+            commands::view::sync_with_promotion(ctx, allow_delete, force)
         }
         ViewCommand::Status { scope, all, format } => {
             resolve_view_scope(&scope, all)?;

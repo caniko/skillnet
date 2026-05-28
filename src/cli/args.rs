@@ -474,7 +474,9 @@ fn valid_tag_key(key: &str) -> bool {
 #[derive(Debug, Subcommand)]
 #[command(disable_help_subcommand = true)]
 pub(super) enum ViewCommand {
-    /// Materialise configured global view symlinks.
+    /// Materialise global view symlinks, adopting view-only skill directories
+    /// into the canonical store and back-syncing them as symlinks. Authored
+    /// view content is never deleted.
     Sync {
         /// Global scope to sync. Only `global` is currently valid.
         #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
@@ -482,10 +484,12 @@ pub(super) enum ViewCommand {
         /// Sync every configured global view.
         #[arg(long)]
         all: bool,
-        /// Remove view entries that no longer correspond to canonical skills.
+        /// Remove dangling view symlinks whose canonical skill is gone. Authored
+        /// non-symlink directories are adopted into canonical, never deleted.
         #[arg(long)]
         allow_delete: bool,
-        /// Replace existing non-symlink entries in the view.
+        /// When canonical is newer than a view directory, discard the view copy
+        /// and restore the symlink (destructive demote).
         #[arg(long)]
         force: bool,
     },
