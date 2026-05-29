@@ -271,6 +271,7 @@ views = []
 [[projects]]
 name = "{project_name}"
 path = "{}"
+canonical_rel = ".skills"
 "#,
         project_root.display()
     )
@@ -462,10 +463,22 @@ impl SyncFixture {
 
         write_skill(&fixture.path("global"), "alpha", "global alpha");
         write_skill(&fixture.path("global"), "beta", "global beta");
-        write_skill(&first_project.join(".skills"), "alpha", "first alpha");
-        write_skill(&first_project.join(".skills"), "beta", "first beta");
-        write_skill(&second_project.join(".skills"), "alpha", "second alpha");
-        write_skill(&second_project.join(".skills"), "beta", "second beta");
+        write_skill(
+            &first_project.join(".agents/skills"),
+            "alpha",
+            "first alpha",
+        );
+        write_skill(&first_project.join(".agents/skills"), "beta", "first beta");
+        write_skill(
+            &second_project.join(".agents/skills"),
+            "alpha",
+            "second alpha",
+        );
+        write_skill(
+            &second_project.join(".agents/skills"),
+            "beta",
+            "second beta",
+        );
 
         init_git_repo(&first_project);
         commit_all(&first_project, "initial first project");
@@ -661,10 +674,115 @@ fn sync_creates_global_and_project_symlinks() {
         ("second", &sync.second_project),
     ] {
         let view = sync.project_view(project);
-        assert_relative_symlink_points_to(&view.join("alpha"), "../../.skills/alpha");
-        assert_relative_symlink_points_to(&view.join("beta"), "../../.skills/beta");
-        assert_symlink_points_to(&sync.aggregator(name), &project.join(".skills"));
+        assert_relative_symlink_points_to(&view.join("alpha"), "../../.agents/skills/alpha");
+        assert_relative_symlink_points_to(&view.join("beta"), "../../.agents/skills/beta");
+        assert!(sync.aggregator(name).exists());
     }
+}
+
+#[test]
+fn sync_scope_projects_materializes_only_project_targets() {
+    let sync = SyncFixture::new();
+
+    sync.command()
+        .args(["sync", "--scope", "projects"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("first:claude")
+                .and(predicate::str::contains("second:claude"))
+                .and(predicate::str::contains("global:agents").not()),
+        );
+
+    assert!(!sync.global_view.exists());
+    for (name, project) in [
+        ("first", &sync.first_project),
+        ("second", &sync.second_project),
+    ] {
+        let view = sync.project_view(project);
+        assert_relative_symlink_points_to(&view.join("alpha"), "../../.agents/skills/alpha");
+        assert!(sync.aggregator(name).exists());
+    }
+}
+
+#[test]
+fn sync_scope_global_materializes_only_global_target() {
+    let sync = SyncFixture::new();
+
+    sync.command()
+        .args(["sync", "--scope", "global"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("global:agents")
+                .and(predicate::str::contains("first:claude").not())
+                .and(predicate::str::contains("second:claude").not()),
+        );
+
+    assert_symlink_points_to(
+        &sync.global_view.join("alpha"),
+        &sync.fixture.path("global/alpha"),
+    );
+    assert!(!sync.project_view(&sync.first_project).exists());
+    assert!(!sync.project_view(&sync.second_project).exists());
+    assert!(!sync.aggregator("first").exists());
+    assert!(!sync.aggregator("second").exists());
+}
+
+#[test]
+fn status_accepts_scope_projects_and_all_selectors() {
+    let sync = SyncFixture::new();
+
+    sync.command()
+        .args(["status", "--scope", "projects"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("scopes: 2 (first, second)")
+                .and(predicate::str::contains("global  ").not()),
+        );
+
+    sync.command()
+        .args(["status", "--scope", "all"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "scopes: 3 (global, first, second)",
+        ));
+}
+
+#[test]
+fn status_warns_once_for_legacy_default_project_layout() {
+    let fixture = Fixture::new();
+    let project = fixture.path("work/demo");
+    write_skill(&project.join(".skills"), "alpha", "legacy alpha");
+    let config = fixture.write_config(format!(
+        r#"
+[global]
+views = []
+
+[[projects]]
+name = "demo"
+path = "{}"
+"#,
+        project.display()
+    ));
+
+    fixture
+        .command(&config)
+        .args(["status", "--scope", "demo"])
+        .assert()
+        .success()
+        .stderr(
+            predicate::str::contains("legacy '.skills' canonical detected")
+                .count(1)
+                .and(predicate::str::contains(
+                    "Set canonical_rel = \".skills\" to keep the old layout",
+                )),
+        );
+
+    assert!(project.join(".skills/alpha/SKILL.md").is_file());
+    assert!(!project.join(".agents/skills").exists());
 }
 
 #[test]
@@ -732,7 +850,7 @@ fn sync_forwards_allow_delete_and_force() {
         FileTime::from_unix_time(1_700_000_000, 0),
     );
     set_skill_file_times(
-        &sync.first_project.join(".skills"),
+        &sync.first_project.join(".agents/skills"),
         "alpha",
         FileTime::from_unix_time(1_700_003_600, 0),
     );
@@ -744,7 +862,7 @@ fn sync_forwards_allow_delete_and_force() {
     );
     assert_relative_symlink_points_to(
         &sync.project_view(&sync.first_project).join("alpha"),
-        "../../.skills/alpha",
+        "../../.agents/skills/alpha",
     );
 }
 
@@ -851,6 +969,7 @@ fn sync_help_lists_command() {
             .and(predicate::str::contains("--no-promote"))
             .and(predicate::str::contains("--prefer"))
             .and(predicate::str::contains("--adopt-new"))
+            .and(predicate::str::contains("--scope"))
             .and(predicate::str::contains("--dry-run"))
             .and(predicate::str::contains("--mirror-root")),
     );
@@ -2204,6 +2323,23 @@ fn project_add_refuses_when_config_under_nix_store() {
             "hint: edit programs.skillnet.settings in your Home Manager configuration",
         ))
         .stderr(predicate::str::contains("then run `home-manager switch`."));
+}
+
+#[test]
+fn project_add_rejects_selector_tokens_as_reserved_names() {
+    let fixture = Fixture::new();
+    let config = fixture.write_config(minimal_config());
+
+    for name in ["all", "projects"] {
+        fixture
+            .command(&config)
+            .args(["project", "add", name, "/tmp/x", "--allow-missing"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(format!(
+                "`{name}` is reserved and cannot be used as a project name"
+            )));
+    }
 }
 
 // removed by P4: pre-Option-B reconcile CLI coverage

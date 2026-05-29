@@ -3,78 +3,119 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use super::Context;
 use crate::{
-    model::{Target, ViewTarget},
-    view::{self, DriftKind, PromotionOptions, PromotionSummary, ReconcileOutcome, WouldEntry},
+    cli::Scope,
+    config::legacy_project_canonical_warning,
+    link::LinkStrategy,
+    model::{Target, TargetScope, ViewTarget},
+    view::{
+        self, AggregatorPending, AggregatorPendingKind, AggregatorPlanAction, AggregatorStatus,
+        DriftKind, PromotionOptions, PromotionSummary, ReconcileOutcome, WouldEntry,
+    },
 };
 
-pub fn run(ctx: &Context, options: PromotionOptions, no_promote: bool) -> Result<i32> {
+pub fn run(
+    ctx: &Context,
+    scopes: &[Scope],
+    options: PromotionOptions,
+    no_promote: bool,
+    link_strategy: Option<LinkStrategy>,
+) -> Result<i32> {
     if no_promote {
-        return run_no_promote(ctx, &options);
+        return run_no_promote(ctx, scopes, &options, link_strategy);
     }
-    run_with_promotion(ctx, options)
+    run_with_promotion(ctx, scopes, options, link_strategy)
 }
 
-fn run_no_promote(ctx: &Context, options: &PromotionOptions) -> Result<i32> {
-    super::view::sync(ctx, options.allow_delete, options.force_demote)?;
-    super::project_sync(ctx, &[], true, options.allow_delete, options.force_demote)?;
+fn run_no_promote(
+    ctx: &Context,
+    scopes: &[Scope],
+    options: &PromotionOptions,
+    link_strategy: Option<LinkStrategy>,
+) -> Result<i32> {
+    for target in scoped_targets(ctx, scopes, link_strategy)? {
+        match target.scope {
+            TargetScope::Global => super::view::sync(
+                ctx,
+                options.allow_delete,
+                options.force_demote,
+                link_strategy,
+            )?,
+            TargetScope::Project => {
+                super::project_sync(
+                    ctx,
+                    std::slice::from_ref(&target.name),
+                    false,
+                    options.allow_delete,
+                    options.force_demote,
+                    link_strategy,
+                )?;
+            }
+        }
+    }
     Ok(0)
 }
 
-fn run_with_promotion(ctx: &Context, options: PromotionOptions) -> Result<i32> {
+fn run_with_promotion(
+    ctx: &Context,
+    scopes: &[Scope],
+    options: PromotionOptions,
+    link_strategy: Option<LinkStrategy>,
+) -> Result<i32> {
     let mut report = OverallReport::default();
-    let global = ctx.config.global_target(&ctx.mirror_root)?;
 
-    if ctx.dry_run {
-        dry_run_target(ctx, &global, &options, &mut report)?;
-    } else {
-        for view in &global.views {
-            let summary = view::materialize_view_with_promotion(
-                &global.canonical_path,
-                view,
-                PromotionOptions {
-                    relative_links: false,
-                    project_root: None,
-                    ..options.clone()
-                },
-                |target_path| ctx.ensure_target_clean(target_path),
-            )?;
-            report.add_summary(&global, view, &summary);
-        }
-    }
-
-    for target in ctx.config.targets(&ctx.mirror_root)?.into_iter().skip(1) {
-        if let Some(project_root) = &target.project_root {
-            if !project_root.is_dir() {
-                eprintln!(
-                    "warn: [{}] project repository path {} does not exist; skipping",
-                    target.name, project_root
-                );
-                continue;
-            }
-        }
-
+    for target in scoped_targets(ctx, scopes, link_strategy)? {
+        warn_legacy_project_layout(&target);
         if ctx.dry_run {
             dry_run_target(ctx, &target, &options, &mut report)?;
             continue;
         }
 
-        let summary = view::materialize_project_with_promotion(
-            &target,
-            PromotionOptions {
-                relative_links: true,
-                project_root: target.project_root.clone(),
-                ..options.clone()
-            },
-            |target_path| ctx.ensure_target_clean(target_path),
-        )?;
-        for view in &summary.views {
-            report.add_summary_by_path(
-                &target.name,
-                &target.canonical_path,
-                &view.label,
-                &view.path,
-                &view.summary,
-            );
+        match target.scope {
+            TargetScope::Global => {
+                for view in &target.views {
+                    let summary = view::materialize_view_with_promotion(
+                        &target.canonical_path,
+                        view,
+                        PromotionOptions {
+                            relative_links: false,
+                            link_strategy: target.link_strategy,
+                            project_root: None,
+                            ..options.clone()
+                        },
+                        |target_path| ctx.ensure_target_clean(target_path),
+                    )?;
+                    report.add_summary(&target, view, &summary);
+                }
+            }
+            TargetScope::Project => {
+                if target.aggregator_path.is_some() {
+                    ctx.ensure_destination_clean()?;
+                }
+                let summary = view::materialize_project_with_promotion(
+                    &target,
+                    PromotionOptions {
+                        relative_links: true,
+                        link_strategy: target.link_strategy,
+                        project_root: target.project_root.clone(),
+                        ..options.clone()
+                    },
+                    |target_path| ctx.ensure_target_clean(target_path),
+                )?;
+                for view in &summary.views {
+                    report.add_summary_by_path(
+                        &target.name,
+                        &target.canonical_path,
+                        &view.label,
+                        &view.path,
+                        &view.summary,
+                    );
+                }
+                report.add_aggregator_summary(
+                    &target,
+                    summary.aggregator,
+                    &summary.aggregator_pending,
+                );
+            }
         }
     }
 
@@ -85,6 +126,49 @@ fn run_with_promotion(ctx: &Context, options: PromotionOptions) -> Result<i32> {
     } else {
         Ok(2)
     }
+}
+
+fn warn_legacy_project_layout(target: &Target) {
+    if let Some(message) = legacy_project_canonical_warning(target) {
+        eprintln!("warning: {message}");
+    }
+}
+
+fn scoped_targets(
+    ctx: &Context,
+    scopes: &[Scope],
+    link_strategy: Option<LinkStrategy>,
+) -> Result<Vec<Target>> {
+    let mut targets = Vec::with_capacity(scopes.len());
+    for scope in scopes {
+        let target = match scope {
+            Scope::Global => ctx
+                .config
+                .global_target_with_link_override(&ctx.mirror_root, link_strategy)?,
+            Scope::Project(name) => {
+                let project = ctx
+                    .project(name)
+                    .ok_or_else(|| anyhow::anyhow!("unknown project `{name}`"))?;
+                ctx.config.project_target_with_link_override(
+                    &ctx.mirror_root,
+                    project,
+                    link_strategy,
+                )?
+            }
+        };
+
+        if let Some(project_root) = &target.project_root {
+            if !project_root.is_dir() {
+                eprintln!(
+                    "warn: [{}] project repository path {} does not exist; skipping",
+                    target.name, project_root
+                );
+                continue;
+            }
+        }
+        targets.push(target);
+    }
+    Ok(targets)
 }
 
 fn dry_run_target(
@@ -131,6 +215,45 @@ fn dry_run_target(
         }
         report.add_summary(target, view, &summary);
     }
+    if let Some(plan) = view::project_aggregator_plan(target)? {
+        match plan.strategy {
+            LinkStrategy::Symlink => {
+                println!("aggregator: symlink {} -> {}", plan.path, plan.canonical);
+            }
+            LinkStrategy::Hardlink => {
+                println!(
+                    "aggregator: hardlink {} ({} files)",
+                    plan.path, plan.file_count
+                );
+            }
+        }
+        match plan.action {
+            AggregatorPlanAction::Create => println!("  + create aggregator"),
+            AggregatorPlanAction::Update => println!("  ~ replace aggregator"),
+            AggregatorPlanAction::Relink { files } => {
+                println!(
+                    "  ~ relink {} severed file{}",
+                    files.len(),
+                    plural(files.len())
+                );
+            }
+            AggregatorPlanAction::Diverged { files }
+                if options.force_demote || options.prefer == Some(view::Preference::Canonical) =>
+            {
+                println!(
+                    "  ~ relink {} diverged file{}",
+                    files.len(),
+                    plural(files.len())
+                );
+            }
+            AggregatorPlanAction::Diverged { files } => println!(
+                "  ! {} diverged file{}; pass --force or --prefer canonical",
+                files.len(),
+                plural(files.len())
+            ),
+            AggregatorPlanAction::Unchanged => println!("  = unchanged"),
+        }
+    }
     Ok(())
 }
 
@@ -145,6 +268,7 @@ fn target_kind(target: &Target) -> &'static str {
 struct OverallReport {
     totals: Totals,
     per_target: Vec<TargetReport>,
+    aggregators: Vec<AggregatorReport>,
 }
 
 impl OverallReport {
@@ -173,6 +297,24 @@ impl OverallReport {
             view_label: view_label.to_string(),
             view_path: view_path.to_path_buf(),
             summary: summary.clone(),
+        });
+    }
+
+    fn add_aggregator_summary(
+        &mut self,
+        target: &Target,
+        status: Option<AggregatorStatus>,
+        pending: &[AggregatorPending],
+    ) {
+        if status.is_none() && pending.is_empty() {
+            return;
+        }
+        self.totals.aggregator_pending += pending.len();
+        self.aggregators.push(AggregatorReport {
+            target_name: target.name.clone(),
+            path: target.aggregator_path.clone(),
+            status,
+            pending: pending.to_vec(),
         });
     }
 
@@ -207,6 +349,19 @@ impl OverallReport {
                 &target.summary.needs_tie_break,
             );
         }
+        for aggregator in &self.aggregators {
+            if let (Some(path), Some(status)) = (&aggregator.path, aggregator.status) {
+                println!(
+                    "{}:aggregator  {} ({})",
+                    aggregator.target_name,
+                    path,
+                    format_aggregator_status(status)
+                );
+            }
+            for entry in &aggregator.pending {
+                print_aggregator_pending(entry);
+            }
+        }
     }
 }
 
@@ -222,6 +377,7 @@ struct Totals {
     would_promote: usize,
     would_demote_destructive: usize,
     needs_tie_break: usize,
+    aggregator_pending: usize,
 }
 
 impl Totals {
@@ -239,7 +395,10 @@ impl Totals {
     }
 
     fn pending(&self) -> usize {
-        self.would_promote + self.would_demote_destructive + self.needs_tie_break
+        self.would_promote
+            + self.would_demote_destructive
+            + self.needs_tie_break
+            + self.aggregator_pending
     }
 }
 
@@ -249,6 +408,40 @@ struct TargetReport {
     view_label: String,
     view_path: Utf8PathBuf,
     summary: PromotionSummary,
+}
+
+struct AggregatorReport {
+    target_name: String,
+    path: Option<Utf8PathBuf>,
+    status: Option<AggregatorStatus>,
+    pending: Vec<AggregatorPending>,
+}
+
+fn format_aggregator_status(status: AggregatorStatus) -> &'static str {
+    match status {
+        AggregatorStatus::Created => "created",
+        AggregatorStatus::Updated => "updated",
+        AggregatorStatus::Unchanged => "unchanged",
+    }
+}
+
+fn print_aggregator_pending(entry: &AggregatorPending) {
+    match entry.kind {
+        AggregatorPendingKind::Diverged => println!(
+            "aggregator needs tie-break: {} diverged file{} at {}; pass --prefer canonical or --force",
+            entry.files.len(),
+            plural(entry.files.len()),
+            entry.path
+        ),
+    }
+}
+
+fn plural(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
 }
 
 fn print_would_entries(

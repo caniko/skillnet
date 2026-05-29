@@ -5,6 +5,7 @@ use std::io::Write;
 use super::Context;
 use crate::{
     cli::{args::StatusFormat, Scope},
+    config::legacy_project_canonical_warning,
     model::{Target, TargetScope},
     view::{DriftEntry, ReconcileOutcome},
 };
@@ -59,6 +60,7 @@ fn status_rows(ctx: &Context, scopes: &[Scope]) -> Result<Vec<StatusRow>> {
 }
 
 fn status_row(target: Target) -> Result<StatusRow> {
+    warn_legacy_project_layout(&target);
     let skill_count = crate::mirror::mirror_skill_dirs(&target.canonical_path)
         .map(|skills| skills.len())
         .unwrap_or(0);
@@ -87,6 +89,12 @@ fn status_row(target: Target) -> Result<StatusRow> {
         needs_tie_break: promotion_status.needs_tie_break,
         drift,
     })
+}
+
+fn warn_legacy_project_layout(target: &Target) {
+    if let Some(message) = legacy_project_canonical_warning(target) {
+        eprintln!("warning: {message}");
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

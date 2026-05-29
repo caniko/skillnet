@@ -16,6 +16,7 @@ use crate::{
         default_catalog_config_path, default_config_path, expand_path, legacy_catalog_config_path,
         legacy_config_path, Config, DbOverrides,
     },
+    link::LinkStrategy,
 };
 
 use args::{CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, ViewCommand};
@@ -87,17 +88,22 @@ pub fn run() -> Result<()> {
         }
         Command::View { command } => run_view_command(&ctx, command),
         Command::Sync {
+            scope,
+            all,
             apply_promote,
             no_promote,
             force,
             prefer,
             adopt_new,
             allow_delete,
+            link,
         } => {
+            let scopes = resolve_scopes(&ctx.config, &scope, all)?;
             let preference = prefer.map(|preference| match preference {
                 args::PreferenceArg::View => crate::view::Preference::View,
                 args::PreferenceArg::Canonical => crate::view::Preference::Canonical,
             });
+            let link_strategy = link.map(link_arg_to_strategy);
             let options = crate::view::PromotionOptions {
                 apply_promote,
                 force_demote: force,
@@ -105,9 +111,10 @@ pub fn run() -> Result<()> {
                 adopt_new,
                 allow_delete,
                 relative_links: false,
+                link_strategy: link_strategy.unwrap_or(LinkStrategy::Symlink),
                 project_root: None,
             };
-            let exit_code = commands::sync::run(&ctx, options, no_promote)?;
+            let exit_code = commands::sync::run(&ctx, &scopes, options, no_promote, link_strategy)?;
             if exit_code != 0 {
                 std::process::exit(exit_code);
             }
@@ -198,9 +205,15 @@ fn run_view_command(ctx: &Context, command: ViewCommand) -> Result<()> {
             all,
             allow_delete,
             force,
+            link,
         } => {
             resolve_view_scope(&scope, all)?;
-            commands::view::sync_with_promotion(ctx, allow_delete, force)
+            commands::view::sync_with_promotion(
+                ctx,
+                allow_delete,
+                force,
+                link.map(link_arg_to_strategy),
+            )
         }
         ViewCommand::Status { scope, all, format } => {
             resolve_view_scope(&scope, all)?;
@@ -221,7 +234,11 @@ fn resolve_view_scope(scope_args: &[String], all: bool) -> Result<()> {
         anyhow::bail!("must pass --scope global or --all");
     }
     if scope_args.iter().any(|scope| scope != "global") {
-        anyhow::bail!("`skillnet view` currently manages only the `global` scope");
+        anyhow::bail!(
+            "`skillnet view` currently manages only the `global` scope; \
+             selector scopes `projects` and `all` are valid for `skillnet sync`, \
+             `skillnet project sync`, and `skillnet status`"
+        );
     }
     Ok(())
 }
@@ -310,7 +327,15 @@ fn run_project_command(ctx: &Context, command: ProjectCommand) -> Result<()> {
             all,
             allow_delete,
             force,
-        } => commands::project_sync(ctx, &name, all, allow_delete, force),
+            link,
+        } => commands::project_sync(
+            ctx,
+            &name,
+            all,
+            allow_delete,
+            force,
+            link.map(link_arg_to_strategy),
+        ),
         ProjectCommand::Status { name, all, format } => {
             commands::project_status_command(ctx, &name, all, format)
         }
@@ -328,6 +353,13 @@ fn run_catalog_command(ctx: &Context, command: CatalogCommand) -> Result<()> {
         CatalogCommand::Generate => catalog::generate(ctx),
         CatalogCommand::Lint => catalog::lint(ctx),
         CatalogCommand::Search { query } => catalog::search(ctx, &query),
+    }
+}
+
+fn link_arg_to_strategy(link: args::LinkArg) -> LinkStrategy {
+    match link {
+        args::LinkArg::Symlink => LinkStrategy::Symlink,
+        args::LinkArg::Hardlink => LinkStrategy::Hardlink,
     }
 }
 

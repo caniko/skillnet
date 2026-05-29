@@ -1,9 +1,12 @@
 use camino::Utf8PathBuf;
 
+use crate::link::LinkStrategy;
+
 #[derive(Debug, Clone)]
 pub struct Target {
     pub name: String,
     pub scope: TargetScope,
+    pub link_strategy: LinkStrategy,
     pub canonical_path: Utf8PathBuf,
     pub views: Vec<ViewTarget>,
     pub aggregator_path: Option<Utf8PathBuf>,

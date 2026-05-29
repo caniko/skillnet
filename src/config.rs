@@ -5,7 +5,11 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
 use crate::calibration::Db;
+use crate::link::{resolve_link_strategy, LinkStrategy};
 use crate::model::{Target, TargetScope, ViewTarget};
+
+pub const DEFAULT_PROJECT_CANONICAL_REL: &str = ".agents/skills";
+pub const LEGACY_PROJECT_CANONICAL_REL: &str = ".skills";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -15,6 +19,8 @@ pub struct Config {
     pub mirror_root: Option<String>,
     #[serde(default)]
     pub database: DatabaseConfig,
+    #[serde(default)]
+    pub link_strategy: Option<LinkStrategy>,
     #[serde(default)]
     pub projects: Vec<ProjectConfig>,
 }
@@ -92,6 +98,9 @@ pub struct ProjectConfig {
     /// Optional repository origin used by `skillnet project clone --all`.
     #[serde(default)]
     pub origin: Option<String>,
+    /// Optional link strategy override for this project scope.
+    #[serde(default)]
+    pub link_strategy: Option<LinkStrategy>,
     /// Relative path inside the project repo holding canonical skills.
     #[serde(default = "default_canonical_rel")]
     pub canonical_rel: String,
@@ -109,20 +118,14 @@ pub struct ProjectViewConfig {
 }
 
 fn default_canonical_rel() -> String {
-    ".skills".into()
+    DEFAULT_PROJECT_CANONICAL_REL.into()
 }
 
 fn default_project_views() -> Vec<ProjectViewConfig> {
-    vec![
-        ProjectViewConfig {
-            rel: ".claude/skills".into(),
-            label: Some("claude".into()),
-        },
-        ProjectViewConfig {
-            rel: ".agents/skills".into(),
-            label: Some("agents".into()),
-        },
-    ]
+    vec![ProjectViewConfig {
+        rel: ".claude/skills".into(),
+        label: Some("claude".into()),
+    }]
 }
 
 fn label_from_rel(rel: &str) -> String {
@@ -215,15 +218,35 @@ impl Config {
     }
 
     pub fn targets(&self, mirror_root: &Utf8Path) -> Result<Vec<Target>> {
+        self.targets_with_link_override(mirror_root, None)
+    }
+
+    pub fn targets_with_link_override(
+        &self,
+        mirror_root: &Utf8Path,
+        cli_link_strategy: Option<LinkStrategy>,
+    ) -> Result<Vec<Target>> {
         let mut targets = Vec::with_capacity(self.projects.len() + 1);
-        targets.push(self.global_target(mirror_root)?);
+        targets.push(self.global_target_with_link_override(mirror_root, cli_link_strategy)?);
         for project in &self.projects {
-            targets.push(self.project_target(mirror_root, project)?);
+            targets.push(self.project_target_with_link_override(
+                mirror_root,
+                project,
+                cli_link_strategy,
+            )?);
         }
         Ok(targets)
     }
 
     pub fn global_target(&self, mirror_root: &Utf8Path) -> Result<Target> {
+        self.global_target_with_link_override(mirror_root, None)
+    }
+
+    pub fn global_target_with_link_override(
+        &self,
+        mirror_root: &Utf8Path,
+        cli_link_strategy: Option<LinkStrategy>,
+    ) -> Result<Target> {
         let canonical_path = match self.global.canonical_path.as_deref() {
             Some(path) => expand_path(path)?,
             None => mirror_root.join("global"),
@@ -231,6 +254,12 @@ impl Config {
         Ok(Target {
             name: "global".to_string(),
             scope: TargetScope::Global,
+            link_strategy: resolve_link_strategy(
+                TargetScope::Global,
+                self,
+                None,
+                cli_link_strategy,
+            ),
             canonical_path,
             views: self
                 .global
@@ -256,12 +285,28 @@ impl Config {
         mirror_root: &Utf8Path,
         project: &ProjectConfig,
     ) -> Result<Target> {
+        self.project_target_with_link_override(mirror_root, project, None)
+    }
+
+    pub fn project_target_with_link_override(
+        &self,
+        mirror_root: &Utf8Path,
+        project: &ProjectConfig,
+        cli_link_strategy: Option<LinkStrategy>,
+    ) -> Result<Target> {
         let project_root = expand_path(&project.path)?;
+        reject_project_view_canonical_overlap(project)?;
         let canonical_path = project_root.join(&project.canonical_rel);
 
         Ok(Target {
             name: project.name.clone(),
             scope: TargetScope::Project,
+            link_strategy: resolve_link_strategy(
+                TargetScope::Project,
+                self,
+                Some(project),
+                cli_link_strategy,
+            ),
             canonical_path,
             views: project
                 .views
@@ -282,6 +327,45 @@ impl Config {
             origin: project.origin.clone(),
         })
     }
+}
+
+pub fn legacy_project_canonical_warning(target: &Target) -> Option<String> {
+    let project_root = target.project_root.as_ref()?;
+    if target.canonical_rel.as_deref() != Some(DEFAULT_PROJECT_CANONICAL_REL) {
+        return None;
+    }
+
+    let legacy_path = project_root.join(LEGACY_PROJECT_CANONICAL_REL);
+    if legacy_path.is_dir() && !target.canonical_path.exists() {
+        Some(format!(
+            "project {}: legacy '.skills' canonical detected; the default moved to \
+'.agents/skills'. Set canonical_rel = \".skills\" to keep the old layout, or migrate: \
+see docs/src/migration/agents-canonical.md.",
+            target.name
+        ))
+    } else {
+        None
+    }
+}
+
+fn reject_project_view_canonical_overlap(project: &ProjectConfig) -> Result<()> {
+    let canonical = normalize_project_rel(&project.canonical_rel);
+    for view in &project.views {
+        let view_rel = normalize_project_rel(&view.rel);
+        if view_rel == canonical {
+            bail!(
+                "project `{}` view rel `{}` equals canonical_rel `{}`; remove it from views or choose a different canonical_rel",
+                project.name,
+                view.rel,
+                project.canonical_rel
+            );
+        }
+    }
+    Ok(())
+}
+
+fn normalize_project_rel(rel: &str) -> &str {
+    rel.trim_matches('/')
 }
 
 impl DatabaseConfig {
@@ -590,21 +674,181 @@ path = "/tmp/demo"
             .unwrap();
         assert_eq!(
             target.canonical_path,
-            Utf8PathBuf::from("/tmp/demo/.skills")
+            Utf8PathBuf::from("/tmp/demo/.agents/skills")
         );
         assert_eq!(
             target.aggregator_path,
             Some(Utf8PathBuf::from("/tmp/mirror/projects/demo"))
         );
-        assert_eq!(target.views.len(), 2);
-        assert!(target
-            .views
-            .iter()
-            .any(|view| view.label == "claude" && view.path == "/tmp/demo/.claude/skills"));
-        assert!(target
-            .views
-            .iter()
-            .any(|view| view.label == "agents" && view.path == "/tmp/demo/.agents/skills"));
+        assert_eq!(target.views.len(), 1);
+        assert_eq!(target.views[0].label, "claude");
+        assert_eq!(target.views[0].path, "/tmp/demo/.claude/skills");
+    }
+
+    #[test]
+    fn project_target_rejects_view_matching_canonical_rel() {
+        let cfg = toml::from_str::<Config>(
+            r#"
+[global]
+views = []
+
+[[projects]]
+name = "demo"
+path = "/tmp/demo"
+canonical_rel = ".agents/skills"
+views = [{ rel = ".agents/skills", label = "agents" }]
+"#,
+        )
+        .unwrap();
+
+        let err = cfg
+            .project_target(
+                Utf8Path::new("/tmp/mirror"),
+                cfg.projects.first().expect("project fixture"),
+            )
+            .unwrap_err();
+        let message = err.to_string();
+        assert!(message.contains("view rel `.agents/skills` equals canonical_rel `.agents/skills`"));
+    }
+
+    #[test]
+    fn project_target_honors_explicit_legacy_canonical_rel() {
+        let cfg = toml::from_str::<Config>(
+            r#"
+[global]
+views = []
+
+[[projects]]
+name = "demo"
+path = "/tmp/demo"
+canonical_rel = ".skills"
+"#,
+        )
+        .unwrap();
+
+        let target = cfg
+            .project_target(
+                Utf8Path::new("/tmp/mirror"),
+                cfg.projects.first().expect("project fixture"),
+            )
+            .unwrap();
+        assert_eq!(
+            target.canonical_path,
+            Utf8PathBuf::from("/tmp/demo/.skills")
+        );
+        assert_eq!(target.canonical_rel.as_deref(), Some(".skills"));
+    }
+
+    #[test]
+    fn link_strategy_resolution_precedence_covers_all_rungs() {
+        let defaults = toml::from_str::<Config>(
+            r#"
+[global]
+views = []
+
+[[projects]]
+name = "demo"
+path = "/tmp/demo"
+"#,
+        )
+        .unwrap();
+        let project = defaults.projects.first().expect("project fixture");
+        assert_eq!(
+            resolve_link_strategy(TargetScope::Global, &defaults, None, None),
+            LinkStrategy::Symlink
+        );
+        assert_eq!(
+            resolve_link_strategy(TargetScope::Project, &defaults, Some(project), None),
+            LinkStrategy::Hardlink
+        );
+
+        let top_level = toml::from_str::<Config>(
+            r#"
+link_strategy = "symlink"
+
+[global]
+views = []
+
+[[projects]]
+name = "demo"
+path = "/tmp/demo"
+"#,
+        )
+        .unwrap();
+        let project = top_level.projects.first().expect("project fixture");
+        assert_eq!(
+            resolve_link_strategy(TargetScope::Project, &top_level, Some(project), None),
+            LinkStrategy::Symlink
+        );
+
+        let per_project = toml::from_str::<Config>(
+            r#"
+link_strategy = "hardlink"
+
+[global]
+views = []
+
+[[projects]]
+name = "demo"
+path = "/tmp/demo"
+link_strategy = "symlink"
+"#,
+        )
+        .unwrap();
+        let project = per_project.projects.first().expect("project fixture");
+        assert_eq!(
+            resolve_link_strategy(TargetScope::Project, &per_project, Some(project), None),
+            LinkStrategy::Symlink
+        );
+        assert_eq!(
+            resolve_link_strategy(
+                TargetScope::Project,
+                &per_project,
+                Some(project),
+                Some(LinkStrategy::Hardlink),
+            ),
+            LinkStrategy::Hardlink
+        );
+    }
+
+    #[test]
+    fn link_strategy_config_fields_parse_and_reject_invalid_values() {
+        let temp = tempdir().unwrap();
+        let path = Utf8PathBuf::from_path_buf(temp.path().join("skillnet.toml")).unwrap();
+        fs::write(
+            &path,
+            r#"
+link_strategy = "hardlink"
+
+[global]
+views = []
+
+[[projects]]
+name = "demo"
+path = "/tmp/demo"
+link_strategy = "symlink"
+"#,
+        )
+        .unwrap();
+        let cfg = Config::load(&path).unwrap();
+        assert_eq!(cfg.link_strategy, Some(LinkStrategy::Hardlink));
+        assert_eq!(
+            cfg.projects.first().unwrap().link_strategy,
+            Some(LinkStrategy::Symlink)
+        );
+
+        fs::write(
+            &path,
+            r#"
+link_strategy = "soft"
+
+[global]
+views = []
+"#,
+        )
+        .unwrap();
+        let err = Config::load(&path).unwrap_err();
+        assert!(err.to_string().contains("failed to parse config file"));
     }
 
     #[test]

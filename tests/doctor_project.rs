@@ -3,9 +3,16 @@ use std::{fs, os::unix::fs as unix_fs, path::Path};
 use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::{tempdir, TempDir};
+use walkdir::WalkDir;
 
 struct Fixture {
     tmp: TempDir,
+}
+
+struct ProjectFixture {
+    config: std::path::PathBuf,
+    canonical: std::path::PathBuf,
+    aggregator: std::path::PathBuf,
 }
 
 impl Fixture {
@@ -39,34 +46,24 @@ impl Fixture {
         ]);
         command
     }
-}
 
-fn write_skill(root: &Path, name: &str) {
-    let dir = root.join(name);
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("SKILL.md"), name).unwrap();
-}
+    fn project(&self, project_config: &str) -> ProjectFixture {
+        fs::create_dir_all(self.path("mirror/global")).unwrap();
+        let project = self.path("repos/demo");
+        let canonical = project.join(".skills");
+        write_skill(&canonical, "alpha");
+        write_skill(&canonical, "beta");
 
-#[test]
-fn doctor_checks_project_views_and_aggregator() {
-    let fixture = Fixture::new();
-    fs::create_dir_all(fixture.path("mirror/global")).unwrap();
-    let project = fixture.path("repos/demo");
-    let canonical = project.join(".skills");
-    write_skill(&canonical, "alpha");
-    write_skill(&canonical, "beta");
+        let view = project.join(".claude/skills");
+        fs::create_dir_all(&view).unwrap();
+        unix_fs::symlink("../../.skills/alpha", view.join("alpha")).unwrap();
+        unix_fs::symlink("../../.skills/beta", view.join("beta")).unwrap();
 
-    let view = project.join(".claude/skills");
-    fs::create_dir_all(&view).unwrap();
-    unix_fs::symlink("../../.skills/alpha", view.join("alpha")).unwrap();
-    unix_fs::symlink("../../.skills/beta", view.join("beta")).unwrap();
+        let aggregator = self.path("mirror/projects/demo");
+        fs::create_dir_all(aggregator.parent().unwrap()).unwrap();
 
-    let aggregator = fixture.path("mirror/projects/demo");
-    fs::create_dir_all(aggregator.parent().unwrap()).unwrap();
-    unix_fs::symlink(&canonical, &aggregator).unwrap();
-
-    let config = fixture.write_config(format!(
-        r#"
+        let config = self.write_config(format!(
+            r#"
 [global]
 views = []
 
@@ -75,25 +72,143 @@ name = "demo"
 path = "{}"
 canonical_rel = ".skills"
 views = [{{ rel = ".claude/skills", label = "claude" }}]
+{project_config}
 "#,
-        project.display()
-    ));
+            project.display()
+        ));
+
+        ProjectFixture {
+            config,
+            canonical,
+            aggregator,
+        }
+    }
+}
+
+fn write_skill(root: &Path, name: &str) {
+    let dir = root.join(name);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("SKILL.md"), name).unwrap();
+}
+
+fn hardlink_aggregator(canonical: &Path, aggregator: &Path) {
+    if aggregator.exists() {
+        fs::remove_dir_all(aggregator).unwrap();
+    }
+    fs::create_dir_all(aggregator).unwrap();
+
+    for entry in WalkDir::new(canonical).min_depth(1) {
+        let entry = entry.unwrap();
+        let source = entry.path();
+        let rel = source.strip_prefix(canonical).unwrap();
+        let dest = aggregator.join(rel);
+        let metadata = fs::symlink_metadata(source).unwrap();
+
+        if metadata.file_type().is_dir() {
+            fs::create_dir_all(&dest).unwrap();
+        } else if metadata.file_type().is_symlink() {
+            unix_fs::symlink(fs::read_link(source).unwrap(), dest).unwrap();
+        } else if metadata.file_type().is_file() {
+            fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            fs::hard_link(source, dest).unwrap();
+        }
+    }
+}
+
+#[test]
+fn doctor_accepts_clean_hardlinked_project_aggregator() {
+    let fixture = Fixture::new();
+    let project = fixture.project("");
+    hardlink_aggregator(&project.canonical, &project.aggregator);
 
     fixture
-        .command(&config)
+        .command(&project.config)
+        .arg("doctor")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("doctor: no issues"));
+}
+
+#[test]
+fn doctor_reports_legacy_symlink_aggregator_under_hardlink_strategy() {
+    let fixture = Fixture::new();
+    let project = fixture.project("");
+    unix_fs::symlink(&project.canonical, &project.aggregator).unwrap();
+
+    fixture
+        .command(&project.config)
+        .arg("doctor")
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "is a symlink but project uses hardlink strategy",
+        ))
+        .stderr(predicate::str::contains("run `skillnet project sync`"));
+}
+
+#[test]
+fn doctor_reports_severed_identical_hardlink_aggregator_files_as_warning() {
+    let fixture = Fixture::new();
+    let project = fixture.project("");
+    hardlink_aggregator(&project.canonical, &project.aggregator);
+
+    let canonical_file = project.canonical.join("alpha/SKILL.md");
+    let aggregator_file = project.aggregator.join("alpha/SKILL.md");
+    fs::remove_file(&aggregator_file).unwrap();
+    fs::copy(&canonical_file, &aggregator_file).unwrap();
+
+    fixture
+        .command(&project.config)
+        .arg("doctor")
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("warn: [demo]"))
+        .stderr(predicate::str::contains("alpha/SKILL.md"))
+        .stderr(predicate::str::contains("will re-link"));
+}
+
+#[test]
+fn doctor_reports_diverged_hardlink_aggregator_files_as_error() {
+    let fixture = Fixture::new();
+    let project = fixture.project("");
+    hardlink_aggregator(&project.canonical, &project.aggregator);
+
+    let aggregator_file = project.aggregator.join("alpha/SKILL.md");
+    fs::remove_file(&aggregator_file).unwrap();
+    fs::write(&aggregator_file, "aggregator edit").unwrap();
+
+    fixture
+        .command(&project.config)
+        .arg("doctor")
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("error: [demo]"))
+        .stderr(predicate::str::contains("alpha/SKILL.md"))
+        .stderr(predicate::str::contains("--force"))
+        .stderr(predicate::str::contains("--prefer canonical"));
+}
+
+#[test]
+fn doctor_keeps_symlink_strategy_aggregator_checks() {
+    let fixture = Fixture::new();
+    let project = fixture.project(r#"link_strategy = "symlink""#);
+    unix_fs::symlink(&project.canonical, &project.aggregator).unwrap();
+
+    fixture
+        .command(&project.config)
         .arg("doctor")
         .assert()
         .success()
         .stdout(predicate::str::contains("doctor: no issues"));
 
-    fs::remove_file(view.join("beta")).unwrap();
-    unix_fs::symlink("../../.skills/missing", view.join("beta")).unwrap();
+    fs::remove_file(&project.aggregator).unwrap();
+    unix_fs::symlink(project.canonical.join("missing"), &project.aggregator).unwrap();
 
     fixture
-        .command(&config)
+        .command(&project.config)
         .arg("doctor")
         .assert()
         .code(1)
-        .stderr(predicate::str::contains("beta"))
-        .stderr(predicate::str::contains("expected ../../.skills/beta"));
+        .stderr(predicate::str::contains("aggregator symlink"))
+        .stderr(predicate::str::contains("expected"));
 }

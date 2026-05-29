@@ -7,6 +7,10 @@ use clap::builder::PossibleValuesParser;
 
 use crate::config::{expand_path, Config};
 
+const SCOPE_GLOBAL: &str = "global";
+const SCOPE_PROJECTS: &str = "projects";
+const SCOPE_ALL: &str = "all";
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Scope {
     Global,
@@ -29,7 +33,7 @@ impl FromStr for Scope {
         if input.is_empty() {
             bail!("scope cannot be empty");
         }
-        if input == "global" {
+        if input == SCOPE_GLOBAL {
             Ok(Self::Global)
         } else {
             Ok(Self::Project(input.to_string()))
@@ -43,7 +47,8 @@ impl FromStr for Scope {
 /// parser after loading config instead of trying to express it in clap derive
 /// attributes.
 pub fn scope_value_parser(config: &Config) -> PossibleValuesParser {
-    let values = std::iter::once("global".to_string())
+    let values = std::iter::once(SCOPE_GLOBAL.to_string())
+        .chain([SCOPE_PROJECTS.to_string(), SCOPE_ALL.to_string()])
         .chain(config.projects.iter().map(|project| project.name.clone()))
         .map(|value| Box::leak(value.into_boxed_str()) as &'static str)
         .collect::<Vec<_>>();
@@ -83,12 +88,28 @@ pub fn resolve_scopes(config: &Config, scope_args: &[String], all: bool) -> Resu
         bail!("use either --all or --scope, not both");
     }
 
-    if all || scope_args.is_empty() {
+    if all || scope_args.is_empty() || scope_args.iter().any(|raw| raw == SCOPE_ALL) {
+        return Ok(configured_scopes(config));
+    }
+
+    let has_projects_selector = scope_args.iter().any(|raw| raw == SCOPE_PROJECTS);
+    let has_global_scope = scope_args.iter().any(|raw| raw == SCOPE_GLOBAL);
+    if has_projects_selector && has_global_scope {
         return Ok(configured_scopes(config));
     }
 
     let mut scopes = Vec::with_capacity(scope_args.len());
     for raw in scope_args {
+        if raw == SCOPE_PROJECTS {
+            for project in &config.projects {
+                let scope = Scope::Project(project.name.clone());
+                if !scopes.contains(&scope) {
+                    scopes.push(scope);
+                }
+            }
+            continue;
+        }
+
         let scope = resolve_scope(config, raw)?;
         if !scopes.contains(&scope) {
             scopes.push(scope);
@@ -165,13 +186,34 @@ impl SkillPath {
     }
 }
 
-// TODO: The old `--target project` selector meant every project and no global.
-// If that behavior is missed in the new surface, prefer repeated
-// `--scope <project>` values or a future `--projects` flag.
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{DatabaseConfig, GlobalConfig};
+
+    fn test_config(project_names: &[&str]) -> Config {
+        Config {
+            global: GlobalConfig {
+                canonical_path: None,
+                views: Vec::new(),
+            },
+            skills_root: None,
+            mirror_root: None,
+            database: DatabaseConfig::default(),
+            link_strategy: None,
+            projects: project_names
+                .iter()
+                .map(|name| crate::config::ProjectConfig {
+                    name: (*name).to_string(),
+                    path: format!("/tmp/{name}"),
+                    origin: None,
+                    link_strategy: None,
+                    canonical_rel: ".skills".to_string(),
+                    views: Vec::new(),
+                })
+                .collect(),
+        }
+    }
 
     #[test]
     fn parses_global_skill_path() {
@@ -201,5 +243,98 @@ mod tests {
     fn rejects_missing_separator() {
         let err = SkillPath::parse("global", &[Scope::Global]).unwrap_err();
         assert!(err.to_string().contains("missing `/`"));
+    }
+
+    #[test]
+    fn resolves_projects_selector_to_project_scopes_only() {
+        let config = test_config(&["first", "second"]);
+
+        let scopes = resolve_scopes(&config, &["projects".to_string()], false).unwrap();
+
+        assert_eq!(
+            scopes,
+            vec![
+                Scope::Project("first".to_string()),
+                Scope::Project("second".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn resolves_all_selector_like_all_flag() {
+        let config = test_config(&["first", "second"]);
+
+        let selector = resolve_scopes(&config, &["all".to_string()], false).unwrap();
+        let flag = resolve_scopes(&config, &[], true).unwrap();
+
+        assert_eq!(selector, flag);
+        assert_eq!(
+            selector,
+            vec![
+                Scope::Global,
+                Scope::Project("first".to_string()),
+                Scope::Project("second".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn resolves_projects_selector_with_global_as_all_in_configured_order() {
+        let config = test_config(&["first", "second"]);
+
+        let scopes = resolve_scopes(
+            &config,
+            &["projects".to_string(), "global".to_string()],
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(
+            scopes,
+            resolve_scopes(&config, &["all".to_string()], false).unwrap()
+        );
+    }
+
+    #[test]
+    fn resolves_projects_selector_without_repeating_named_project() {
+        let config = test_config(&["first", "second"]);
+
+        let scopes = resolve_scopes(
+            &config,
+            &["projects".to_string(), "first".to_string()],
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(
+            scopes,
+            vec![
+                Scope::Project("first".to_string()),
+                Scope::Project("second".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn scope_value_parser_accepts_selector_tokens_and_rejects_unknowns() {
+        let config = test_config(&["first"]);
+        let command = || {
+            clap::Command::new("skillnet").arg(
+                clap::Arg::new("scope")
+                    .long("scope")
+                    .action(clap::ArgAction::Append)
+                    .value_parser(scope_value_parser(&config)),
+            )
+        };
+
+        assert!(command()
+            .try_get_matches_from(["skillnet", "--scope", "projects"])
+            .is_ok());
+        assert!(command()
+            .try_get_matches_from(["skillnet", "--scope", "all"])
+            .is_ok());
+        assert!(command()
+            .try_get_matches_from(["skillnet", "--scope", "nope"])
+            .is_err());
     }
 }

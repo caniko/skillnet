@@ -70,6 +70,12 @@ pub(super) enum Command {
     },
     /// Materialise every configured global view and project view in one shot.
     Sync {
+        /// Mirror scope to sync. Use `projects` for every project or `all` for global plus projects.
+        #[arg(long, value_name = "SCOPE", action = ArgAction::Append)]
+        scope: Vec<String>,
+        /// Sync every configured scope. Alias for `--scope all`.
+        #[arg(long)]
+        all: bool,
         /// Promote view-side edits back into canonical skills.
         #[arg(long)]
         apply_promote: bool,
@@ -88,6 +94,9 @@ pub(super) enum Command {
         /// Remove view entries that no longer correspond to canonical skills.
         #[arg(long)]
         allow_delete: bool,
+        /// Link strategy for this sync run.
+        #[arg(long, value_enum)]
+        link: Option<LinkArg>,
     },
     /// Manage skillnet's configuration files.
     Config {
@@ -440,6 +449,12 @@ pub(crate) enum PreferenceArg {
     Canonical,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum LinkArg {
+    Symlink,
+    Hardlink,
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub(crate) enum Decision {
     Accept,
@@ -492,6 +507,9 @@ pub(super) enum ViewCommand {
         /// and restore the symlink (destructive demote).
         #[arg(long)]
         force: bool,
+        /// Link strategy for this sync run.
+        #[arg(long, value_enum)]
+        link: Option<LinkArg>,
     },
     /// Show read-only global view drift.
     Status {
@@ -601,7 +619,7 @@ pub(super) enum ProjectCommand {
         #[arg(long)]
         prune_mirror: bool,
     },
-    /// Materialise configured project view and aggregator symlinks.
+    /// Materialise configured project views and aggregators.
     Sync {
         /// Project name to sync. May be repeated.
         #[arg(long, value_name = "NAME", action = ArgAction::Append)]
@@ -615,6 +633,9 @@ pub(super) enum ProjectCommand {
         /// Replace existing non-symlink entries in project views.
         #[arg(long)]
         force: bool,
+        /// Link strategy for this sync run.
+        #[arg(long, value_enum)]
+        link: Option<LinkArg>,
     },
     /// Show read-only project view and aggregator drift.
     Status {
@@ -628,7 +649,7 @@ pub(super) enum ProjectCommand {
         #[arg(long, default_value = "text")]
         format: StatusFormat,
     },
-    /// Show project view and aggregator symlink deltas.
+    /// Show project view and aggregator deltas.
     Diff {
         /// Project name to diff. May be repeated.
         #[arg(long, value_name = "NAME", action = ArgAction::Append)]
@@ -737,13 +758,16 @@ mod tests {
         assert!(matches!(
             cli.command,
             Some(Command::Sync {
+                scope,
+                all: false,
                 apply_promote: false,
                 no_promote: false,
                 force: false,
                 prefer: None,
                 adopt_new: false,
                 allow_delete: false,
-            })
+                link: None,
+            }) if scope.is_empty()
         ));
     }
 
@@ -763,12 +787,51 @@ mod tests {
         assert!(matches!(
             cli.command,
             Some(Command::Sync {
+                scope,
+                all: false,
                 apply_promote: true,
                 no_promote: false,
                 force: true,
                 prefer: Some(PreferenceArg::View),
                 adopt_new: true,
                 allow_delete: true,
+                link: None,
+            }) if scope.is_empty()
+        ));
+    }
+
+    #[test]
+    fn materializing_commands_parse_link_strategy() {
+        let sync = Cli::parse_from(["skillnet", "sync", "--link", "hardlink"]);
+        assert!(matches!(
+            sync.command,
+            Some(Command::Sync {
+                link: Some(LinkArg::Hardlink),
+                ..
+            })
+        ));
+
+        let view = Cli::parse_from(["skillnet", "view", "sync", "--all", "--link", "symlink"]);
+        assert!(matches!(
+            view.command,
+            Some(Command::View {
+                command: ViewCommand::Sync {
+                    link: Some(LinkArg::Symlink),
+                    ..
+                }
+            })
+        ));
+
+        let project = Cli::parse_from([
+            "skillnet", "project", "sync", "--name", "x", "--link", "hardlink",
+        ]);
+        assert!(matches!(
+            project.command,
+            Some(Command::Project {
+                command: ProjectCommand::Sync {
+                    link: Some(LinkArg::Hardlink),
+                    ..
+                }
             })
         ));
     }

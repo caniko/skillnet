@@ -27,16 +27,32 @@ use serde::Serialize;
 use walkdir::WalkDir;
 
 use crate::{
-    fs_ops::{content_signature, copy_dir, newest_mtime_nanos},
+    fs_ops::{
+        content_signature, copy_dir, hardlink_dir, hardlink_dir_status, newest_mtime_nanos,
+        relink_files, HardlinkStatus,
+    },
+    link::LinkStrategy,
     mirror::mirror_skill_dirs,
     model::{Target, ViewTarget},
 };
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ViewSyncOptions {
     pub allow_delete: bool,
     pub force: bool,
     pub relative_links: bool,
+    pub link_strategy: LinkStrategy,
+}
+
+impl Default for ViewSyncOptions {
+    fn default() -> Self {
+        Self {
+            allow_delete: false,
+            force: false,
+            relative_links: false,
+            link_strategy: LinkStrategy::Symlink,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -106,7 +122,7 @@ pub enum Preference {
     Canonical,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromotionOptions {
     pub apply_promote: bool,
     pub force_demote: bool,
@@ -114,7 +130,23 @@ pub struct PromotionOptions {
     pub adopt_new: bool,
     pub allow_delete: bool,
     pub relative_links: bool,
+    pub link_strategy: LinkStrategy,
     pub project_root: Option<Utf8PathBuf>,
+}
+
+impl Default for PromotionOptions {
+    fn default() -> Self {
+        Self {
+            apply_promote: false,
+            force_demote: false,
+            prefer: None,
+            adopt_new: false,
+            allow_delete: false,
+            relative_links: false,
+            link_strategy: LinkStrategy::Symlink,
+            project_root: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -616,6 +648,7 @@ pub fn materialize_project(target: &Target) -> Result<ProjectSyncSummary> {
         ProjectSyncOptions {
             allow_delete: false,
             force: false,
+            link_strategy: target.link_strategy,
         },
     )
 }
@@ -633,6 +666,7 @@ pub fn materialize_project_with_options(
                 allow_delete: options.allow_delete,
                 force: options.force,
                 relative_links: true,
+                link_strategy: options.link_strategy,
             },
         )?;
         views.push(ProjectViewSummary {
@@ -642,12 +676,26 @@ pub fn materialize_project_with_options(
         });
     }
 
-    let aggregator = match &target.aggregator_path {
-        Some(path) => Some(ensure_aggregator_symlink(path, &target.canonical_path)?),
-        None => None,
+    let (aggregator, aggregator_pending) = match &target.aggregator_path {
+        Some(path) => {
+            let outcome = ensure_aggregator(
+                path,
+                &target.canonical_path,
+                options.link_strategy,
+                options.force,
+                None,
+            )
+            .with_context(|| format!("[{}] failed to hardlink aggregator", target.name))?;
+            (Some(outcome.status), outcome.pending)
+        }
+        None => (None, Vec::new()),
     };
 
-    Ok(ProjectSyncSummary { views, aggregator })
+    Ok(ProjectSyncSummary {
+        views,
+        aggregator,
+        aggregator_pending,
+    })
 }
 
 pub fn materialize_project_with_promotion(
@@ -662,6 +710,7 @@ pub fn materialize_project_with_promotion(
             view,
             PromotionOptions {
                 relative_links: true,
+                link_strategy: options.link_strategy,
                 project_root: target.project_root.clone(),
                 ..options.clone()
             },
@@ -674,12 +723,26 @@ pub fn materialize_project_with_promotion(
         });
     }
 
-    let aggregator = match &target.aggregator_path {
-        Some(path) => Some(ensure_aggregator_symlink(path, &target.canonical_path)?),
-        None => None,
+    let (aggregator, aggregator_pending) = match &target.aggregator_path {
+        Some(path) => {
+            let outcome = ensure_aggregator(
+                path,
+                &target.canonical_path,
+                options.link_strategy,
+                options.force_demote,
+                options.prefer,
+            )
+            .with_context(|| format!("[{}] failed to hardlink aggregator", target.name))?;
+            (Some(outcome.status), outcome.pending)
+        }
+        None => (None, Vec::new()),
     };
 
-    Ok(ProjectPromotionSummary { views, aggregator })
+    Ok(ProjectPromotionSummary {
+        views,
+        aggregator,
+        aggregator_pending,
+    })
 }
 
 pub fn project_status(target: &Target) -> Result<Vec<DriftEntry>> {
@@ -695,20 +758,10 @@ pub fn project_status(target: &Target) -> Result<Vec<DriftEntry>> {
         )?);
     }
     if let Some(path) = &target.aggregator_path {
-        if aggregator_status(path, &target.canonical_path)? != AggregatorStatus::Unchanged {
-            drift.push(DriftEntry {
-                skill: "aggregator".to_string(),
-                kind: DriftKind::WrongTarget,
-                expected: Some(target.canonical_path.clone()),
-                actual: fs::read_link(path)
-                    .ok()
-                    .and_then(|path| Utf8PathBuf::from_path_buf(path).ok()),
-                view_mtime_nanos: None,
-                canonical_mtime_nanos: None,
-                view_sha: None,
-                canonical_sha: None,
-                reconcile_outcome: None,
-            });
+        if let Some(entry) =
+            aggregator_drift_entry(path, &target.canonical_path, target.link_strategy)?
+        {
+            drift.push(entry);
         }
     }
     Ok(drift)
@@ -727,33 +780,67 @@ pub fn project_diff(target: &Target) -> Result<Vec<FileDelta>> {
         )?);
     }
     if let Some(path) = &target.aggregator_path {
-        if aggregator_status(path, &target.canonical_path)? != AggregatorStatus::Unchanged {
-            deltas.push(FileDelta {
-                skill: "aggregator".to_string(),
-                kind: FileDeltaKind::Modified,
-                expected: Some(target.canonical_path.clone()),
-                actual: fs::read_link(path)
-                    .ok()
-                    .and_then(|path| Utf8PathBuf::from_path_buf(path).ok()),
-            });
+        if let Some(delta) =
+            aggregator_file_delta(path, &target.canonical_path, target.link_strategy)?
+        {
+            deltas.push(delta);
         }
     }
     Ok(deltas)
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub fn project_aggregator_plan(target: &Target) -> Result<Option<AggregatorPlan>> {
+    let Some(path) = &target.aggregator_path else {
+        return Ok(None);
+    };
+    let action = match target.link_strategy {
+        LinkStrategy::Symlink => match aggregator_symlink_status(path, &target.canonical_path)? {
+            AggregatorStatus::Created => AggregatorPlanAction::Create,
+            AggregatorStatus::Updated => AggregatorPlanAction::Update,
+            AggregatorStatus::Unchanged => AggregatorPlanAction::Unchanged,
+        },
+        LinkStrategy::Hardlink => match hardlink_dir_status(&target.canonical_path, path)? {
+            HardlinkStatus::Missing => AggregatorPlanAction::Create,
+            HardlinkStatus::Foreign => AggregatorPlanAction::Update,
+            HardlinkStatus::Identical => AggregatorPlanAction::Unchanged,
+            HardlinkStatus::Severed { files } => AggregatorPlanAction::Relink { files },
+            HardlinkStatus::Diverged { files } => AggregatorPlanAction::Diverged { files },
+        },
+    };
+    Ok(Some(AggregatorPlan {
+        strategy: target.link_strategy,
+        path: path.clone(),
+        canonical: target.canonical_path.clone(),
+        file_count: regular_file_count(&target.canonical_path)?,
+        action,
+    }))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectSyncOptions {
     pub allow_delete: bool,
     pub force: bool,
+    pub link_strategy: LinkStrategy,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+impl Default for ProjectSyncOptions {
+    fn default() -> Self {
+        Self {
+            allow_delete: false,
+            force: false,
+            link_strategy: LinkStrategy::Symlink,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct ProjectSyncSummary {
     pub views: Vec<ProjectViewSummary>,
     pub aggregator: Option<AggregatorStatus>,
+    pub aggregator_pending: Vec<AggregatorPending>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProjectViewSummary {
     pub label: String,
     pub path: Utf8PathBuf,
@@ -764,6 +851,7 @@ pub struct ProjectViewSummary {
 pub struct ProjectPromotionSummary {
     pub views: Vec<ProjectPromotionViewSummary>,
     pub aggregator: Option<AggregatorStatus>,
+    pub aggregator_pending: Vec<AggregatorPending>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -778,6 +866,42 @@ pub enum AggregatorStatus {
     Created,
     Updated,
     Unchanged,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AggregatorPending {
+    pub path: Utf8PathBuf,
+    pub canonical: Utf8PathBuf,
+    pub kind: AggregatorPendingKind,
+    pub files: Vec<Utf8PathBuf>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum AggregatorPendingKind {
+    Diverged,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AggregatorPlan {
+    pub strategy: LinkStrategy,
+    pub path: Utf8PathBuf,
+    pub canonical: Utf8PathBuf,
+    pub file_count: usize,
+    pub action: AggregatorPlanAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AggregatorPlanAction {
+    Create,
+    Update,
+    Relink { files: Vec<Utf8PathBuf> },
+    Diverged { files: Vec<Utf8PathBuf> },
+    Unchanged,
+}
+
+struct AggregatorOutcome {
+    status: AggregatorStatus,
+    pending: Vec<AggregatorPending>,
 }
 
 fn now_nanos() -> Result<u128> {
@@ -818,6 +942,17 @@ fn comparable_file_set(root: &Utf8Path) -> Result<BTreeSet<Utf8PathBuf>> {
     Ok(files)
 }
 
+fn regular_file_count(root: &Utf8Path) -> Result<usize> {
+    let mut count = 0;
+    for entry in WalkDir::new(root).follow_links(false) {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
 fn expected_skill_links(canonical: &Utf8Path) -> Result<BTreeMap<String, Utf8PathBuf>> {
     mirror_skill_dirs(canonical)?
         .into_iter()
@@ -855,6 +990,24 @@ fn ensure_symlink(link: &Utf8Path, desired: &Utf8Path, force: bool) -> Result<Li
     }
 }
 
+fn ensure_aggregator(
+    path: &Utf8Path,
+    canonical: &Utf8Path,
+    strategy: LinkStrategy,
+    force: bool,
+    prefer: Option<Preference>,
+) -> Result<AggregatorOutcome> {
+    match strategy {
+        LinkStrategy::Symlink => {
+            ensure_aggregator_symlink(path, canonical).map(|status| AggregatorOutcome {
+                status,
+                pending: Vec::new(),
+            })
+        }
+        LinkStrategy::Hardlink => ensure_aggregator_hardlink(path, canonical, force, prefer),
+    }
+}
+
 fn ensure_aggregator_symlink(path: &Utf8Path, canonical: &Utf8Path) -> Result<AggregatorStatus> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -877,7 +1030,67 @@ fn ensure_aggregator_symlink(path: &Utf8Path, canonical: &Utf8Path) -> Result<Ag
     }
 }
 
-fn aggregator_status(path: &Utf8Path, canonical: &Utf8Path) -> Result<AggregatorStatus> {
+fn ensure_aggregator_hardlink(
+    path: &Utf8Path,
+    canonical: &Utf8Path,
+    force: bool,
+    prefer: Option<Preference>,
+) -> Result<AggregatorOutcome> {
+    match hardlink_dir_status(canonical, path)? {
+        HardlinkStatus::Missing => {
+            hardlink_dir(canonical, path)?;
+            Ok(aggregator_outcome(AggregatorStatus::Created))
+        }
+        HardlinkStatus::Foreign => {
+            hardlink_dir(canonical, path)?;
+            Ok(aggregator_outcome(AggregatorStatus::Updated))
+        }
+        HardlinkStatus::Identical => Ok(aggregator_outcome(AggregatorStatus::Unchanged)),
+        HardlinkStatus::Severed { files } => {
+            relink_files(canonical, path, &files)?;
+            Ok(aggregator_outcome(AggregatorStatus::Updated))
+        }
+        HardlinkStatus::Diverged { files } if force || prefer == Some(Preference::Canonical) => {
+            relink_files(canonical, path, &files)?;
+            Ok(aggregator_outcome(AggregatorStatus::Updated))
+        }
+        HardlinkStatus::Diverged { files } => Ok(AggregatorOutcome {
+            status: AggregatorStatus::Unchanged,
+            pending: vec![AggregatorPending {
+                path: path.to_path_buf(),
+                canonical: canonical.to_path_buf(),
+                kind: AggregatorPendingKind::Diverged,
+                files,
+            }],
+        }),
+    }
+}
+
+fn aggregator_outcome(status: AggregatorStatus) -> AggregatorOutcome {
+    AggregatorOutcome {
+        status,
+        pending: Vec::new(),
+    }
+}
+
+fn aggregator_status(
+    path: &Utf8Path,
+    canonical: &Utf8Path,
+    strategy: LinkStrategy,
+) -> Result<AggregatorStatus> {
+    match strategy {
+        LinkStrategy::Symlink => aggregator_symlink_status(path, canonical),
+        LinkStrategy::Hardlink => match hardlink_dir_status(canonical, path)? {
+            HardlinkStatus::Missing => Ok(AggregatorStatus::Created),
+            HardlinkStatus::Identical => Ok(AggregatorStatus::Unchanged),
+            HardlinkStatus::Severed { .. }
+            | HardlinkStatus::Diverged { .. }
+            | HardlinkStatus::Foreign => Ok(AggregatorStatus::Updated),
+        },
+    }
+}
+
+fn aggregator_symlink_status(path: &Utf8Path, canonical: &Utf8Path) -> Result<AggregatorStatus> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             let current = read_link_utf8(path)?;
@@ -890,6 +1103,78 @@ fn aggregator_status(path: &Utf8Path, canonical: &Utf8Path) -> Result<Aggregator
         Ok(_) => Ok(AggregatorStatus::Updated),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(AggregatorStatus::Created),
         Err(err) => Err(err).with_context(|| format!("failed to inspect {path}")),
+    }
+}
+
+fn aggregator_drift_entry(
+    path: &Utf8Path,
+    canonical: &Utf8Path,
+    strategy: LinkStrategy,
+) -> Result<Option<DriftEntry>> {
+    let status = aggregator_status(path, canonical, strategy)?;
+    if status == AggregatorStatus::Unchanged {
+        return Ok(None);
+    }
+    let (kind, actual) = aggregator_drift_kind_and_actual(path, strategy, status);
+    Ok(Some(DriftEntry {
+        skill: "aggregator".to_string(),
+        kind,
+        expected: Some(canonical.to_path_buf()),
+        actual,
+        view_mtime_nanos: None,
+        canonical_mtime_nanos: None,
+        view_sha: None,
+        canonical_sha: None,
+        reconcile_outcome: None,
+    }))
+}
+
+fn aggregator_file_delta(
+    path: &Utf8Path,
+    canonical: &Utf8Path,
+    strategy: LinkStrategy,
+) -> Result<Option<FileDelta>> {
+    let status = aggregator_status(path, canonical, strategy)?;
+    if status == AggregatorStatus::Unchanged {
+        return Ok(None);
+    }
+    let kind = match status {
+        AggregatorStatus::Created => FileDeltaKind::Missing,
+        AggregatorStatus::Updated => FileDeltaKind::Modified,
+        AggregatorStatus::Unchanged => unreachable!("unchanged status returned early"),
+    };
+    let actual = match (strategy, status) {
+        (_, AggregatorStatus::Created) => None,
+        (LinkStrategy::Symlink, _) => fs::read_link(path)
+            .ok()
+            .and_then(|path| Utf8PathBuf::from_path_buf(path).ok()),
+        (LinkStrategy::Hardlink, _) => Some(path.to_path_buf()),
+    };
+    Ok(Some(FileDelta {
+        skill: "aggregator".to_string(),
+        kind,
+        expected: Some(canonical.to_path_buf()),
+        actual,
+    }))
+}
+
+fn aggregator_drift_kind_and_actual(
+    path: &Utf8Path,
+    strategy: LinkStrategy,
+    status: AggregatorStatus,
+) -> (DriftKind, Option<Utf8PathBuf>) {
+    match status {
+        AggregatorStatus::Created => (DriftKind::Missing, None),
+        AggregatorStatus::Updated => {
+            let actual = match strategy {
+                LinkStrategy::Symlink => fs::read_link(path)
+                    .ok()
+                    .and_then(|path| Utf8PathBuf::from_path_buf(path).ok()),
+                LinkStrategy::Hardlink => Some(path.to_path_buf()),
+            };
+            (DriftKind::WrongTarget, actual)
+        }
+        AggregatorStatus::Unchanged => unreachable!("unchanged status has no drift"),
     }
 }
 

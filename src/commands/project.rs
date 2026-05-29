@@ -7,10 +7,14 @@ use toml_edit::{value, ArrayOfTables, DocumentMut, Item, Table};
 
 use super::{status::promotion_status_counts, view::format_view_summary, Context};
 use crate::cli::args::StatusFormat;
-use crate::config::{config_is_hm_managed, expand_path, hm_managed_error_message};
+use crate::config::{
+    config_is_hm_managed, expand_path, hm_managed_error_message, legacy_project_canonical_warning,
+};
+use crate::link::LinkStrategy;
 use crate::view::{
-    materialize_project_with_options, project_diff, project_status, AggregatorStatus, DriftEntry,
-    DriftKind, FileDeltaKind, ProjectSyncOptions,
+    materialize_project_with_options, project_aggregator_plan, project_diff, project_status,
+    AggregatorPending, AggregatorPendingKind, AggregatorPlan, AggregatorPlanAction,
+    AggregatorStatus, DriftEntry, DriftKind, FileDeltaKind, ProjectSyncOptions,
 };
 
 pub fn project_list(ctx: &Context) {
@@ -27,7 +31,7 @@ pub fn project_add(ctx: &Context, name: &str, path: &Utf8Path, allow_missing: bo
     if name.is_empty() || name.contains('/') || name.contains('\\') {
         bail!("project name must be a non-empty scope name, not a path");
     }
-    if name == "global" || name == "all" || name == "project" {
+    if name == "global" || name == "all" || name == "project" || name == "projects" {
         bail!("`{name}` is reserved and cannot be used as a project name");
     }
     if ctx.config.projects.iter().any(|p| p.name == name) {
@@ -90,8 +94,11 @@ pub fn project_sync(
     all: bool,
     allow_delete: bool,
     force: bool,
+    link_strategy: Option<LinkStrategy>,
 ) -> Result<()> {
-    for target in project_targets(ctx, names, all)? {
+    let mut pending = 0usize;
+    for target in project_targets(ctx, names, all, link_strategy)? {
+        warn_legacy_project_layout(&target);
         if let Some(project_root) = &target.project_root {
             if !project_root.is_dir() {
                 eprintln!(
@@ -109,10 +116,13 @@ pub fn project_sync(
             for view in &target.views {
                 println!("to: {}\t{}", view.label, view.path);
             }
-            if let Some(aggregator) = &target.aggregator_path {
-                println!("aggregator: {aggregator}");
+            if let Some(plan) = project_aggregator_plan(&target)? {
+                print_aggregator_plan(&plan, force);
             }
             continue;
+        }
+        if target.aggregator_path.is_some() {
+            ctx.ensure_destination_clean()?;
         }
 
         let summary = materialize_project_with_options(
@@ -120,6 +130,7 @@ pub fn project_sync(
             ProjectSyncOptions {
                 allow_delete,
                 force,
+                link_strategy: target.link_strategy,
             },
         )?;
         println!("# {}", target.name);
@@ -133,6 +144,16 @@ pub fn project_sync(
         if let Some(status) = summary.aggregator {
             println!("aggregator  {}", format_aggregator_status(status));
         }
+        for entry in &summary.aggregator_pending {
+            print_aggregator_pending(entry);
+        }
+        pending += summary.aggregator_pending.len();
+    }
+    if pending > 0 {
+        bail!(
+            "{pending} aggregator entr{} need a decision; rerun with --force to replace from canonical",
+            if pending == 1 { "y" } else { "ies" }
+        );
     }
     Ok(())
 }
@@ -191,7 +212,7 @@ pub fn project_clone_all(ctx: &Context, all: bool, dry_run: bool, ssh_strict: bo
         if dry_run {
             println!("project sync --all");
         } else {
-            project_sync(ctx, &[], true, false, false)?;
+            project_sync(ctx, &[], true, false, false, None)?;
         }
     }
 
@@ -205,7 +226,8 @@ pub fn project_status_command(
     format: StatusFormat,
 ) -> Result<()> {
     let mut rows = Vec::new();
-    for target in project_targets(ctx, names, all)? {
+    for target in project_targets(ctx, names, all, None)? {
+        warn_legacy_project_layout(&target);
         let drift = project_status(&target)?;
         let promotion_status = promotion_status_counts(&drift);
         rows.push(ProjectStatusRow {
@@ -238,7 +260,7 @@ pub fn project_status_command(
 }
 
 pub fn project_diff_command(ctx: &Context, names: &[String], all: bool) -> Result<()> {
-    for target in project_targets(ctx, names, all)? {
+    for target in project_targets(ctx, names, all, None)? {
         println!("# {}", target.name);
         let deltas = project_diff(&target)?;
         if deltas.is_empty() {
@@ -261,6 +283,7 @@ fn project_targets(
     ctx: &Context,
     names: &[String],
     all: bool,
+    link_strategy: Option<LinkStrategy>,
 ) -> Result<Vec<crate::model::Target>> {
     if all && !names.is_empty() {
         bail!("use either --all or --name, not both");
@@ -284,9 +307,19 @@ fn project_targets(
         let project = ctx
             .project(&name)
             .with_context(|| format!("unknown project `{name}`"))?;
-        targets.push(ctx.config.project_target(&ctx.mirror_root, project)?);
+        targets.push(ctx.config.project_target_with_link_override(
+            &ctx.mirror_root,
+            project,
+            link_strategy,
+        )?);
     }
     Ok(targets)
+}
+
+fn warn_legacy_project_layout(target: &crate::model::Target) {
+    if let Some(message) = legacy_project_canonical_warning(target) {
+        eprintln!("warning: {message}");
+    }
 }
 
 fn format_aggregator_status(status: AggregatorStatus) -> &'static str {
@@ -294,6 +327,65 @@ fn format_aggregator_status(status: AggregatorStatus) -> &'static str {
         AggregatorStatus::Created => "created",
         AggregatorStatus::Updated => "updated",
         AggregatorStatus::Unchanged => "unchanged",
+    }
+}
+
+fn print_aggregator_pending(entry: &AggregatorPending) {
+    match entry.kind {
+        AggregatorPendingKind::Diverged => println!(
+            "aggregator  needs decision: {} diverged file{} at {}; pass --force to replace from {}",
+            entry.files.len(),
+            if entry.files.len() == 1 { "" } else { "s" },
+            entry.path,
+            entry.canonical
+        ),
+    }
+}
+
+fn print_aggregator_plan(plan: &AggregatorPlan, force: bool) {
+    match plan.strategy {
+        LinkStrategy::Symlink => {
+            println!("aggregator: symlink {} -> {}", plan.path, plan.canonical);
+        }
+        LinkStrategy::Hardlink => {
+            println!(
+                "aggregator: hardlink {} ({} files)",
+                plan.path, plan.file_count
+            );
+        }
+    }
+
+    match &plan.action {
+        AggregatorPlanAction::Create => println!("  + create aggregator"),
+        AggregatorPlanAction::Update => println!("  ~ replace aggregator"),
+        AggregatorPlanAction::Relink { files } => {
+            println!(
+                "  ~ relink {} severed file{}",
+                files.len(),
+                plural(files.len())
+            );
+        }
+        AggregatorPlanAction::Diverged { files } if force => {
+            println!(
+                "  ~ relink {} diverged file{}",
+                files.len(),
+                plural(files.len())
+            );
+        }
+        AggregatorPlanAction::Diverged { files } => println!(
+            "  ! {} diverged file{}; pass --force to replace from canonical",
+            files.len(),
+            plural(files.len())
+        ),
+        AggregatorPlanAction::Unchanged => println!("  = unchanged"),
+    }
+}
+
+fn plural(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
     }
 }
 

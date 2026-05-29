@@ -9,6 +9,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use super::Context;
 use crate::{
+    config::legacy_project_canonical_warning,
+    fs_ops::{hardlink_dir_status, HardlinkStatus},
+    link::LinkStrategy,
     model::{Target, TargetScope, ViewTarget},
     view::{compare_view_entry, ReconcileOutcome},
 };
@@ -56,6 +59,7 @@ pub fn run(ctx: &Context) -> Result<()> {
 pub fn lint(ctx: &Context) -> Result<Vec<Issue>> {
     let mut issues = Vec::new();
     for target in ctx.all_targets()? {
+        warn_legacy_project_layout(&target);
         match target.scope {
             TargetScope::Global => check_global(&target, &mut issues)?,
             TargetScope::Project => check_project(&target, &mut issues)?,
@@ -68,6 +72,12 @@ pub fn lint(ctx: &Context) -> Result<Vec<Issue>> {
             .then(left.message.cmp(&right.message))
     });
     Ok(issues)
+}
+
+fn warn_legacy_project_layout(target: &Target) {
+    if let Some(message) = legacy_project_canonical_warning(target) {
+        eprintln!("warning: {message}");
+    }
 }
 
 fn check_global(target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
@@ -358,6 +368,17 @@ fn check_project_aggregator(target: &Target, issues: &mut Vec<Issue>) -> Result<
     let Some(path) = &target.aggregator_path else {
         return Ok(());
     };
+    match target.link_strategy {
+        LinkStrategy::Symlink => check_project_symlink_aggregator(target, path, issues),
+        LinkStrategy::Hardlink => check_project_hardlink_aggregator(target, path, issues),
+    }
+}
+
+fn check_project_symlink_aggregator(
+    target: &Target,
+    path: &Utf8Path,
+    issues: &mut Vec<Issue>,
+) -> Result<()> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             let actual = read_link_utf8(path)?;
@@ -407,6 +428,88 @@ fn check_project_aggregator(target: &Target, issues: &mut Vec<Issue>) -> Result<
         Err(err) => return Err(err).with_context(|| format!("failed to inspect {path}")),
     }
     Ok(())
+}
+
+fn check_project_hardlink_aggregator(
+    target: &Target,
+    path: &Utf8Path,
+    issues: &mut Vec<Issue>,
+) -> Result<()> {
+    if let Ok(metadata) = fs::symlink_metadata(path) {
+        if metadata.file_type().is_symlink() {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "aggregator {path} is a symlink but project uses hardlink strategy; run `skillnet project sync` to materialise the hardlinked copy"
+                ),
+            );
+            return Ok(());
+        }
+    }
+
+    match hardlink_dir_status(&target.canonical_path, path)? {
+        HardlinkStatus::Missing => issue(
+            issues,
+            target,
+            Severity::Error,
+            format!(
+                "aggregator hardlink directory {path} is missing; run `skillnet project sync`"
+            ),
+        ),
+        HardlinkStatus::Identical => {}
+        HardlinkStatus::Severed { files } => issue(
+            issues,
+            target,
+            Severity::Warn,
+            format!(
+                "{} aggregator file{} no longer hardlinked ({}) but content matches; `skillnet project sync` will re-link",
+                files.len(),
+                plural(files.len()),
+                sample_files(&files)
+            ),
+        ),
+        HardlinkStatus::Diverged { files } => issue(
+            issues,
+            target,
+            Severity::Error,
+            format!(
+                "{} aggregator file{} diverged from canonical ({}); run `skillnet project sync --force` / `--prefer canonical` to overwrite, or reconcile manually",
+                files.len(),
+                plural(files.len()),
+                sample_files(&files)
+            ),
+        ),
+        HardlinkStatus::Foreign => issue(
+            issues,
+            target,
+            Severity::Error,
+            format!("aggregator path {path} is not a faithful copy (extra/missing entries)"),
+        ),
+    }
+    Ok(())
+}
+
+fn plural(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
+fn sample_files(files: &[Utf8PathBuf]) -> String {
+    const LIMIT: usize = 3;
+    let mut names = files
+        .iter()
+        .take(LIMIT)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    if files.len() > LIMIT {
+        names.push(format!("+{} more", files.len() - LIMIT));
+    }
+    names.join(", ")
 }
 
 fn canonical_skill_names(canonical_path: &Utf8Path) -> Result<BTreeSet<String>> {

@@ -11,6 +11,7 @@ mod commands;
 mod config;
 pub mod exit;
 mod fs_ops;
+pub mod link;
 pub mod mirror;
 pub mod model;
 mod vcs;

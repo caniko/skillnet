@@ -191,6 +191,7 @@ fn sync_after_mutation(ctx: &Context, scope: &Scope, allow_delete: bool) -> Resu
                     view,
                     ViewSyncOptions {
                         allow_delete,
+                        link_strategy: target.link_strategy,
                         ..ViewSyncOptions::default()
                     },
                 )?;
@@ -202,6 +203,7 @@ fn sync_after_mutation(ctx: &Context, scope: &Scope, allow_delete: bool) -> Resu
                 ProjectSyncOptions {
                     allow_delete,
                     force: false,
+                    link_strategy: target.link_strategy,
                 },
             )?;
         }

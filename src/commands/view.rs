@@ -7,6 +7,7 @@ use super::Context;
 use crate::{
     cli::args::StatusFormat,
     commands::status::promotion_status_counts,
+    link::LinkStrategy,
     model::{Target, ViewTarget},
     view::{
         materialize_view_with_options, materialize_view_with_promotion, view_diff, view_status,
@@ -15,8 +16,15 @@ use crate::{
     },
 };
 
-pub fn sync(ctx: &Context, allow_delete: bool, force: bool) -> Result<()> {
-    let target = ctx.config.global_target(&ctx.mirror_root)?;
+pub fn sync(
+    ctx: &Context,
+    allow_delete: bool,
+    force: bool,
+    link_strategy: Option<LinkStrategy>,
+) -> Result<()> {
+    let target = ctx
+        .config
+        .global_target_with_link_override(&ctx.mirror_root, link_strategy)?;
     if ctx.dry_run {
         print_dry_run(&target, allow_delete, force);
         return Ok(());
@@ -29,6 +37,7 @@ pub fn sync(ctx: &Context, allow_delete: bool, force: bool) -> Result<()> {
             ViewSyncOptions {
                 allow_delete,
                 force,
+                link_strategy: target.link_strategy,
                 ..ViewSyncOptions::default()
             },
         )?;
@@ -47,8 +56,15 @@ pub fn sync(ctx: &Context, allow_delete: bool, force: bool) -> Result<()> {
 /// into the canonical store (and back-synced to a symlink on the next pass)
 /// rather than wiped. `allow_delete` now only removes dangling view *symlinks*
 /// whose canonical skill is gone; authored directories are always preserved.
-pub fn sync_with_promotion(ctx: &Context, allow_delete: bool, force: bool) -> Result<()> {
-    let target = ctx.config.global_target(&ctx.mirror_root)?;
+pub fn sync_with_promotion(
+    ctx: &Context,
+    allow_delete: bool,
+    force: bool,
+    link_strategy: Option<LinkStrategy>,
+) -> Result<()> {
+    let target = ctx
+        .config
+        .global_target_with_link_override(&ctx.mirror_root, link_strategy)?;
     if ctx.dry_run {
         return print_promotion_dry_run(&target, allow_delete, force);
     }
@@ -60,6 +76,7 @@ pub fn sync_with_promotion(ctx: &Context, allow_delete: bool, force: bool) -> Re
         allow_delete,
         prefer: None,
         relative_links: false,
+        link_strategy: target.link_strategy,
         project_root: None,
     };
 
