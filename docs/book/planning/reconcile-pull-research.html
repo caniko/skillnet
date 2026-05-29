@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bbf4fcb3.js";
+            window.path_to_searchindex_js = "../searchindex-7598599b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f6ac2029.js"></script>
+        <script src="../toc-271c7bfa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -456,8 +456,9 @@ identical content.</li>
 <h3 id="phase-c--cli-surface"><a class="header" href="#phase-c--cli-surface">Phase C — CLI surface</a></h3>
 <p>Two-tier surface, no breaking changes:</p>
 <ol>
-<li><strong>New per-scope subcommand</strong> <code>skillnet view reconcile</code> and
-<code>skillnet project reconcile</code> (parallel to <code>sync</code>/<code>status</code>/<code>diff</code>):
+<li>
+<p><strong>New per-scope subcommand</strong> <code>skillnet view reconcile</code> and
+<code>skillnet project reconcile</code> (parallel to <code>sync</code>/<code>status</code>/<code>diff</code>):</p>
 <pre><code>skillnet view reconcile --all
     [--allow-delete] [--force-canonical] [--prefer view|canonical]
     [--adopt-new]
@@ -473,14 +474,20 @@ name as a deprecated alias for one release.</li>
 <li><code>--adopt-new</code>: promote unknown view skills into canonical.</li>
 </ul>
 </li>
-<li><strong>Top-level convenience</strong> <code>skillnet sync --pull</code>: runs <code>view reconcile --all</code> then <code>project reconcile --all</code> then the existing
+<li>
+<p><strong>Top-level convenience</strong> <code>skillnet sync --pull</code>: runs <code>view reconcile --all</code> then <code>project reconcile --all</code> then the existing
 <code>materialize_view</code>/<code>materialize_project</code> pass. Default of
-<code>skillnet sync</code> (no flag) stays exactly as today.</li>
-<li>Standard JSON output via <code>--format json</code> for the report, matching the
-existing <code>view_status_with_options</code> pattern.</li>
-<li>Honour <code>--dry-run</code> and <code>--allow-dirty-destination</code> from the global flag
+<code>skillnet sync</code> (no flag) stays exactly as today.</p>
+</li>
+<li>
+<p>Standard JSON output via <code>--format json</code> for the report, matching the
+existing <code>view_status_with_options</code> pattern.</p>
+</li>
+<li>
+<p>Honour <code>--dry-run</code> and <code>--allow-dirty-destination</code> from the global flag
 set already in
-<a href="../../../src/cli/args.rs#L32-L38">src/cli/args.rs:32-38</a>.</li>
+<a href="../../../src/cli/args.rs#L32-L38">src/cli/args.rs:32-38</a>.</p>
+</li>
 </ol>
 <h3 id="phase-d--doctor-wiring"><a class="header" href="#phase-d--doctor-wiring">Phase D — Doctor wiring</a></h3>
 <p>In <a href="../../../src/commands/doctor.rs">src/commands/doctor.rs</a>, extend

@@ -39,7 +39,7 @@ in {
           Enable skillnet, the AI skill mirror and calibration CLI.
 
           During Home Manager activation, skillnet materialises configured
-          global views and per-project aggregator symlinks. As described in
+          global view symlinks and per-project hardlinked aggregators. As described in
           the mirror canonical store dossier's "Fresh-host bootstrap order"
           section, hosts without every configured project cloned should see
           stderr warnings from `skillnet project sync --all` for missing
@@ -80,7 +80,11 @@ in {
             ];
           };
           projects = [
-            { name = "myproject"; path = "/home/alice/Projects/myproject"; }
+            {
+              name = "myproject";
+              path = "/home/alice/Projects/myproject";
+              link_strategy = "hardlink";
+            }
           ];
         }
       '';
@@ -95,7 +99,9 @@ in {
         runtime; the removed pre-0.5.0 fields [global].sources, sync_paths,
         stale_codex_skill_paths, and project_source_rules are rejected by the
         CLI with a migration error. Project entries may omit canonical_rel;
-        skillnet defaults it to ".skills".
+        skillnet defaults it to ".agents/skills". Link strategy is set here as
+        top-level link_strategy or per-project link_strategy; there is no
+        separate Nix option because settings is a TOML pass-through.
 
         Leave null, and leave configFile null, to use a user-managed config
         file.

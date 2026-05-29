@@ -1,6 +1,6 @@
 ---
 source: tests/cli.rs
-assertion_line: 834
+assertion_line: 951
 expression: help
 ---
 Materialise every configured global view and project view in one shot
@@ -8,29 +8,35 @@ Materialise every configured global view and project view in one shot
 Usage: skillnet sync [OPTIONS]
 
 Options:
-      --apply-promote
-          Promote view-side edits back into canonical skills
       --config <CONFIG>
           Path to the skillnet TOML configuration file [env: SKILLNET_CONFIG=]
+      --scope <SCOPE>
+          Mirror scope to sync. Use `projects` for every project or `all` for global plus projects
+      --all
+          Sync every configured scope. Alias for `--scope all`
       --mirror-root <MIRROR_ROOT>
           Root directory containing the global/ and projects/ mirror directories [env: SKILLNET_MIRROR_ROOT=]
-      --no-promote
-          Disable promotion handling and keep legacy non-symlink errors
+      --apply-promote
+          Promote view-side edits back into canonical skills
       --catalog-config <CATALOG_CONFIG>
           Path to the skill catalog metadata configuration file [env: SKILLNET_CATALOG_CONFIG=]
-      --force
-          Destructively demote view-side content when canonical is newer
       --database-url <URL>
           Postgres URL for the calibration database
+      --no-promote
+          Disable promotion handling and keep legacy non-symlink errors
+      --dry-run
+          Print planned filesystem changes without mutating files
+      --force
+          Destructively demote view-side content when canonical is newer
+      --allow-dirty-destination
+          Allow mutating the mirror destination even when its Git working tree is dirty
       --prefer <PREFER>
           Tie-breaker for equal-mtime or both-advanced conflicts [possible values: view, canonical]
       --adopt-new
           Adopt view-only skills into canonical when promotion is enabled
-      --dry-run
-          Print planned filesystem changes without mutating files
       --allow-delete
           Remove view entries that no longer correspond to canonical skills
-      --allow-dirty-destination
-          Allow mutating the mirror destination even when its Git working tree is dirty
+      --link <LINK>
+          Link strategy for this sync run [possible values: symlink, hardlink]
   -h, --help
           Print help

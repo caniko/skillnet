@@ -31,16 +31,15 @@ Replacement project schema:
 name = "demo"
 path = "/home/alice/Projects/demo"
 origin = "git@codeberg.org:alice/demo.git"
-canonical_rel = ".skills"
 views = [
   { rel = ".claude/skills", label = "claude" },
-  { rel = ".agents/skills", label = "agents" },
 ]
 ```
 
 `origin` is optional and is used only by `skillnet project clone --all`.
-`canonical_rel` defaults to `.skills`; project views default to
-`.claude/skills` and `.agents/skills`.
+`canonical_rel` defaults to `.agents/skills`; project views default to
+`.claude/skills`. Projects keeping the older `.skills` canonical layout should
+set `canonical_rel = ".skills"` explicitly.
 
 ## Layout
 
@@ -69,7 +68,9 @@ skillnet doctor
 `project clone --all` skips existing project paths, warns for projects without
 `origin`, clones missing projects with configured origins, then runs
 `skillnet project sync --all` to materialise in-repo views and mirror
-aggregator symlinks.
+aggregators. In current releases, project aggregators default to hardlinked
+directory twins under `projects/<name>/`; older `0.5.x` releases used
+symlink-based aggregators.
 
 By default, HTTPS origins are refused. Use `--ssh-strict=false` only when an
 HTTPS clone is intentional.
@@ -83,7 +84,7 @@ HTTPS clone is intentional.
 - view symlinks that are broken or point outside the canonical store;
 - canonical skills missing from a configured view;
 - orphan view entries not matching any canonical skill name;
-- missing, non-symlink, broken, or unexpected project aggregator symlinks.
+- missing, foreign, legacy-symlink, severed, or diverged project aggregators.
 
 Missing project repository paths are warnings, not errors, because a host may
 be partially bootstrapped before all project repositories are cloned.

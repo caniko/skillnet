@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bbf4fcb3.js";
+            window.path_to_searchindex_js = "../searchindex-7598599b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f6ac2029.js"></script>
+        <script src="../toc-271c7bfa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -639,21 +639,14 @@ against a fixture host and <code>nix flake check</code> against the canix repo.<
 <h2 id="resolved-decisions"><a class="header" href="#resolved-decisions">Resolved Decisions</a></h2>
 <p>Each of the six open questions is closed; the concrete specs in
 <a href="#final-design">Final Design</a> below assume these answers.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>#</th><th>Decision</th><th>Choice</th><th>Why</th></tr>
-</thead>
-<tbody>
-<tr><td>1</td><td>Default behaviour of <code>skillnet sync</code> on non-symlink view</td><td><strong>Dry-run-on-conflict</strong>: print the proposed promotion, do not mutate canonical, exit <code>2</code>. Mutation requires explicit <code>--apply-promote</code></td><td>Idempotent reruns are safe; HM activation cannot silently rewrite canonical; mtime-spoof has no force-multiplier effect</td></tr>
-<tr><td>2</td><td>Adoption policy for unknown view skills</td><td>Never adopt without <code>--adopt-new</code>. <code>Stale</code> semantics on view-only entries unchanged</td><td>Foreign content stays foreign; promotion path stays explicit</td></tr>
-<tr><td>3</td><td>Migration command vs. manual <code>mv</code></td><td>Ship <code>skillnet config migrate</code></td><td>Small, idempotent, handles the both-locations-present-and-different edge case the user will hit at least once</td></tr>
-<tr><td>4</td><td>HM activation default</td><td><code>programs.skillnet.activation.promote = false</code>, <code>programs.skillnet.activation.failOnConflict = true</code></td><td>Multi-host safe; mutation only on hosts that explicitly opt in; loud activation surfaces drift instead of masking it like today’s `</td></tr>
-<tr><td>5</td><td>Per-target <code>--allow-dirty-destination</code></td><td>Extend the existing global flag to gate every canonical write (mirror + per-project repo)</td><td>Smallest surface; no concrete need yet for per-scope override</td></tr>
-<tr><td>6</td><td>Legacy CWD config discovery sunset</td><td>Deprecation warning in <code>0.6.0</code>, drop in <code>0.7.0</code></td><td>Two-release window matches the cadence of every other breaking change in this CHANGELOG</td></tr>
-</tbody>
-</table>
-</div>
+<p>| #   | Decision                                                 | Choice                                                                                                                                 | Why                                                                                                                                 |
+| — | –––––––––––––––––––––––––––– | ––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––– | ———————————————————————————————————————————– | — | —– |
+| 1   | Default behaviour of <code>skillnet sync</code> on non-symlink view | <strong>Dry-run-on-conflict</strong>: print the proposed promotion, do not mutate canonical, exit <code>2</code>. Mutation requires explicit <code>--apply-promote</code> | Idempotent reruns are safe; HM activation cannot silently rewrite canonical; mtime-spoof has no force-multiplier effect             |
+| 2   | Adoption policy for unknown view skills                  | Never adopt without <code>--adopt-new</code>. <code>Stale</code> semantics on view-only entries unchanged                                                    | Foreign content stays foreign; promotion path stays explicit                                                                        |
+| 3   | Migration command vs. manual <code>mv</code>                        | Ship <code>skillnet config migrate</code>                                                                                                         | Small, idempotent, handles the both-locations-present-and-different edge case the user will hit at least once                       |
+| 4   | HM activation default                                    | <code>programs.skillnet.activation.promote = false</code>, <code>programs.skillnet.activation.failOnConflict = true</code>                                   | Multi-host safe; mutation only on hosts that explicitly opt in; loud activation surfaces drift instead of masking it like today’s <code> |     | true</code> |
+| 5   | Per-target <code>--allow-dirty-destination</code>                   | Extend the existing global flag to gate every canonical write (mirror + per-project repo)                                              | Smallest surface; no concrete need yet for per-scope override                                                                       |
+| 6   | Legacy CWD config discovery sunset                       | Deprecation warning in <code>0.6.0</code>, drop in <code>0.7.0</code>                                                                                        | Two-release window matches the cadence of every other breaking change in this CHANGELOG                                             |</p>
 <h2 id="final-design"><a class="header" href="#final-design">Final Design</a></h2>
 <h3 id="1-skillnet-sync-flag-surface"><a class="header" href="#1-skillnet-sync-flag-surface">1. <code>skillnet sync</code> flag surface</a></h3>
 <p>Single command, no subcommands added. Existing flags kept; new flags added.</p>

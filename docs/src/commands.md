@@ -37,9 +37,9 @@ skillnet hook status
 ## View And Project Commands
 
 `skillnet sync` is the top-level materialisation command. It resolves every
-configured global view and project view from `skillnet.toml`, materialises the
-view symlinks, and reports real-directory view entries that may need
-promotion back into canonical.
+selected global view and project view from `skillnet.toml`, materialises the
+view symlinks, materialises project aggregators, and reports real-directory
+view entries that may need promotion back into canonical.
 
 When a view entry is already a symlink, `sync` keeps the normal generated-view
 behaviour. When a view entry is a real directory, `sync` compares that content
@@ -58,6 +58,9 @@ Promotion flags:
 | `--prefer <view\|canonical>` | unset   | Tie-breaker for `EqualMtimeDifferentContent` and `BothAdvanced`. Only consulted when `--apply-promote` is also passed.                                                                  |
 | `--adopt-new`                | off     | Treats `AdoptCandidate` outcomes as promotion candidates. Only acts when `--apply-promote` is also passed.                                                                              |
 | `--allow-delete`             | off     | Existing pruning semantics. Removes view entries with no canonical sibling and no `--adopt-new`.                                                                                        |
+| `--scope <SCOPE>`            | unset   | Selects named scopes. Use `--scope projects` for every project, or `--scope all` for global plus every project. May be repeated.                                                        |
+| `--all`                      | off     | Alias for `--scope all`.                                                                                                                                                                |
+| `--link <symlink\|hardlink>` | unset   | Overrides the resolved link strategy for this materialisation run. Global scopes default to symlink; project aggregators default to hardlink.                                           |
 | `--dry-run`                  | off     | Global flag. Never mutates and never escalates would-promote work to exit code `2`; prints would-\* lines and exits `0`.                                                                |
 | `--allow-dirty-destination`  | off     | Global flag. Allows canonical writes even when the destination Git working tree is dirty. This now gates every canonical write site, not just `mirror_root`.                            |
 
@@ -96,10 +99,25 @@ centralised XDG config migration and Home Manager pattern, see
 [Centralised config (0.6.0)](migration/centralised-config.md).
 
 `skillnet view sync --all` materialises configured global views from the
-canonical global store.
+canonical global store. It accepts `--link symlink|hardlink` for parity with
+the materialisation interface, but global views default to generated symlinks.
 
 `skillnet project sync --all` materialises configured project views and the
-project aggregator symlinks under `mirror_root/projects/`.
+project aggregator under `mirror_root/projects/`. Project views such as
+`.claude/skills` remain per-skill relative symlinks into the project canonical
+store. Project aggregators default to hardlinked directory twins of the
+canonical store, giving the `ai-skills` checkout real committable files under
+`projects/<name>/`. Use `--link symlink` or `link_strategy = "symlink"` only
+when you intentionally want the old directory-symlink aggregator behavior.
+
+Hardlink aggregators are read and repaired by status-aware sync:
+
+- missing or foreign aggregators are replaced during sync;
+- severed-but-identical files are re-linked;
+- diverged files are left untouched unless `--force` or `--prefer canonical`
+  chooses canonical content;
+- cross-filesystem hardlink failures are errors, with no copy or symlink
+  fallback.
 
 `skillnet project clone --all` clones every configured project whose `path`
 does not exist and whose `origin` is configured, then runs
@@ -111,6 +129,16 @@ clones are intended.
 Use `view status|diff` and `project status|diff` to inspect derived view drift
 without mutating files. `skillnet sync` is the preferred one-shot command when
 you want all configured views materialised from the same config.
+
+Scope selectors:
+
+| Selector           | Meaning                                 |
+| ------------------ | --------------------------------------- |
+| `--scope global`   | Selects the global scope.               |
+| `--scope <name>`   | Selects one configured project by name. |
+| `--scope projects` | Selects every configured project.       |
+| `--scope all`      | Selects global plus every project.      |
+| `--all`            | Alias for `--scope all` on `sync`.      |
 
 ## Status JSON Schema
 
@@ -141,7 +169,7 @@ decisions can be inspected without mutating the filesystem.
 
 - global canonical store existence and global view symlinks;
 - project canonical stores, committed in-repo view symlinks, and mirror
-  aggregator symlinks;
+  aggregators;
 - orphan view entries that do not correspond to canonical skill names;
 - broken or unexpected symlink targets.
 
@@ -149,7 +177,15 @@ Missing configured project repositories are warnings because a fresh host may
 not have cloned every project yet. Non-symlink view entries are classified by
 the same comparator used by `skillnet sync`: `Identical`, `ViewNewer`,
 `CanonicalNewer`, `EqualMtimeDifferentContent`, `BothAdvanced`, or
-`AdoptCandidate`. Other invariant violations are errors.
+`AdoptCandidate`.
+
+For project aggregators, doctor follows the configured link strategy. Symlink
+strategy keeps the old target and resolution checks. Hardlink strategy verifies
+that `mirror_root/projects/<name>` is a directory whose regular files are
+hardlinked twins of canonical files. Missing aggregators, legacy symlink
+aggregators, foreign trees, and diverged files are errors. Severed-but-identical
+files are warnings because `skillnet project sync` can re-link them without
+discarding content.
 
 ## Config File Location
 

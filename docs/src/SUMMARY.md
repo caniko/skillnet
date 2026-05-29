@@ -9,6 +9,7 @@
 - [Hook ingestion](hook-ingestion.md)
 - [Migration](migration/option-b.md)
   - [Centralised config (0.6.0)](migration/centralised-config.md)
+  - [Agents canonical project layout](migration/agents-canonical.md)
 - [Release And Maintenance](release.md)
 - [Planning](planning/index.md)
   - [Reconcile-pull research](planning/reconcile-pull-research.md)

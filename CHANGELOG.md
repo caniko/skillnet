@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Project defaults now use `<project>/.agents/skills` as the canonical store and
+  `<project>/.claude/skills` as the default per-skill symlink view. Projects
+  that still rely on the old `.skills` default get a warning and can either set
+  `canonical_rel = ".skills"` or follow `docs/src/migration/agents-canonical.md`;
+  migration is documented only and is not performed automatically.
+- Project aggregators now default to hardlinked directory twins under
+  `<mirror_root>/projects/<name>`, giving the `ai-skills` checkout real
+  committable files instead of directory symlinks. Severed-but-identical
+  hardlinks are re-linked by sync; diverged files require `--force`,
+  `--prefer canonical`, or manual reconciliation.
+- Link strategy is configurable through top-level `link_strategy`, per-project
+  `link_strategy`, and the `--link symlink|hardlink` flag on materialisation
+  commands. Defaults are symlink for global scopes and hardlink for project
+  aggregators.
+- `skillnet sync` and other scope-aware commands now accept
+  `--scope projects` and `--scope all`; `skillnet sync --all` is an alias for
+  `--scope all`.
+- `projects` and `all` are reserved selector tokens and can no longer be used
+  as new project names.
+
 ### Fixed
 
 - `skillnet view sync` now adopts view-only skill directories into the canonical
@@ -85,8 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `skillnet doctor` now validates Option B invariants across global and
   project scopes: canonical store existence, view symlink shape, orphan view
-  entries, missing canonical view entries, and project aggregator symlink
-  freshness.
+  entries, missing canonical view entries, and, in `0.5.x`, project aggregator
+  symlink freshness.
 - Missing configured project repositories are reported as doctor warnings so
   partially bootstrapped hosts get actionable output without being labeled as
   corrupted state.

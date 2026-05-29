@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bbf4fcb3.js";
+            window.path_to_searchindex_js = "../searchindex-7598599b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f6ac2029.js"></script>
+        <script src="../toc-271c7bfa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -199,15 +199,14 @@ views = [
 name = "demo"
 path = "/home/alice/Projects/demo"
 origin = "git@codeberg.org:alice/demo.git"
-canonical_rel = ".skills"
 views = [
   { rel = ".claude/skills", label = "claude" },
-  { rel = ".agents/skills", label = "agents" },
 ]
 </code></pre>
 <p><code>origin</code> is optional and is used only by <code>skillnet project clone --all</code>.
-<code>canonical_rel</code> defaults to <code>.skills</code>; project views default to
-<code>.claude/skills</code> and <code>.agents/skills</code>.</p>
+<code>canonical_rel</code> defaults to <code>.agents/skills</code>; project views default to
+<code>.claude/skills</code>. Projects keeping the older <code>.skills</code> canonical layout should
+set <code>canonical_rel = ".skills"</code> explicitly.</p>
 <h2 id="layout"><a class="header" href="#layout">Layout</a></h2>
 <ul>
 <li>Global canonical store: <code>&lt;mirror_root&gt;/global/</code></li>
@@ -230,7 +229,9 @@ skillnet doctor
 <p><code>project clone --all</code> skips existing project paths, warns for projects without
 <code>origin</code>, clones missing projects with configured origins, then runs
 <code>skillnet project sync --all</code> to materialise in-repo views and mirror
-aggregator symlinks.</p>
+aggregators. In current releases, project aggregators default to hardlinked
+directory twins under <code>projects/&lt;name&gt;/</code>; older <code>0.5.x</code> releases used
+symlink-based aggregators.</p>
 <p>By default, HTTPS origins are refused. Use <code>--ssh-strict=false</code> only when an
 HTTPS clone is intentional.</p>
 <h2 id="doctor"><a class="header" href="#doctor">Doctor</a></h2>
@@ -241,7 +242,7 @@ HTTPS clone is intentional.</p>
 <li>view symlinks that are broken or point outside the canonical store;</li>
 <li>canonical skills missing from a configured view;</li>
 <li>orphan view entries not matching any canonical skill name;</li>
-<li>missing, non-symlink, broken, or unexpected project aggregator symlinks.</li>
+<li>missing, foreign, legacy-symlink, severed, or diverged project aggregators.</li>
 </ul>
 <p>Missing project repository paths are warnings, not errors, because a host may
 be partially bootstrapped before all project repositories are cloned.</p>

@@ -4,6 +4,12 @@
 
 The supported interface in `0.6.0` is the `skillnet` binary. This crate does not commit to a stable embeddable Rust API yet.
 
+For project scopes, the default canonical store is `<project>/.agents/skills`
+and the default Claude view is `<project>/.claude/skills` as per-skill relative
+symlinks. Projects keeping the older `.skills` layout should set
+`canonical_rel = ".skills"` explicitly; migration steps are documented in
+`docs/src/migration/agents-canonical.md`.
+
 ## Install
 
 ```sh
@@ -253,8 +259,27 @@ cargo test-pg
 `skillnet` keeps canonical skill stores separate from generated agent views:
 
 - `global/` stores the canonical global skills by default.
-- Project canonical stores live at each project's `canonical_rel`, defaulting to `.skills`.
-- Global and project views such as `.agents/skills` and `.claude/skills` are symlinks generated from canonical stores.
+- Project canonical stores live at each project's `canonical_rel`, defaulting
+  to `.agents/skills`.
+- Global and project views such as `.claude/skills` are generated symlink
+  views. Project views use per-skill relative symlinks into the project
+  canonical store.
+- Project aggregators under `<mirror_root>/projects/<name>` default to real
+  hardlinked directory copies of the project canonical store, so the
+  `ai-skills` checkout contains committable files instead of symlinks pointing
+  back into project repositories.
+- Link strategy defaults are `symlink` for global scopes and `hardlink` for
+  project aggregators. Set top-level `link_strategy`, per-project
+  `link_strategy`, or pass `--link symlink|hardlink` to materialisation
+  commands to override a run.
+
+Hardlink aggregators require the project checkout and mirror checkout to live
+on the same filesystem. Cross-device hardlink failures are reported as errors;
+skillnet does not silently fall back to copying or symlinking. If a Git pull or
+editor rewrite severs a hardlink but leaves matching content, `skillnet sync`
+or `skillnet project sync` re-links it. If the aggregator file content diverges
+from canonical, sync refuses to clobber it until you pass `--force` or
+`--prefer canonical`, or reconcile the files manually.
 
 Configuration lives in `$XDG_CONFIG_HOME/skillnet/skillnet.toml`. Catalog
 metadata uses `$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`. The legacy
@@ -276,6 +301,11 @@ The current top-level commands are:
 - `project`
 - `catalog`
 - `calibration`
+
+Many scope-aware commands accept `--scope <name>`. The selector
+`--scope projects` expands to every configured project, and `--scope all`
+selects global plus every project. `skillnet sync --all` is an alias for
+`skillnet sync --scope all`.
 
 Generate shell completions with:
 

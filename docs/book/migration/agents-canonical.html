@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - skillnet</title>
+        <title>Agents canonical project layout - skillnet</title>
 
 
         <!-- Custom HTML head -->
@@ -12,33 +12,33 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="favicon-8114d1fc.png">
-        <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-2459343d.css">
-        <link rel="stylesheet" href="css/chrome-ae938929.css">
-        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7598599b.js";
+            window.path_to_searchindex_js = "../searchindex-7598599b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-271c7bfa.js"></script>
+        <script src="../toc-271c7bfa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -105,7 +105,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -140,7 +140,7 @@
                     <h1 class="menu-title">skillnet</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
 
@@ -174,27 +174,70 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="skillnet"><a class="header" href="#skillnet">skillnet</a></h1>
-<p><code>skillnet</code> manages a checked-in mirror of AI skills and the live directories that feed it.</p>
-<p>The current release focuses on the CLI:</p>
-<ul>
-<li>maintain canonical global and project skill stores;</li>
-<li>materialise generated symlink views for agents;</li>
-<li>materialise hardlinked project aggregators in the <code>ai-skills</code> checkout;</li>
-<li>inspect, move, rename, and delete mirrored skills;</li>
-<li>generate catalog output from <code>skillnet.catalog.toml</code>;</li>
-<li>record and analyze <code>multi-phase-plan</code> calibration data;</li>
-<li>store calibration data in Postgres by default, with explicit SQLite support;</li>
-<li>install and configure the binary through the exported Nix Home Manager module.</li>
-</ul>
-<p>The supported public surface is the <code>skillnet</code> binary. No stable Rust library API is promised.</p>
+                        <h1 id="agents-canonical-project-layout"><a class="header" href="#agents-canonical-project-layout">Agents Canonical Project Layout</a></h1>
+<p>Skillnet now defaults project canonical skill stores to:</p>
+<pre><code class="language-text">&lt;project&gt;/.agents/skills
+</code></pre>
+<p>The default Claude view remains per-skill relative symlinks under:</p>
+<pre><code class="language-text">&lt;project&gt;/.claude/skills
+</code></pre>
+<p>Projects that already set <code>canonical_rel = ".skills"</code> keep the old layout. The
+default only changes projects that omitted <code>canonical_rel</code>.</p>
+<p>Project sync also changed the mirror-side aggregator. By default,
+<code>&lt;mirror_root&gt;/projects/&lt;name&gt;</code> is now a directory of hardlinked files whose
+regular files share device and inode with the canonical files under
+<code>.agents/skills</code>. The <code>ai-skills</code> repository therefore sees real files under
+<code>projects/&lt;name&gt;/</code> that can be committed. It is no longer a directory symlink
+unless the project explicitly sets <code>link_strategy = "symlink"</code> or a sync run
+passes <code>--link symlink</code>.</p>
+<h2 id="keeping-skills"><a class="header" href="#keeping-skills">Keeping <code>.skills</code></a></h2>
+<p>If a project should keep using <code>.skills</code>, make that explicit:</p>
+<pre><code class="language-toml">[[projects]]
+name = "demo"
+path = "/path/to/demo"
+canonical_rel = ".skills"
+</code></pre>
+<p>Then validate without mutating:</p>
+<pre><code class="language-sh">skillnet status --scope demo
+skillnet doctor
+</code></pre>
+<h2 id="migrating-manually"><a class="header" href="#migrating-manually">Migrating Manually</a></h2>
+<p>Skillnet does not move project files during <code>sync</code>, <code>status</code>, or <code>doctor</code>.
+Migrate deliberately from inside the project repository:</p>
+<pre><code class="language-sh">git status --short
+mkdir -p .agents
+git mv .skills .agents/skills
+skillnet project sync --name demo
+git status --short
+</code></pre>
+<p>If <code>.agents/skills</code> already exists as an old symlink view, remove that symlink
+before <code>git mv</code>:</p>
+<pre><code class="language-sh">rm .agents/skills
+git mv .skills .agents/skills
+</code></pre>
+<p>The validation point is:</p>
+<pre><code class="language-sh">skillnet status --scope demo
+skillnet doctor
+</code></pre>
+<p>Both commands should stop warning about the legacy <code>.skills</code> canonical after
+<code>.agents/skills</code> exists and the config does not override <code>canonical_rel</code>.</p>
+<p>After migration, run one project sync to refresh the hardlinked aggregator:</p>
+<pre><code class="language-sh">skillnet project sync --name demo
+</code></pre>
+<p>If the project checkout and mirror checkout are on different filesystems, this
+fails instead of silently copying. Move one checkout, choose
+<code>link_strategy = "symlink"</code> for that project, or keep the old layout explicitly
+until both paths can share a filesystem.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../migration/centralised-config.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="quickstart.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../release.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -204,8 +247,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../migration/centralised-config.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="quickstart.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../release.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -225,13 +271,13 @@
         </script>
 
 
-        <script src="elasticlunr-ef4e11c1.min.js"></script>
-        <script src="mark-09e88c2c.min.js"></script>
-        <script src="searcher-c2a407aa.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="clipboard-1626706a.min.js"></script>
-        <script src="highlight-abc7f01d.js"></script>
-        <script src="book-a0b12cfe.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
 

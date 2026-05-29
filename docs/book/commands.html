@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bbf4fcb3.js";
+            window.path_to_searchindex_js = "searchindex-7598599b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f6ac2029.js"></script>
+        <script src="toc-271c7bfa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -208,9 +208,9 @@ skillnet hook status
 </code></pre>
 <h2 id="view-and-project-commands"><a class="header" href="#view-and-project-commands">View And Project Commands</a></h2>
 <p><code>skillnet sync</code> is the top-level materialisation command. It resolves every
-configured global view and project view from <code>skillnet.toml</code>, materialises the
-view symlinks, and reports real-directory view entries that may need
-promotion back into canonical.</p>
+selected global view and project view from <code>skillnet.toml</code>, materialises the
+view symlinks, materialises project aggregators, and reports real-directory
+view entries that may need promotion back into canonical.</p>
 <p>When a view entry is already a symlink, <code>sync</code> keeps the normal generated-view
 behaviour. When a view entry is a real directory, <code>sync</code> compares that content
 with the canonical skill of the same name. A view entry whose content is newer
@@ -230,6 +230,9 @@ view entry with a symlink.</p>
 <tr><td><code>--prefer &lt;view|canonical&gt;</code></td><td>unset</td><td>Tie-breaker for <code>EqualMtimeDifferentContent</code> and <code>BothAdvanced</code>. Only consulted when <code>--apply-promote</code> is also passed.</td></tr>
 <tr><td><code>--adopt-new</code></td><td>off</td><td>Treats <code>AdoptCandidate</code> outcomes as promotion candidates. Only acts when <code>--apply-promote</code> is also passed.</td></tr>
 <tr><td><code>--allow-delete</code></td><td>off</td><td>Existing pruning semantics. Removes view entries with no canonical sibling and no <code>--adopt-new</code>.</td></tr>
+<tr><td><code>--scope &lt;SCOPE&gt;</code></td><td>unset</td><td>Selects named scopes. Use <code>--scope projects</code> for every project, or <code>--scope all</code> for global plus every project. May be repeated.</td></tr>
+<tr><td><code>--all</code></td><td>off</td><td>Alias for <code>--scope all</code>.</td></tr>
+<tr><td><code>--link &lt;symlink|hardlink&gt;</code></td><td>unset</td><td>Overrides the resolved link strategy for this materialisation run. Global scopes default to symlink; project aggregators default to hardlink.</td></tr>
 <tr><td><code>--dry-run</code></td><td>off</td><td>Global flag. Never mutates and never escalates would-promote work to exit code <code>2</code>; prints would-* lines and exits <code>0</code>.</td></tr>
 <tr><td><code>--allow-dirty-destination</code></td><td>off</td><td>Global flag. Allows canonical writes even when the destination Git working tree is dirty. This now gates every canonical write site, not just <code>mirror_root</code>.</td></tr>
 </tbody>
@@ -269,9 +272,24 @@ and <code>AdoptCandidate</code> with hints for the matching <code>sync</code> fl
 centralised XDG config migration and Home Manager pattern, see
 <a href="migration/centralised-config.html">Centralised config (0.6.0)</a>.</p>
 <p><code>skillnet view sync --all</code> materialises configured global views from the
-canonical global store.</p>
+canonical global store. It accepts <code>--link symlink|hardlink</code> for parity with
+the materialisation interface, but global views default to generated symlinks.</p>
 <p><code>skillnet project sync --all</code> materialises configured project views and the
-project aggregator symlinks under <code>mirror_root/projects/</code>.</p>
+project aggregator under <code>mirror_root/projects/</code>. Project views such as
+<code>.claude/skills</code> remain per-skill relative symlinks into the project canonical
+store. Project aggregators default to hardlinked directory twins of the
+canonical store, giving the <code>ai-skills</code> checkout real committable files under
+<code>projects/&lt;name&gt;/</code>. Use <code>--link symlink</code> or <code>link_strategy = "symlink"</code> only
+when you intentionally want the old directory-symlink aggregator behavior.</p>
+<p>Hardlink aggregators are read and repaired by status-aware sync:</p>
+<ul>
+<li>missing or foreign aggregators are replaced during sync;</li>
+<li>severed-but-identical files are re-linked;</li>
+<li>diverged files are left untouched unless <code>--force</code> or <code>--prefer canonical</code>
+chooses canonical content;</li>
+<li>cross-filesystem hardlink failures are errors, with no copy or symlink
+fallback.</li>
+</ul>
 <p><code>skillnet project clone --all</code> clones every configured project whose <code>path</code>
 does not exist and whose <code>origin</code> is configured, then runs
 <code>skillnet project sync --all</code>. It is idempotent for projects already present on
@@ -281,6 +299,21 @@ clones are intended.</p>
 <p>Use <code>view status|diff</code> and <code>project status|diff</code> to inspect derived view drift
 without mutating files. <code>skillnet sync</code> is the preferred one-shot command when
 you want all configured views materialised from the same config.</p>
+<p>Scope selectors:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Selector</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--scope global</code></td><td>Selects the global scope.</td></tr>
+<tr><td><code>--scope &lt;name&gt;</code></td><td>Selects one configured project by name.</td></tr>
+<tr><td><code>--scope projects</code></td><td>Selects every configured project.</td></tr>
+<tr><td><code>--scope all</code></td><td>Selects global plus every project.</td></tr>
+<tr><td><code>--all</code></td><td>Alias for <code>--scope all</code> on <code>sync</code>.</td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="status-json-schema"><a class="header" href="#status-json-schema">Status JSON Schema</a></h2>
 <p><code>skillnet status --format json --scope &lt;SCOPE&gt;</code> emits a pretty JSON array:</p>
 <pre><code class="language-json">[
@@ -304,7 +337,7 @@ decisions can be inspected without mutating the filesystem.</p>
 <ul>
 <li>global canonical store existence and global view symlinks;</li>
 <li>project canonical stores, committed in-repo view symlinks, and mirror
-aggregator symlinks;</li>
+aggregators;</li>
 <li>orphan view entries that do not correspond to canonical skill names;</li>
 <li>broken or unexpected symlink targets.</li>
 </ul>
@@ -312,7 +345,14 @@ aggregator symlinks;</li>
 not have cloned every project yet. Non-symlink view entries are classified by
 the same comparator used by <code>skillnet sync</code>: <code>Identical</code>, <code>ViewNewer</code>,
 <code>CanonicalNewer</code>, <code>EqualMtimeDifferentContent</code>, <code>BothAdvanced</code>, or
-<code>AdoptCandidate</code>. Other invariant violations are errors.</p>
+<code>AdoptCandidate</code>.</p>
+<p>For project aggregators, doctor follows the configured link strategy. Symlink
+strategy keeps the old target and resolution checks. Hardlink strategy verifies
+that <code>mirror_root/projects/&lt;name&gt;</code> is a directory whose regular files are
+hardlinked twins of canonical files. Missing aggregators, legacy symlink
+aggregators, foreign trees, and diverged files are errors. Severed-but-identical
+files are warnings because <code>skillnet project sync</code> can re-link them without
+discarding content.</p>
 <h2 id="config-file-location"><a class="header" href="#config-file-location">Config File Location</a></h2>
 <p><code>skillnet --config &lt;path&gt;</code> is the highest-precedence source. When the flag is
 omitted, the binary reads:</p>

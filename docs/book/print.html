@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bbf4fcb3.js";
+            window.path_to_searchindex_js = "searchindex-7598599b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f6ac2029.js"></script>
+        <script src="toc-271c7bfa.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -179,7 +179,9 @@
 <p><code>skillnet</code> manages a checked-in mirror of AI skills and the live directories that feed it.</p>
 <p>The current release focuses on the CLI:</p>
 <ul>
-<li>reconcile live <code>.agents</code>, <code>.claude</code>, and <code>.codex</code> trees into mirror scopes;</li>
+<li>maintain canonical global and project skill stores;</li>
+<li>materialise generated symlink views for agents;</li>
+<li>materialise hardlinked project aggregators in the <code>ai-skills</code> checkout;</li>
 <li>inspect, move, rename, and delete mirrored skills;</li>
 <li>generate catalog output from <code>skillnet.catalog.toml</code>;</li>
 <li>record and analyze <code>multi-phase-plan</code> calibration data;</li>
@@ -261,9 +263,9 @@ skillnet hook status
 </code></pre>
 <h2 id="view-and-project-commands"><a class="header" href="#view-and-project-commands">View And Project Commands</a></h2>
 <p><code>skillnet sync</code> is the top-level materialisation command. It resolves every
-configured global view and project view from <code>skillnet.toml</code>, materialises the
-view symlinks, and reports real-directory view entries that may need
-promotion back into canonical.</p>
+selected global view and project view from <code>skillnet.toml</code>, materialises the
+view symlinks, materialises project aggregators, and reports real-directory
+view entries that may need promotion back into canonical.</p>
 <p>When a view entry is already a symlink, <code>sync</code> keeps the normal generated-view
 behaviour. When a view entry is a real directory, <code>sync</code> compares that content
 with the canonical skill of the same name. A view entry whose content is newer
@@ -283,6 +285,9 @@ view entry with a symlink.</p>
 <tr><td><code>--prefer &lt;view|canonical&gt;</code></td><td>unset</td><td>Tie-breaker for <code>EqualMtimeDifferentContent</code> and <code>BothAdvanced</code>. Only consulted when <code>--apply-promote</code> is also passed.</td></tr>
 <tr><td><code>--adopt-new</code></td><td>off</td><td>Treats <code>AdoptCandidate</code> outcomes as promotion candidates. Only acts when <code>--apply-promote</code> is also passed.</td></tr>
 <tr><td><code>--allow-delete</code></td><td>off</td><td>Existing pruning semantics. Removes view entries with no canonical sibling and no <code>--adopt-new</code>.</td></tr>
+<tr><td><code>--scope &lt;SCOPE&gt;</code></td><td>unset</td><td>Selects named scopes. Use <code>--scope projects</code> for every project, or <code>--scope all</code> for global plus every project. May be repeated.</td></tr>
+<tr><td><code>--all</code></td><td>off</td><td>Alias for <code>--scope all</code>.</td></tr>
+<tr><td><code>--link &lt;symlink|hardlink&gt;</code></td><td>unset</td><td>Overrides the resolved link strategy for this materialisation run. Global scopes default to symlink; project aggregators default to hardlink.</td></tr>
 <tr><td><code>--dry-run</code></td><td>off</td><td>Global flag. Never mutates and never escalates would-promote work to exit code <code>2</code>; prints would-* lines and exits <code>0</code>.</td></tr>
 <tr><td><code>--allow-dirty-destination</code></td><td>off</td><td>Global flag. Allows canonical writes even when the destination Git working tree is dirty. This now gates every canonical write site, not just <code>mirror_root</code>.</td></tr>
 </tbody>
@@ -322,9 +327,24 @@ and <code>AdoptCandidate</code> with hints for the matching <code>sync</code> fl
 centralised XDG config migration and Home Manager pattern, see
 <a href="#centralised-config-060">Centralised config (0.6.0)</a>.</p>
 <p><code>skillnet view sync --all</code> materialises configured global views from the
-canonical global store.</p>
+canonical global store. It accepts <code>--link symlink|hardlink</code> for parity with
+the materialisation interface, but global views default to generated symlinks.</p>
 <p><code>skillnet project sync --all</code> materialises configured project views and the
-project aggregator symlinks under <code>mirror_root/projects/</code>.</p>
+project aggregator under <code>mirror_root/projects/</code>. Project views such as
+<code>.claude/skills</code> remain per-skill relative symlinks into the project canonical
+store. Project aggregators default to hardlinked directory twins of the
+canonical store, giving the <code>ai-skills</code> checkout real committable files under
+<code>projects/&lt;name&gt;/</code>. Use <code>--link symlink</code> or <code>link_strategy = "symlink"</code> only
+when you intentionally want the old directory-symlink aggregator behavior.</p>
+<p>Hardlink aggregators are read and repaired by status-aware sync:</p>
+<ul>
+<li>missing or foreign aggregators are replaced during sync;</li>
+<li>severed-but-identical files are re-linked;</li>
+<li>diverged files are left untouched unless <code>--force</code> or <code>--prefer canonical</code>
+chooses canonical content;</li>
+<li>cross-filesystem hardlink failures are errors, with no copy or symlink
+fallback.</li>
+</ul>
 <p><code>skillnet project clone --all</code> clones every configured project whose <code>path</code>
 does not exist and whose <code>origin</code> is configured, then runs
 <code>skillnet project sync --all</code>. It is idempotent for projects already present on
@@ -334,6 +354,21 @@ clones are intended.</p>
 <p>Use <code>view status|diff</code> and <code>project status|diff</code> to inspect derived view drift
 without mutating files. <code>skillnet sync</code> is the preferred one-shot command when
 you want all configured views materialised from the same config.</p>
+<p>Scope selectors:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Selector</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--scope global</code></td><td>Selects the global scope.</td></tr>
+<tr><td><code>--scope &lt;name&gt;</code></td><td>Selects one configured project by name.</td></tr>
+<tr><td><code>--scope projects</code></td><td>Selects every configured project.</td></tr>
+<tr><td><code>--scope all</code></td><td>Selects global plus every project.</td></tr>
+<tr><td><code>--all</code></td><td>Alias for <code>--scope all</code> on <code>sync</code>.</td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="status-json-schema"><a class="header" href="#status-json-schema">Status JSON Schema</a></h2>
 <p><code>skillnet status --format json --scope &lt;SCOPE&gt;</code> emits a pretty JSON array:</p>
 <pre><code class="language-json">[
@@ -357,7 +392,7 @@ decisions can be inspected without mutating the filesystem.</p>
 <ul>
 <li>global canonical store existence and global view symlinks;</li>
 <li>project canonical stores, committed in-repo view symlinks, and mirror
-aggregator symlinks;</li>
+aggregators;</li>
 <li>orphan view entries that do not correspond to canonical skill names;</li>
 <li>broken or unexpected symlink targets.</li>
 </ul>
@@ -365,7 +400,14 @@ aggregator symlinks;</li>
 not have cloned every project yet. Non-symlink view entries are classified by
 the same comparator used by <code>skillnet sync</code>: <code>Identical</code>, <code>ViewNewer</code>,
 <code>CanonicalNewer</code>, <code>EqualMtimeDifferentContent</code>, <code>BothAdvanced</code>, or
-<code>AdoptCandidate</code>. Other invariant violations are errors.</p>
+<code>AdoptCandidate</code>.</p>
+<p>For project aggregators, doctor follows the configured link strategy. Symlink
+strategy keeps the old target and resolution checks. Hardlink strategy verifies
+that <code>mirror_root/projects/&lt;name&gt;</code> is a directory whose regular files are
+hardlinked twins of canonical files. Missing aggregators, legacy symlink
+aggregators, foreign trees, and diverged files are errors. Severed-but-identical
+files are warnings because <code>skillnet project sync</code> can re-link them without
+discarding content.</p>
 <h2 id="config-file-location"><a class="header" href="#config-file-location">Config File Location</a></h2>
 <p><code>skillnet --config &lt;path&gt;</code> is the highest-precedence source. When the flag is
 omitted, the binary reads:</p>
@@ -830,15 +872,14 @@ views = [
 name = "demo"
 path = "/home/alice/Projects/demo"
 origin = "git@codeberg.org:alice/demo.git"
-canonical_rel = ".skills"
 views = [
   { rel = ".claude/skills", label = "claude" },
-  { rel = ".agents/skills", label = "agents" },
 ]
 </code></pre>
 <p><code>origin</code> is optional and is used only by <code>skillnet project clone --all</code>.
-<code>canonical_rel</code> defaults to <code>.skills</code>; project views default to
-<code>.claude/skills</code> and <code>.agents/skills</code>.</p>
+<code>canonical_rel</code> defaults to <code>.agents/skills</code>; project views default to
+<code>.claude/skills</code>. Projects keeping the older <code>.skills</code> canonical layout should
+set <code>canonical_rel = ".skills"</code> explicitly.</p>
 <h2 id="layout"><a class="header" href="#layout">Layout</a></h2>
 <ul>
 <li>Global canonical store: <code>&lt;mirror_root&gt;/global/</code></li>
@@ -861,7 +902,9 @@ skillnet doctor
 <p><code>project clone --all</code> skips existing project paths, warns for projects without
 <code>origin</code>, clones missing projects with configured origins, then runs
 <code>skillnet project sync --all</code> to materialise in-repo views and mirror
-aggregator symlinks.</p>
+aggregators. In current releases, project aggregators default to hardlinked
+directory twins under <code>projects/&lt;name&gt;/</code>; older <code>0.5.x</code> releases used
+symlink-based aggregators.</p>
 <p>By default, HTTPS origins are refused. Use <code>--ssh-strict=false</code> only when an
 HTTPS clone is intentional.</p>
 <h2 id="doctor-1"><a class="header" href="#doctor-1">Doctor</a></h2>
@@ -872,7 +915,7 @@ HTTPS clone is intentional.</p>
 <li>view symlinks that are broken or point outside the canonical store;</li>
 <li>canonical skills missing from a configured view;</li>
 <li>orphan view entries not matching any canonical skill name;</li>
-<li>missing, non-symlink, broken, or unexpected project aggregator symlinks.</li>
+<li>missing, foreign, legacy-symlink, severed, or diverged project aggregators.</li>
 </ul>
 <p>Missing project repository paths are warnings, not errors, because a host may
 be partially bootstrapped before all project repositories are cloned.</p>
@@ -1124,6 +1167,61 @@ ls -la "$XDG_CONFIG_HOME/skillnet"
 <p>Remove any leftover cwd TOML files after confirming their XDG copies are
 correct. Breadcrumbs are harmless, but stale cwd TOMLs keep rank 4 discovery
 alive when no XDG file is present.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="agents-canonical-project-layout"><a class="header" href="#agents-canonical-project-layout">Agents Canonical Project Layout</a></h1>
+<p>Skillnet now defaults project canonical skill stores to:</p>
+<pre><code class="language-text">&lt;project&gt;/.agents/skills
+</code></pre>
+<p>The default Claude view remains per-skill relative symlinks under:</p>
+<pre><code class="language-text">&lt;project&gt;/.claude/skills
+</code></pre>
+<p>Projects that already set <code>canonical_rel = ".skills"</code> keep the old layout. The
+default only changes projects that omitted <code>canonical_rel</code>.</p>
+<p>Project sync also changed the mirror-side aggregator. By default,
+<code>&lt;mirror_root&gt;/projects/&lt;name&gt;</code> is now a directory of hardlinked files whose
+regular files share device and inode with the canonical files under
+<code>.agents/skills</code>. The <code>ai-skills</code> repository therefore sees real files under
+<code>projects/&lt;name&gt;/</code> that can be committed. It is no longer a directory symlink
+unless the project explicitly sets <code>link_strategy = "symlink"</code> or a sync run
+passes <code>--link symlink</code>.</p>
+<h2 id="keeping-skills"><a class="header" href="#keeping-skills">Keeping <code>.skills</code></a></h2>
+<p>If a project should keep using <code>.skills</code>, make that explicit:</p>
+<pre><code class="language-toml">[[projects]]
+name = "demo"
+path = "/path/to/demo"
+canonical_rel = ".skills"
+</code></pre>
+<p>Then validate without mutating:</p>
+<pre><code class="language-sh">skillnet status --scope demo
+skillnet doctor
+</code></pre>
+<h2 id="migrating-manually"><a class="header" href="#migrating-manually">Migrating Manually</a></h2>
+<p>Skillnet does not move project files during <code>sync</code>, <code>status</code>, or <code>doctor</code>.
+Migrate deliberately from inside the project repository:</p>
+<pre><code class="language-sh">git status --short
+mkdir -p .agents
+git mv .skills .agents/skills
+skillnet project sync --name demo
+git status --short
+</code></pre>
+<p>If <code>.agents/skills</code> already exists as an old symlink view, remove that symlink
+before <code>git mv</code>:</p>
+<pre><code class="language-sh">rm .agents/skills
+git mv .skills .agents/skills
+</code></pre>
+<p>The validation point is:</p>
+<pre><code class="language-sh">skillnet status --scope demo
+skillnet doctor
+</code></pre>
+<p>Both commands should stop warning about the legacy <code>.skills</code> canonical after
+<code>.agents/skills</code> exists and the config does not override <code>canonical_rel</code>.</p>
+<p>After migration, run one project sync to refresh the hardlinked aggregator:</p>
+<pre><code class="language-sh">skillnet project sync --name demo
+</code></pre>
+<p>If the project checkout and mirror checkout are on different filesystems, this
+fails instead of silently copying. Move one checkout, choose
+<code>link_strategy = "symlink"</code> for that project, or keep the old layout explicitly
+until both paths can share a filesystem.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="release-and-maintenance"><a class="header" href="#release-and-maintenance">Release And Maintenance</a></h1>
 <p>Release validation for this crate uses the same checks documented in the repository root:</p>
@@ -1430,8 +1528,9 @@ identical content.</li>
 <h3 id="phase-c--cli-surface"><a class="header" href="#phase-c--cli-surface">Phase C — CLI surface</a></h3>
 <p>Two-tier surface, no breaking changes:</p>
 <ol>
-<li><strong>New per-scope subcommand</strong> <code>skillnet view reconcile</code> and
-<code>skillnet project reconcile</code> (parallel to <code>sync</code>/<code>status</code>/<code>diff</code>):
+<li>
+<p><strong>New per-scope subcommand</strong> <code>skillnet view reconcile</code> and
+<code>skillnet project reconcile</code> (parallel to <code>sync</code>/<code>status</code>/<code>diff</code>):</p>
 <pre><code>skillnet view reconcile --all
     [--allow-delete] [--force-canonical] [--prefer view|canonical]
     [--adopt-new]
@@ -1447,14 +1546,20 @@ name as a deprecated alias for one release.</li>
 <li><code>--adopt-new</code>: promote unknown view skills into canonical.</li>
 </ul>
 </li>
-<li><strong>Top-level convenience</strong> <code>skillnet sync --pull</code>: runs <code>view reconcile --all</code> then <code>project reconcile --all</code> then the existing
+<li>
+<p><strong>Top-level convenience</strong> <code>skillnet sync --pull</code>: runs <code>view reconcile --all</code> then <code>project reconcile --all</code> then the existing
 <code>materialize_view</code>/<code>materialize_project</code> pass. Default of
-<code>skillnet sync</code> (no flag) stays exactly as today.</li>
-<li>Standard JSON output via <code>--format json</code> for the report, matching the
-existing <code>view_status_with_options</code> pattern.</li>
-<li>Honour <code>--dry-run</code> and <code>--allow-dirty-destination</code> from the global flag
+<code>skillnet sync</code> (no flag) stays exactly as today.</p>
+</li>
+<li>
+<p>Standard JSON output via <code>--format json</code> for the report, matching the
+existing <code>view_status_with_options</code> pattern.</p>
+</li>
+<li>
+<p>Honour <code>--dry-run</code> and <code>--allow-dirty-destination</code> from the global flag
 set already in
-<a href="../../src/cli/args.rs#L32-L38">src/cli/args.rs:32-38</a>.</li>
+<a href="../../src/cli/args.rs#L32-L38">src/cli/args.rs:32-38</a>.</p>
+</li>
 </ol>
 <h3 id="phase-d--doctor-wiring"><a class="header" href="#phase-d--doctor-wiring">Phase D — Doctor wiring</a></h3>
 <p>In <a href="../../src/commands/doctor.rs">src/commands/doctor.rs</a>, extend
@@ -1982,21 +2087,14 @@ against a fixture host and <code>nix flake check</code> against the canix repo.<
 <h2 id="resolved-decisions"><a class="header" href="#resolved-decisions">Resolved Decisions</a></h2>
 <p>Each of the six open questions is closed; the concrete specs in
 <a href="#final-design">Final Design</a> below assume these answers.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>#</th><th>Decision</th><th>Choice</th><th>Why</th></tr>
-</thead>
-<tbody>
-<tr><td>1</td><td>Default behaviour of <code>skillnet sync</code> on non-symlink view</td><td><strong>Dry-run-on-conflict</strong>: print the proposed promotion, do not mutate canonical, exit <code>2</code>. Mutation requires explicit <code>--apply-promote</code></td><td>Idempotent reruns are safe; HM activation cannot silently rewrite canonical; mtime-spoof has no force-multiplier effect</td></tr>
-<tr><td>2</td><td>Adoption policy for unknown view skills</td><td>Never adopt without <code>--adopt-new</code>. <code>Stale</code> semantics on view-only entries unchanged</td><td>Foreign content stays foreign; promotion path stays explicit</td></tr>
-<tr><td>3</td><td>Migration command vs. manual <code>mv</code></td><td>Ship <code>skillnet config migrate</code></td><td>Small, idempotent, handles the both-locations-present-and-different edge case the user will hit at least once</td></tr>
-<tr><td>4</td><td>HM activation default</td><td><code>programs.skillnet.activation.promote = false</code>, <code>programs.skillnet.activation.failOnConflict = true</code></td><td>Multi-host safe; mutation only on hosts that explicitly opt in; loud activation surfaces drift instead of masking it like today’s `</td></tr>
-<tr><td>5</td><td>Per-target <code>--allow-dirty-destination</code></td><td>Extend the existing global flag to gate every canonical write (mirror + per-project repo)</td><td>Smallest surface; no concrete need yet for per-scope override</td></tr>
-<tr><td>6</td><td>Legacy CWD config discovery sunset</td><td>Deprecation warning in <code>0.6.0</code>, drop in <code>0.7.0</code></td><td>Two-release window matches the cadence of every other breaking change in this CHANGELOG</td></tr>
-</tbody>
-</table>
-</div>
+<p>| #   | Decision                                                 | Choice                                                                                                                                 | Why                                                                                                                                 |
+| — | –––––––––––––––––––––––––––– | ––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––– | ———————————————————————————————————————————– | — | —– |
+| 1   | Default behaviour of <code>skillnet sync</code> on non-symlink view | <strong>Dry-run-on-conflict</strong>: print the proposed promotion, do not mutate canonical, exit <code>2</code>. Mutation requires explicit <code>--apply-promote</code> | Idempotent reruns are safe; HM activation cannot silently rewrite canonical; mtime-spoof has no force-multiplier effect             |
+| 2   | Adoption policy for unknown view skills                  | Never adopt without <code>--adopt-new</code>. <code>Stale</code> semantics on view-only entries unchanged                                                    | Foreign content stays foreign; promotion path stays explicit                                                                        |
+| 3   | Migration command vs. manual <code>mv</code>                        | Ship <code>skillnet config migrate</code>                                                                                                         | Small, idempotent, handles the both-locations-present-and-different edge case the user will hit at least once                       |
+| 4   | HM activation default                                    | <code>programs.skillnet.activation.promote = false</code>, <code>programs.skillnet.activation.failOnConflict = true</code>                                   | Multi-host safe; mutation only on hosts that explicitly opt in; loud activation surfaces drift instead of masking it like today’s <code> |     | true</code> |
+| 5   | Per-target <code>--allow-dirty-destination</code>                   | Extend the existing global flag to gate every canonical write (mirror + per-project repo)                                              | Smallest surface; no concrete need yet for per-scope override                                                                       |
+| 6   | Legacy CWD config discovery sunset                       | Deprecation warning in <code>0.6.0</code>, drop in <code>0.7.0</code>                                                                                        | Two-release window matches the cadence of every other breaking change in this CHANGELOG                                             |</p>
 <h2 id="final-design"><a class="header" href="#final-design">Final Design</a></h2>
 <h3 id="1-skillnet-sync-flag-surface"><a class="header" href="#1-skillnet-sync-flag-surface">1. <code>skillnet sync</code> flag surface</a></h3>
 <p>Single command, no subcommands added. Existing flags kept; new flags added.</p>
