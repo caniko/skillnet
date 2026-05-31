@@ -182,10 +182,22 @@ fn dry_run_target(
     println!("allow_delete: {}", options.allow_delete);
     println!("force: {}", options.force_demote);
     println!("apply_promote: {}", options.apply_promote);
+    if target.scope == TargetScope::Project {
+        for entry in view::project_canonical_drift(target)? {
+            println!("canonical: {} {}", drift_marker(entry.kind), entry.skill);
+        }
+    }
+    let view_root = match target.scope {
+        TargetScope::Project => target
+            .aggregator_path
+            .as_ref()
+            .unwrap_or(&target.canonical_path),
+        TargetScope::Global => &target.canonical_path,
+    };
     for view in &target.views {
         println!("to: {}\t{}", view.label, view.path);
         let mut summary = PromotionSummary::default();
-        for entry in view::view_status(&target.canonical_path, view)? {
+        for entry in view::view_status(view_root, view)? {
             if entry.kind != DriftKind::NonSymlink {
                 continue;
             }
@@ -218,18 +230,18 @@ fn dry_run_target(
     if let Some(plan) = view::project_aggregator_plan(target)? {
         match plan.strategy {
             LinkStrategy::Symlink => {
-                println!("aggregator: symlink {} -> {}", plan.path, plan.canonical);
+                println!("working-copy: symlink {} -> {}", plan.path, plan.canonical);
             }
             LinkStrategy::Hardlink => {
                 println!(
-                    "aggregator: hardlink {} ({} files)",
+                    "working-copy: hardlink {} ({} files)",
                     plan.path, plan.file_count
                 );
             }
         }
         match plan.action {
-            AggregatorPlanAction::Create => println!("  + create aggregator"),
-            AggregatorPlanAction::Update => println!("  ~ replace aggregator"),
+            AggregatorPlanAction::Create => println!("  + create working copy"),
+            AggregatorPlanAction::Update => println!("  ~ replace working copy"),
             AggregatorPlanAction::Relink { files } => {
                 println!(
                     "  ~ relink {} severed file{}",
@@ -352,7 +364,7 @@ impl OverallReport {
         for aggregator in &self.aggregators {
             if let (Some(path), Some(status)) = (&aggregator.path, aggregator.status) {
                 println!(
-                    "{}:aggregator  {} ({})",
+                    "{}:working-copy  {} ({})",
                     aggregator.target_name,
                     path,
                     format_aggregator_status(status)
@@ -428,7 +440,7 @@ fn format_aggregator_status(status: AggregatorStatus) -> &'static str {
 fn print_aggregator_pending(entry: &AggregatorPending) {
     match entry.kind {
         AggregatorPendingKind::Diverged => println!(
-            "aggregator needs tie-break: {} diverged file{} at {}; pass --prefer canonical or --force",
+            "working copy needs tie-break: {} diverged file{} at {}; pass --prefer canonical or --force",
             entry.files.len(),
             plural(entry.files.len()),
             entry.path
@@ -488,4 +500,12 @@ fn print_would_entries(
 
 fn short_sha(sha: &str) -> &str {
     sha.get(..8).unwrap_or(sha)
+}
+
+fn drift_marker(kind: DriftKind) -> char {
+    match kind {
+        DriftKind::Missing => '-',
+        DriftKind::WrongTarget | DriftKind::NonSymlink => '~',
+        DriftKind::Stale => '+',
+    }
 }

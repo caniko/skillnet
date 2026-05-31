@@ -296,7 +296,7 @@ impl Config {
     ) -> Result<Target> {
         let project_root = expand_path(&project.path)?;
         reject_project_view_canonical_overlap(project)?;
-        let canonical_path = project_root.join(&project.canonical_rel);
+        let canonical_path = mirror_root.join("projects").join(&project.name);
 
         Ok(Target {
             name: project.name.clone(),
@@ -321,7 +321,7 @@ impl Config {
                     })
                 })
                 .collect::<Result<Vec<_>>>()?,
-            aggregator_path: Some(mirror_root.join("projects").join(&project.name)),
+            aggregator_path: Some(project_root.join(&project.canonical_rel)),
             project_root: Some(project_root),
             canonical_rel: Some(project.canonical_rel.clone()),
             origin: project.origin.clone(),
@@ -338,10 +338,10 @@ pub fn legacy_project_canonical_warning(target: &Target) -> Option<String> {
     let legacy_path = project_root.join(LEGACY_PROJECT_CANONICAL_REL);
     if legacy_path.is_dir() && !target.canonical_path.exists() {
         Some(format!(
-            "project {}: legacy '.skills' canonical detected; the default moved to \
-'.agents/skills'. Set canonical_rel = \".skills\" to keep the old layout, or migrate: \
-see docs/src/migration/agents-canonical.md.",
-            target.name
+            "project {}: legacy '.skills' store detected and mirror canonical is missing; \
+run `skillnet sync --scope {}` to import it, or set canonical_rel = \".skills\" to use \
+'.skills' as the generated working-copy path. See docs/src/migration/agents-canonical.md.",
+            target.name, target.name
         ))
     } else {
         None
@@ -674,11 +674,11 @@ path = "/tmp/demo"
             .unwrap();
         assert_eq!(
             target.canonical_path,
-            Utf8PathBuf::from("/tmp/demo/.agents/skills")
+            Utf8PathBuf::from("/tmp/mirror/projects/demo")
         );
         assert_eq!(
             target.aggregator_path,
-            Some(Utf8PathBuf::from("/tmp/mirror/projects/demo"))
+            Some(Utf8PathBuf::from("/tmp/demo/.agents/skills"))
         );
         assert_eq!(target.views.len(), 1);
         assert_eq!(target.views[0].label, "claude");
@@ -734,7 +734,11 @@ canonical_rel = ".skills"
             .unwrap();
         assert_eq!(
             target.canonical_path,
-            Utf8PathBuf::from("/tmp/demo/.skills")
+            Utf8PathBuf::from("/tmp/mirror/projects/demo")
+        );
+        assert_eq!(
+            target.aggregator_path,
+            Some(Utf8PathBuf::from("/tmp/demo/.skills"))
         );
         assert_eq!(target.canonical_rel.as_deref(), Some(".skills"));
     }

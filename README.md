@@ -4,10 +4,11 @@
 
 The supported interface in `0.6.0` is the `skillnet` binary. This crate does not commit to a stable embeddable Rust API yet.
 
-For project scopes, the default canonical store is `<project>/.agents/skills`
-and the default Claude view is `<project>/.claude/skills` as per-skill relative
-symlinks. Projects keeping the older `.skills` layout should set
-`canonical_rel = ".skills"` explicitly; migration steps are documented in
+For project scopes, the canonical store is
+`<mirror_root>/projects/<name>`. The default project-local working copy is
+`<project>/.agents/skills`, hardlinked from canonical, and the default Claude
+view is `<project>/.claude/skills` as per-skill relative symlinks into
+`.agents/skills`. Legacy `.skills` migration steps are documented in
 `docs/src/migration/agents-canonical.md`.
 
 ## Install
@@ -259,27 +260,23 @@ cargo test-pg
 `skillnet` keeps canonical skill stores separate from generated agent views:
 
 - `global/` stores the canonical global skills by default.
-- Project canonical stores live at each project's `canonical_rel`, defaulting
-  to `.agents/skills`.
+- Project canonical stores live under `<mirror_root>/projects/<name>`.
+- Project-local working copies live at each project's `canonical_rel`,
+  defaulting to `.agents/skills`, and are materialised from canonical.
 - Global and project views such as `.claude/skills` are generated symlink
   views. Project views use per-skill relative symlinks into the project
-  canonical store.
-- Project aggregators under `<mirror_root>/projects/<name>` default to real
-  hardlinked directory copies of the project canonical store, so the
-  `ai-skills` checkout contains committable files instead of symlinks pointing
-  back into project repositories.
+  working copy.
 - Link strategy defaults are `symlink` for global scopes and `hardlink` for
-  project aggregators. Set top-level `link_strategy`, per-project
+  project working copies. Set top-level `link_strategy`, per-project
   `link_strategy`, or pass `--link symlink|hardlink` to materialisation
   commands to override a run.
 
-Hardlink aggregators require the project checkout and mirror checkout to live
+Hardlink project working copies require the project checkout and mirror checkout to live
 on the same filesystem. Cross-device hardlink failures are reported as errors;
 skillnet does not silently fall back to copying or symlinking. If a Git pull or
 editor rewrite severs a hardlink but leaves matching content, `skillnet sync`
-or `skillnet project sync` re-links it. If the aggregator file content diverges
-from canonical, sync refuses to clobber it until you pass `--force` or
-`--prefer canonical`, or reconcile the files manually.
+or `skillnet project sync` re-links it. Project working copies are generated
+from canonical and are replaced when they drift.
 
 Configuration lives in `$XDG_CONFIG_HOME/skillnet/skillnet.toml`. Catalog
 metadata uses `$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`. The legacy

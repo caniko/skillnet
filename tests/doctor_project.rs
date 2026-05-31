@@ -11,6 +11,7 @@ struct Fixture {
 
 struct ProjectFixture {
     config: std::path::PathBuf,
+    project_root: std::path::PathBuf,
     canonical: std::path::PathBuf,
     aggregator: std::path::PathBuf,
 }
@@ -50,17 +51,16 @@ impl Fixture {
     fn project(&self, project_config: &str) -> ProjectFixture {
         fs::create_dir_all(self.path("mirror/global")).unwrap();
         let project = self.path("repos/demo");
-        let canonical = project.join(".skills");
+        let canonical = self.path("mirror/projects/demo");
         write_skill(&canonical, "alpha");
         write_skill(&canonical, "beta");
 
         let view = project.join(".claude/skills");
         fs::create_dir_all(&view).unwrap();
-        unix_fs::symlink("../../.skills/alpha", view.join("alpha")).unwrap();
-        unix_fs::symlink("../../.skills/beta", view.join("beta")).unwrap();
+        unix_fs::symlink("../../.agents/skills/alpha", view.join("alpha")).unwrap();
+        unix_fs::symlink("../../.agents/skills/beta", view.join("beta")).unwrap();
 
-        let aggregator = self.path("mirror/projects/demo");
-        fs::create_dir_all(aggregator.parent().unwrap()).unwrap();
+        let aggregator = project.join(".agents/skills");
 
         let config = self.write_config(format!(
             r#"
@@ -70,7 +70,6 @@ views = []
 [[projects]]
 name = "demo"
 path = "{}"
-canonical_rel = ".skills"
 views = [{{ rel = ".claude/skills", label = "claude" }}]
 {project_config}
 "#,
@@ -79,6 +78,7 @@ views = [{{ rel = ".claude/skills", label = "claude" }}]
 
         ProjectFixture {
             config,
+            project_root: project,
             canonical,
             aggregator,
         }
@@ -133,6 +133,7 @@ fn doctor_accepts_clean_hardlinked_project_aggregator() {
 fn doctor_reports_legacy_symlink_aggregator_under_hardlink_strategy() {
     let fixture = Fixture::new();
     let project = fixture.project("");
+    fs::create_dir_all(project.aggregator.parent().unwrap()).unwrap();
     unix_fs::symlink(&project.canonical, &project.aggregator).unwrap();
 
     fixture
@@ -192,6 +193,7 @@ fn doctor_reports_diverged_hardlink_aggregator_files_as_error() {
 fn doctor_keeps_symlink_strategy_aggregator_checks() {
     let fixture = Fixture::new();
     let project = fixture.project(r#"link_strategy = "symlink""#);
+    fs::create_dir_all(project.aggregator.parent().unwrap()).unwrap();
     unix_fs::symlink(&project.canonical, &project.aggregator).unwrap();
 
     fixture
@@ -209,6 +211,38 @@ fn doctor_keeps_symlink_strategy_aggregator_checks() {
         .arg("doctor")
         .assert()
         .code(1)
-        .stderr(predicate::str::contains("aggregator symlink"))
+        .stderr(predicate::str::contains("project working-copy symlink"))
         .stderr(predicate::str::contains("expected"));
+}
+
+#[test]
+fn doctor_reports_symlink_entries_inside_project_canonical() {
+    let fixture = Fixture::new();
+    let project = fixture.project("");
+    hardlink_aggregator(&project.canonical, &project.aggregator);
+    fs::remove_dir_all(project.canonical.join("alpha")).unwrap();
+    unix_fs::symlink("beta", project.canonical.join("alpha")).unwrap();
+
+    fixture
+        .command(&project.config)
+        .arg("doctor")
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("project canonical entry"))
+        .stderr(predicate::str::contains("is a symlink"));
+}
+
+#[test]
+fn doctor_reports_legacy_skills_as_info_only() {
+    let fixture = Fixture::new();
+    let project = fixture.project("");
+    hardlink_aggregator(&project.canonical, &project.aggregator);
+    write_skill(&project.project_root.join(".skills"), "alpha");
+
+    fixture
+        .command(&project.config)
+        .arg("doctor")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("legacy project skill store"));
 }

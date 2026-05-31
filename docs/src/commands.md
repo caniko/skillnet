@@ -38,8 +38,9 @@ skillnet hook status
 
 `skillnet sync` is the top-level materialisation command. It resolves every
 selected global view and project view from `skillnet.toml`, materialises the
-view symlinks, materialises project aggregators, and reports real-directory
-view entries that may need promotion back into canonical.
+view symlinks, materialises project working copies, bootstraps project mirror
+canonicals when possible, and reports real-directory view entries that may need
+promotion back into canonical.
 
 When a view entry is already a symlink, `sync` keeps the normal generated-view
 behaviour. When a view entry is a real directory, `sync` compares that content
@@ -60,7 +61,7 @@ Promotion flags:
 | `--allow-delete`             | off     | Existing pruning semantics. Removes view entries with no canonical sibling and no `--adopt-new`.                                                                                        |
 | `--scope <SCOPE>`            | unset   | Selects named scopes. Use `--scope projects` for every project, or `--scope all` for global plus every project. May be repeated.                                                        |
 | `--all`                      | off     | Alias for `--scope all`.                                                                                                                                                                |
-| `--link <symlink\|hardlink>` | unset   | Overrides the resolved link strategy for this materialisation run. Global scopes default to symlink; project aggregators default to hardlink.                                           |
+| `--link <symlink\|hardlink>` | unset   | Overrides the resolved link strategy for this materialisation run. Global scopes default to symlink; project working copies default to hardlink.                                        |
 | `--dry-run`                  | off     | Global flag. Never mutates and never escalates would-promote work to exit code `2`; prints would-\* lines and exits `0`.                                                                |
 | `--allow-dirty-destination`  | off     | Global flag. Allows canonical writes even when the destination Git working tree is dirty. This now gates every canonical write site, not just `mirror_root`.                            |
 
@@ -102,20 +103,20 @@ centralised XDG config migration and Home Manager pattern, see
 canonical global store. It accepts `--link symlink|hardlink` for parity with
 the materialisation interface, but global views default to generated symlinks.
 
-`skillnet project sync --all` materialises configured project views and the
-project aggregator under `mirror_root/projects/`. Project views such as
-`.claude/skills` remain per-skill relative symlinks into the project canonical
-store. Project aggregators default to hardlinked directory twins of the
-canonical store, giving the `ai-skills` checkout real committable files under
-`projects/<name>/`. Use `--link symlink` or `link_strategy = "symlink"` only
-when you intentionally want the old directory-symlink aggregator behavior.
+`skillnet project sync --all` materialises project canonical stores under
+`mirror_root/projects/`, project-local working copies at each project's
+`canonical_rel` (default `.agents/skills`), and configured project views.
+Project views such as `.claude/skills` remain per-skill relative symlinks into
+the project working copy. Project working copies default to hardlinked
+directory twins of the canonical store. Use `--link symlink` or
+`link_strategy = "symlink"` only when you intentionally want the working copy to
+be a directory symlink.
 
-Hardlink aggregators are read and repaired by status-aware sync:
+Hardlink working copies are read and repaired by status-aware sync:
 
-- missing or foreign aggregators are replaced during sync;
-- severed-but-identical files are re-linked;
-- diverged files are left untouched unless `--force` or `--prefer canonical`
-  chooses canonical content;
+- missing or foreign working copies are replaced during sync;
+- severed, identical, or diverged working-copy files are re-linked from
+  canonical;
 - cross-filesystem hardlink failures are errors, with no copy or symlink
   fallback.
 
@@ -165,11 +166,11 @@ decisions can be inspected without mutating the filesystem.
 
 ## Doctor
 
-`skillnet doctor` checks the Option B canonical/view/aggregator invariants:
+`skillnet doctor` checks the Option B canonical/view/working-copy invariants:
 
 - global canonical store existence and global view symlinks;
-- project canonical stores, committed in-repo view symlinks, and mirror
-  aggregators;
+- mirror project canonical stores, project working copies, and committed
+  in-repo view symlinks;
 - orphan view entries that do not correspond to canonical skill names;
 - broken or unexpected symlink targets.
 
@@ -179,13 +180,14 @@ the same comparator used by `skillnet sync`: `Identical`, `ViewNewer`,
 `CanonicalNewer`, `EqualMtimeDifferentContent`, `BothAdvanced`, or
 `AdoptCandidate`.
 
-For project aggregators, doctor follows the configured link strategy. Symlink
-strategy keeps the old target and resolution checks. Hardlink strategy verifies
-that `mirror_root/projects/<name>` is a directory whose regular files are
-hardlinked twins of canonical files. Missing aggregators, legacy symlink
-aggregators, foreign trees, and diverged files are errors. Severed-but-identical
-files are warnings because `skillnet project sync` can re-link them without
-discarding content.
+For project working copies, doctor follows the configured link strategy.
+Symlink strategy checks the configured working-copy path points at
+`mirror_root/projects/<name>`. Hardlink strategy verifies the project-local
+working-copy directory's regular files are hardlinked twins of canonical files.
+Missing working copies, symlink working copies under hardlink strategy, foreign
+trees, and diverged files are errors. Severed-but-identical files are warnings
+because `skillnet project sync` can re-link them without discarding content.
+Legacy `.skills` directories are reported as informational backups.
 
 ## Config File Location
 

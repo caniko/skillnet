@@ -78,6 +78,7 @@ pub fn sync_with_promotion(
         relative_links: false,
         link_strategy: target.link_strategy,
         project_root: None,
+        link_root: None,
     };
 
     let mut pending = 0usize;

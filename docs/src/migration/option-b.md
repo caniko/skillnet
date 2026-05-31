@@ -45,13 +45,13 @@ set `canonical_rel = ".skills"` explicitly.
 
 - Global canonical store: `<mirror_root>/global/`
 - Global views: configured `[global].views[*].path`
-- Project canonical store: `<project>/<canonical_rel>/`
+- Project canonical store: `<mirror_root>/projects/<project-name>/`
+- Project working copy: `<project>/<canonical_rel>/`
 - Project committed views: `<project>/<view.rel>/`
-- Project mirror aggregator: `<mirror_root>/projects/<project-name>` symlink
-  to `<project>/<canonical_rel>/`
 
 Global views use absolute symlinks to canonical skills. Project views use
-relative symlinks so they can be committed to project repositories.
+relative symlinks to the project working copy so they can be committed to
+project repositories.
 
 ## Fresh Host Bootstrap
 
@@ -67,10 +67,9 @@ skillnet doctor
 
 `project clone --all` skips existing project paths, warns for projects without
 `origin`, clones missing projects with configured origins, then runs
-`skillnet project sync --all` to materialise in-repo views and mirror
-aggregators. In current releases, project aggregators default to hardlinked
-directory twins under `projects/<name>/`; older `0.5.x` releases used
-symlink-based aggregators.
+`skillnet project sync --all` to materialise mirror canonicals, project
+working copies, and in-repo views. Project working copies default to hardlinked
+directory twins of `projects/<name>/`.
 
 By default, HTTPS origins are refused. Use `--ssh-strict=false` only when an
 HTTPS clone is intentional.
@@ -84,7 +83,8 @@ HTTPS clone is intentional.
 - view symlinks that are broken or point outside the canonical store;
 - canonical skills missing from a configured view;
 - orphan view entries not matching any canonical skill name;
-- missing, foreign, legacy-symlink, severed, or diverged project aggregators.
+- missing, foreign, legacy-symlink, severed, or diverged project working
+  copies.
 
 Missing project repository paths are warnings, not errors, because a host may
 be partially bootstrapped before all project repositories are cloned.

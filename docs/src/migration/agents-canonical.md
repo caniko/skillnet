@@ -1,31 +1,33 @@
 # Agents Canonical Project Layout
 
-Skillnet now defaults project canonical skill stores to:
+Skillnet stores project canonical skills in the mirror checkout:
+
+```text
+<mirror_root>/projects/<name>
+```
+
+The default project-local working copy is hardlinked from canonical:
 
 ```text
 <project>/.agents/skills
 ```
 
-The default Claude view remains per-skill relative symlinks under:
+The default Claude view remains per-skill relative symlinks into that working
+copy:
 
 ```text
 <project>/.claude/skills
 ```
 
-Projects that already set `canonical_rel = ".skills"` keep the old layout. The
-default only changes projects that omitted `canonical_rel`.
-
-Project sync also changed the mirror-side aggregator. By default,
-`<mirror_root>/projects/<name>` is now a directory of hardlinked files whose
-regular files share device and inode with the canonical files under
-`.agents/skills`. The `ai-skills` repository therefore sees real files under
-`projects/<name>/` that can be committed. It is no longer a directory symlink
-unless the project explicitly sets `link_strategy = "symlink"` or a sync run
-passes `--link symlink`.
+`canonical_rel` still controls the project-local working-copy path and defaults
+to `.agents/skills`. Project sync can bootstrap the mirror canonical from
+legacy project-local real skill directories, then refresh `.agents/skills` as a
+hardlinked copy and `.claude/skills` as relative symlinks.
 
 ## Keeping `.skills`
 
-If a project should keep using `.skills`, make that explicit:
+If a project should keep the generated working copy at `.skills`, make that
+explicit:
 
 ```toml
 [[projects]]
@@ -41,44 +43,33 @@ skillnet status --scope demo
 skillnet doctor
 ```
 
-## Migrating Manually
+## Migrating
 
-Skillnet does not move project files during `sync`, `status`, or `doctor`.
-Migrate deliberately from inside the project repository:
+Skillnet preserves legacy `.skills` as a backup. To migrate deliberately, run
+sync and then inspect both repositories:
 
 ```sh
 git status --short
-mkdir -p .agents
-git mv .skills .agents/skills
-skillnet project sync --name demo
-git status --short
-```
-
-If `.agents/skills` already exists as an old symlink view, remove that symlink
-before `git mv`:
-
-```sh
-rm .agents/skills
-git mv .skills .agents/skills
-```
-
-The validation point is:
-
-```sh
-skillnet status --scope demo
+skillnet sync --scope demo
 skillnet doctor
+git status --short
 ```
 
-Both commands should stop warning about the legacy `.skills` canonical after
-`.agents/skills` exists and the config does not override `canonical_rel`.
+If `<mirror_root>/projects/<name>` is missing, empty, or contains only copied
+symlinks that match legacy `.skills` entries, sync imports real skill
+directories from `.skills`. If the mirror already contains divergent real
+content while the project is still in the old symlink-only shape, sync stops
+and requires manual reconciliation.
 
-After migration, run one project sync to refresh the hardlinked aggregator:
+After sync:
 
-```sh
-skillnet project sync --name demo
-```
+- `<mirror_root>/projects/<name>` should contain real skill directories;
+- `<project>/.agents/skills` should be hardlinked to the mirror canonical;
+- `<project>/.claude/skills` should contain relative symlinks into
+  `.agents/skills`;
+- `<project>/.skills` may remain as an informational backup until removed
+  deliberately.
 
-If the project checkout and mirror checkout are on different filesystems, this
-fails instead of silently copying. Move one checkout, choose
-`link_strategy = "symlink"` for that project, or keep the old layout explicitly
-until both paths can share a filesystem.
+If the project checkout and mirror checkout are on different filesystems,
+hardlinking fails instead of silently copying. Move one checkout or choose
+`link_strategy = "symlink"` for that project.

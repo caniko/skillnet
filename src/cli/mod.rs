@@ -113,6 +113,7 @@ pub fn run() -> Result<()> {
                 relative_links: false,
                 link_strategy: link_strategy.unwrap_or(LinkStrategy::Symlink),
                 project_root: None,
+                link_root: None,
             };
             let exit_code = commands::sync::run(&ctx, &scopes, options, no_promote, link_strategy)?;
             if exit_code != 0 {

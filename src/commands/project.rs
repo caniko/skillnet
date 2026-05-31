@@ -142,7 +142,7 @@ pub fn project_sync(
             );
         }
         if let Some(status) = summary.aggregator {
-            println!("aggregator  {}", format_aggregator_status(status));
+            println!("working-copy  {}", format_aggregator_status(status));
         }
         for entry in &summary.aggregator_pending {
             print_aggregator_pending(entry);
@@ -151,7 +151,7 @@ pub fn project_sync(
     }
     if pending > 0 {
         bail!(
-            "{pending} aggregator entr{} need a decision; rerun with --force to replace from canonical",
+            "{pending} working-copy entr{} need a decision; rerun with --force to replace from canonical",
             if pending == 1 { "y" } else { "ies" }
         );
     }
@@ -333,7 +333,7 @@ fn format_aggregator_status(status: AggregatorStatus) -> &'static str {
 fn print_aggregator_pending(entry: &AggregatorPending) {
     match entry.kind {
         AggregatorPendingKind::Diverged => println!(
-            "aggregator  needs decision: {} diverged file{} at {}; pass --force to replace from {}",
+            "working-copy  needs decision: {} diverged file{} at {}; pass --force to replace from {}",
             entry.files.len(),
             if entry.files.len() == 1 { "" } else { "s" },
             entry.path,
@@ -345,19 +345,19 @@ fn print_aggregator_pending(entry: &AggregatorPending) {
 fn print_aggregator_plan(plan: &AggregatorPlan, force: bool) {
     match plan.strategy {
         LinkStrategy::Symlink => {
-            println!("aggregator: symlink {} -> {}", plan.path, plan.canonical);
+            println!("working-copy: symlink {} -> {}", plan.path, plan.canonical);
         }
         LinkStrategy::Hardlink => {
             println!(
-                "aggregator: hardlink {} ({} files)",
+                "working-copy: hardlink {} ({} files)",
                 plan.path, plan.file_count
             );
         }
     }
 
     match &plan.action {
-        AggregatorPlanAction::Create => println!("  + create aggregator"),
-        AggregatorPlanAction::Update => println!("  ~ replace aggregator"),
+        AggregatorPlanAction::Create => println!("  + create working copy"),
+        AggregatorPlanAction::Update => println!("  ~ replace working copy"),
         AggregatorPlanAction::Relink { files } => {
             println!(
                 "  ~ relink {} severed file{}",

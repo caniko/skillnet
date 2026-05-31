@@ -1,13 +1,13 @@
-use std::{fs, os::unix::fs::MetadataExt};
+use std::{
+    fs,
+    os::unix::fs::{self as unix_fs, MetadataExt},
+};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use skillnet::{
     link::LinkStrategy,
     model::{Target, TargetScope, ViewTarget},
-    view::{
-        materialize_project, materialize_project_with_options, project_diff, project_status,
-        AggregatorPendingKind, AggregatorStatus, DriftKind, FileDeltaKind, ProjectSyncOptions,
-    },
+    view::{materialize_project, project_diff, project_status, AggregatorStatus},
 };
 use tempfile::tempdir;
 
@@ -23,12 +23,12 @@ fn project_target(root: &Utf8Path, strategy: LinkStrategy) -> Target {
         name: "demo".into(),
         scope: TargetScope::Project,
         link_strategy: strategy,
-        canonical_path: project.join(".agents/skills"),
+        canonical_path: root.join("mirror/projects/demo"),
         views: vec![ViewTarget {
             label: "claude".into(),
             path: project.join(".claude/skills"),
         }],
-        aggregator_path: Some(root.join("mirror/projects/demo")),
+        aggregator_path: Some(project.join(".agents/skills")),
         project_root: Some(project),
         canonical_rel: Some(".agents/skills".into()),
         origin: None,
@@ -136,7 +136,7 @@ fn materialize_project_hardlinks_aggregator_and_repairs_severed_files() {
 }
 
 #[test]
-fn materialize_project_requires_force_for_diverged_hardlink_aggregator_files() {
+fn materialize_project_repairs_diverged_hardlink_working_copy_files() {
     let tmp = tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
     let target = project_target(&root, LinkStrategy::Hardlink);
@@ -154,37 +154,89 @@ fn materialize_project_requires_force_for_diverged_hardlink_aggregator_files() {
     fs::copy(&canonical_skill, &aggregator_skill).unwrap();
     fs::write(&aggregator_skill, "edited").unwrap();
 
-    let pending = materialize_project(&target).unwrap();
-    assert_eq!(pending.aggregator, Some(AggregatorStatus::Unchanged));
-    assert_eq!(pending.aggregator_pending.len(), 1);
-    assert_eq!(
-        pending.aggregator_pending[0].kind,
-        AggregatorPendingKind::Diverged
-    );
-    assert_eq!(fs::read_to_string(&aggregator_skill).unwrap(), "edited");
+    let repaired = materialize_project(&target).unwrap();
+    assert_eq!(repaired.aggregator, Some(AggregatorStatus::Updated));
+    assert!(repaired.aggregator_pending.is_empty());
+    assert_eq!(fs::read_to_string(&aggregator_skill).unwrap(), "alpha");
     assert_eq!(fs::read_to_string(&canonical_skill).unwrap(), "alpha");
-    assert_different_inode(&canonical_skill, &aggregator_skill);
+    assert_same_inode(&canonical_skill, &aggregator_skill);
 
     let drift = project_status(&target).unwrap();
-    assert!(drift
-        .iter()
-        .any(|entry| entry.skill == "aggregator" && entry.kind == DriftKind::WrongTarget));
+    assert!(drift.is_empty());
     let diff = project_diff(&target).unwrap();
-    assert!(diff
-        .iter()
-        .any(|delta| delta.skill == "aggregator" && delta.kind == FileDeltaKind::Modified));
+    assert!(diff.is_empty());
+}
 
-    let forced = materialize_project_with_options(
-        &target,
-        ProjectSyncOptions {
-            force: true,
-            link_strategy: LinkStrategy::Hardlink,
-            ..ProjectSyncOptions::default()
-        },
+#[test]
+fn materialize_project_repairs_symlink_only_canonical_from_legacy_skills() {
+    let tmp = tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
+    let target = project_target(&root, LinkStrategy::Hardlink);
+    let project_root = target.project_root.as_ref().unwrap();
+    let legacy = project_root.join(".skills");
+
+    for skill in ["alpha", "beta", "gamma"] {
+        write_skill(&legacy, skill);
+        fs::create_dir_all(&target.canonical_path).unwrap();
+        unix_fs::symlink(
+            format!("../../.skills/{skill}"),
+            target.canonical_path.join(skill),
+        )
+        .unwrap();
+        fs::create_dir_all(target.aggregator_path.as_ref().unwrap()).unwrap();
+        unix_fs::symlink(
+            format!("../../.skills/{skill}"),
+            target.aggregator_path.as_ref().unwrap().join(skill),
+        )
+        .unwrap();
+    }
+
+    let summary = materialize_project(&target).unwrap();
+
+    assert_eq!(summary.aggregator, Some(AggregatorStatus::Updated));
+    assert!(summary.aggregator_pending.is_empty());
+    assert_relative_project_views(&target);
+    assert!(legacy.join("alpha/SKILL.md").is_file());
+    assert!(!fs::symlink_metadata(target.canonical_path.join("alpha"))
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert_same_inode(
+        &target.canonical_path.join("alpha/SKILL.md"),
+        &target
+            .aggregator_path
+            .as_ref()
+            .unwrap()
+            .join("alpha/SKILL.md"),
+    );
+}
+
+#[test]
+fn materialize_project_refuses_divergent_real_canonical_during_legacy_repair() {
+    let tmp = tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
+    let target = project_target(&root, LinkStrategy::Hardlink);
+    let project_root = target.project_root.as_ref().unwrap();
+    let legacy = project_root.join(".skills");
+
+    write_skill(&legacy, "alpha");
+    fs::write(legacy.join("alpha/SKILL.md"), "legacy").unwrap();
+    write_skill(&target.canonical_path, "alpha");
+    fs::write(target.canonical_path.join("alpha/SKILL.md"), "canonical").unwrap();
+    fs::create_dir_all(target.aggregator_path.as_ref().unwrap()).unwrap();
+    unix_fs::symlink(
+        "../../.skills/alpha",
+        target.aggregator_path.as_ref().unwrap().join("alpha"),
     )
     .unwrap();
-    assert_eq!(forced.aggregator, Some(AggregatorStatus::Updated));
-    assert!(forced.aggregator_pending.is_empty());
-    assert_same_inode(&canonical_skill, &aggregator_skill);
-    assert_eq!(fs::read_to_string(&canonical_skill).unwrap(), "alpha");
+
+    let err = materialize_project(&target).unwrap_err();
+
+    assert!(err
+        .to_string()
+        .contains("already contains real content that diverges"));
+    assert_eq!(
+        fs::read_to_string(target.canonical_path.join("alpha/SKILL.md")).unwrap(),
+        "canonical"
+    );
 }

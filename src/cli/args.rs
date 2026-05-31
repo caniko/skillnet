@@ -619,7 +619,7 @@ pub(super) enum ProjectCommand {
         #[arg(long)]
         prune_mirror: bool,
     },
-    /// Materialise configured project views and aggregators.
+    /// Materialise configured project working copies and views.
     Sync {
         /// Project name to sync. May be repeated.
         #[arg(long, value_name = "NAME", action = ArgAction::Append)]
@@ -637,7 +637,7 @@ pub(super) enum ProjectCommand {
         #[arg(long, value_enum)]
         link: Option<LinkArg>,
     },
-    /// Show read-only project view and aggregator drift.
+    /// Show read-only project view and working-copy drift.
     Status {
         /// Project name to inspect. May be repeated.
         #[arg(long, value_name = "NAME", action = ArgAction::Append)]
@@ -649,7 +649,7 @@ pub(super) enum ProjectCommand {
         #[arg(long, default_value = "text")]
         format: StatusFormat,
     },
-    /// Show project view and aggregator deltas.
+    /// Show project view and working-copy deltas.
     Diff {
         /// Project name to diff. May be repeated.
         #[arg(long, value_name = "NAME", action = ArgAction::Append)]

@@ -9,20 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Project defaults now use `<project>/.agents/skills` as the canonical store and
-  `<project>/.claude/skills` as the default per-skill symlink view. Projects
-  that still rely on the old `.skills` default get a warning and can either set
-  `canonical_rel = ".skills"` or follow `docs/src/migration/agents-canonical.md`;
-  migration is documented only and is not performed automatically.
-- Project aggregators now default to hardlinked directory twins under
-  `<mirror_root>/projects/<name>`, giving the `ai-skills` checkout real
-  committable files instead of directory symlinks. Severed-but-identical
-  hardlinks are re-linked by sync; diverged files require `--force`,
-  `--prefer canonical`, or manual reconciliation.
+- Project canonical stores now live under `<mirror_root>/projects/<name>`,
+  giving the `ai-skills` checkout real committable files. Project-local
+  working copies default to `<project>/.agents/skills` and are hardlinked from
+  canonical; `<project>/.claude/skills` remains the default per-skill symlink
+  view into `.agents/skills`.
+- Project sync can repair the legacy symlink-only state by importing real skill
+  directories from `.skills` into `<mirror_root>/projects/<name>`, while leaving
+  `.skills` as a backup. Divergent real mirror content is refused for manual
+  reconciliation.
 - Link strategy is configurable through top-level `link_strategy`, per-project
   `link_strategy`, and the `--link symlink|hardlink` flag on materialisation
   commands. Defaults are symlink for global scopes and hardlink for project
-  aggregators.
+  working copies.
 - `skillnet sync` and other scope-aware commands now accept
   `--scope projects` and `--scope all`; `skillnet sync --all` is an alias for
   `--scope all`.

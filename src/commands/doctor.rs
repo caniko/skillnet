@@ -243,6 +243,7 @@ fn check_project(target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
         return Ok(());
     }
 
+    check_project_canonical(target, issues)?;
     let canonical_skills = canonical_skill_names(&target.canonical_path)?;
     for view in &target.views {
         check_project_view(
@@ -255,6 +256,26 @@ fn check_project(target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
         )?;
     }
     check_project_aggregator(target, issues)?;
+    check_legacy_project_store(target, project_root, issues)?;
+    Ok(())
+}
+
+fn check_project_canonical(target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
+    for entry in read_dir_utf8(&target.canonical_path)? {
+        let metadata = fs::symlink_metadata(&entry)
+            .with_context(|| format!("failed to inspect project canonical entry {entry}"))?;
+        if metadata.file_type().is_symlink() {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "project canonical entry {entry} is a symlink; expected real skill directory under {}",
+                    target.canonical_path
+                ),
+            );
+        }
+    }
     Ok(())
 }
 
@@ -336,15 +357,15 @@ fn check_project_view(
             continue;
         }
         let resolved = resolve_link_target(&view.path, &actual);
-        if resolved != target.canonical_path.join(&name) {
+        let expected_resolved = project_root.join(canonical_rel).join(&name);
+        if resolved != expected_resolved {
             issue(
                 issues,
                 target,
                 Severity::Error,
                 format!(
                     "project view `{}` entry `{name}` resolves to {resolved}; expected {}",
-                    view.label,
-                    target.canonical_path.join(&name)
+                    view.label, expected_resolved
                 ),
             );
         }
@@ -388,7 +409,7 @@ fn check_project_symlink_aggregator(
                     target,
                     Severity::Error,
                     format!(
-                        "aggregator symlink {path} points to {actual}; expected {}",
+                        "project working-copy symlink {path} points to {actual}; expected {}",
                         target.canonical_path
                     ),
                 );
@@ -401,7 +422,7 @@ fn check_project_symlink_aggregator(
                     target,
                     Severity::Error,
                     format!(
-                        "aggregator symlink {path} resolves to {resolved}; expected {}",
+                        "project working-copy symlink {path} resolves to {resolved}; expected {}",
                         target.canonical_path
                     ),
                 ),
@@ -409,7 +430,7 @@ fn check_project_symlink_aggregator(
                     issues,
                     target,
                     Severity::Error,
-                    format!("aggregator symlink {path} is broken: {err}"),
+                    format!("project working-copy symlink {path} is broken: {err}"),
                 ),
             }
         }
@@ -417,13 +438,13 @@ fn check_project_symlink_aggregator(
             issues,
             target,
             Severity::Error,
-            format!("aggregator path {path} exists but is not a symlink"),
+            format!("project working-copy path {path} exists but is not a symlink"),
         ),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => issue(
             issues,
             target,
             Severity::Error,
-            format!("aggregator symlink {path} is missing"),
+            format!("project working-copy symlink {path} is missing"),
         ),
         Err(err) => return Err(err).with_context(|| format!("failed to inspect {path}")),
     }
@@ -442,7 +463,7 @@ fn check_project_hardlink_aggregator(
                 target,
                 Severity::Error,
                 format!(
-                    "aggregator {path} is a symlink but project uses hardlink strategy; run `skillnet project sync` to materialise the hardlinked copy"
+                    "project working copy {path} is a symlink but project uses hardlink strategy; run `skillnet project sync` to materialise the hardlinked copy"
                 ),
             );
             return Ok(());
@@ -455,7 +476,7 @@ fn check_project_hardlink_aggregator(
             target,
             Severity::Error,
             format!(
-                "aggregator hardlink directory {path} is missing; run `skillnet project sync`"
+                "project hardlink working-copy directory {path} is missing; run `skillnet project sync`"
             ),
         ),
         HardlinkStatus::Identical => {}
@@ -464,7 +485,7 @@ fn check_project_hardlink_aggregator(
             target,
             Severity::Warn,
             format!(
-                "{} aggregator file{} no longer hardlinked ({}) but content matches; `skillnet project sync` will re-link",
+                "{} project working-copy file{} no longer hardlinked ({}) but content matches; `skillnet project sync` will re-link",
                 files.len(),
                 plural(files.len()),
                 sample_files(&files)
@@ -475,7 +496,7 @@ fn check_project_hardlink_aggregator(
             target,
             Severity::Error,
             format!(
-                "{} aggregator file{} diverged from canonical ({}); run `skillnet project sync --force` / `--prefer canonical` to overwrite, or reconcile manually",
+                "{} project working-copy file{} diverged from canonical ({}); run `skillnet project sync --force` / `--prefer canonical` to overwrite, or reconcile manually",
                 files.len(),
                 plural(files.len()),
                 sample_files(&files)
@@ -485,8 +506,28 @@ fn check_project_hardlink_aggregator(
             issues,
             target,
             Severity::Error,
-            format!("aggregator path {path} is not a faithful copy (extra/missing entries)"),
+            format!("project working-copy path {path} is not a faithful copy (extra/missing entries)"),
         ),
+    }
+    Ok(())
+}
+
+fn check_legacy_project_store(
+    target: &Target,
+    project_root: &Utf8Path,
+    issues: &mut Vec<Issue>,
+) -> Result<()> {
+    if target.canonical_rel.as_deref() == Some(".skills") {
+        return Ok(());
+    }
+    let legacy = project_root.join(".skills");
+    if legacy.is_dir() {
+        issue(
+            issues,
+            target,
+            Severity::Info,
+            format!("legacy project skill store {legacy} remains as a backup"),
+        );
     }
     Ok(())
 }

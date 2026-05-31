@@ -132,6 +132,7 @@ pub struct PromotionOptions {
     pub relative_links: bool,
     pub link_strategy: LinkStrategy,
     pub project_root: Option<Utf8PathBuf>,
+    pub link_root: Option<Utf8PathBuf>,
 }
 
 impl Default for PromotionOptions {
@@ -145,6 +146,7 @@ impl Default for PromotionOptions {
             relative_links: false,
             link_strategy: LinkStrategy::Symlink,
             project_root: None,
+            link_root: None,
         }
     }
 }
@@ -225,7 +227,12 @@ pub fn materialize_view_with_promotion(
     let mut summary = PromotionSummary::default();
     for (skill, canonical_skill) in &expected {
         let link = view.path.join(skill);
-        let desired = desired_link_target(&view.path, canonical_skill, options.relative_links)?;
+        let desired_target = options
+            .link_root
+            .as_ref()
+            .map(|root| root.join(skill))
+            .unwrap_or_else(|| canonical_skill.clone());
+        let desired = desired_link_target(&view.path, &desired_target, options.relative_links)?;
         match fs::symlink_metadata(&link) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 let current = read_link_utf8(&link)?;
@@ -657,10 +664,36 @@ pub fn materialize_project_with_options(
     target: &Target,
     options: ProjectSyncOptions,
 ) -> Result<ProjectSyncSummary> {
+    ensure_project_canonical(target)?;
+
+    let (aggregator, aggregator_pending) = match &target.aggregator_path {
+        Some(path) => {
+            let outcome = ensure_aggregator(
+                path,
+                &target.canonical_path,
+                options.link_strategy,
+                true,
+                None,
+            )
+            .with_context(|| {
+                format!(
+                    "[{}] failed to materialise project working copy",
+                    target.name
+                )
+            })?;
+            (Some(outcome.status), outcome.pending)
+        }
+        None => (None, Vec::new()),
+    };
+
     let mut views = Vec::with_capacity(target.views.len());
+    let view_root = target
+        .aggregator_path
+        .as_ref()
+        .unwrap_or(&target.canonical_path);
     for view in &target.views {
         let summary = materialize_view_with_options(
-            &target.canonical_path,
+            view_root,
             view,
             ViewSyncOptions {
                 allow_delete: options.allow_delete,
@@ -676,21 +709,6 @@ pub fn materialize_project_with_options(
         });
     }
 
-    let (aggregator, aggregator_pending) = match &target.aggregator_path {
-        Some(path) => {
-            let outcome = ensure_aggregator(
-                path,
-                &target.canonical_path,
-                options.link_strategy,
-                options.force,
-                None,
-            )
-            .with_context(|| format!("[{}] failed to hardlink aggregator", target.name))?;
-            (Some(outcome.status), outcome.pending)
-        }
-        None => (None, Vec::new()),
-    };
-
     Ok(ProjectSyncSummary {
         views,
         aggregator,
@@ -703,6 +721,24 @@ pub fn materialize_project_with_promotion(
     options: PromotionOptions,
     ensure_clean: impl Fn(&Utf8Path) -> Result<()>,
 ) -> Result<ProjectPromotionSummary> {
+    ensure_project_canonical(target)?;
+
+    if let Some(path) = &target.aggregator_path {
+        ensure_aggregator(
+            path,
+            &target.canonical_path,
+            options.link_strategy,
+            true,
+            options.prefer,
+        )
+        .with_context(|| {
+            format!(
+                "[{}] failed to materialise project working copy",
+                target.name
+            )
+        })?;
+    }
+
     let mut views = Vec::with_capacity(target.views.len());
     for view in &target.views {
         let summary = materialize_view_with_promotion(
@@ -712,6 +748,7 @@ pub fn materialize_project_with_promotion(
                 relative_links: true,
                 link_strategy: options.link_strategy,
                 project_root: target.project_root.clone(),
+                link_root: target.aggregator_path.clone(),
                 ..options.clone()
             },
             &ensure_clean,
@@ -729,10 +766,15 @@ pub fn materialize_project_with_promotion(
                 path,
                 &target.canonical_path,
                 options.link_strategy,
-                options.force_demote,
+                true,
                 options.prefer,
             )
-            .with_context(|| format!("[{}] failed to hardlink aggregator", target.name))?;
+            .with_context(|| {
+                format!(
+                    "[{}] failed to materialise project working copy",
+                    target.name
+                )
+            })?;
             (Some(outcome.status), outcome.pending)
         }
         None => (None, Vec::new()),
@@ -747,9 +789,14 @@ pub fn materialize_project_with_promotion(
 
 pub fn project_status(target: &Target) -> Result<Vec<DriftEntry>> {
     let mut drift = Vec::new();
+    drift.extend(project_canonical_drift(target)?);
+    let view_root = target
+        .aggregator_path
+        .as_ref()
+        .unwrap_or(&target.canonical_path);
     for view in &target.views {
         drift.extend(view_status_with_options(
-            &target.canonical_path,
+            view_root,
             view,
             ViewSyncOptions {
                 relative_links: true,
@@ -757,11 +804,13 @@ pub fn project_status(target: &Target) -> Result<Vec<DriftEntry>> {
             },
         )?);
     }
-    if let Some(path) = &target.aggregator_path {
-        if let Some(entry) =
-            aggregator_drift_entry(path, &target.canonical_path, target.link_strategy)?
-        {
-            drift.push(entry);
+    if target.canonical_path.exists() {
+        if let Some(path) = &target.aggregator_path {
+            if let Some(entry) =
+                aggregator_drift_entry(path, &target.canonical_path, target.link_strategy)?
+            {
+                drift.push(entry);
+            }
         }
     }
     Ok(drift)
@@ -769,9 +818,23 @@ pub fn project_status(target: &Target) -> Result<Vec<DriftEntry>> {
 
 pub fn project_diff(target: &Target) -> Result<Vec<FileDelta>> {
     let mut deltas = Vec::new();
+    deltas.extend(
+        project_canonical_drift(target)?
+            .into_iter()
+            .map(|entry| FileDelta {
+                skill: entry.skill,
+                kind: FileDeltaKind::Modified,
+                expected: entry.expected,
+                actual: entry.actual,
+            }),
+    );
+    let view_root = target
+        .aggregator_path
+        .as_ref()
+        .unwrap_or(&target.canonical_path);
     for view in &target.views {
         deltas.extend(view_diff_with_options(
-            &target.canonical_path,
+            view_root,
             view,
             ViewSyncOptions {
                 relative_links: true,
@@ -779,11 +842,13 @@ pub fn project_diff(target: &Target) -> Result<Vec<FileDelta>> {
             },
         )?);
     }
-    if let Some(path) = &target.aggregator_path {
-        if let Some(delta) =
-            aggregator_file_delta(path, &target.canonical_path, target.link_strategy)?
-        {
-            deltas.push(delta);
+    if target.canonical_path.exists() {
+        if let Some(path) = &target.aggregator_path {
+            if let Some(delta) =
+                aggregator_file_delta(path, &target.canonical_path, target.link_strategy)?
+            {
+                deltas.push(delta);
+            }
         }
     }
     Ok(deltas)
@@ -793,25 +858,32 @@ pub fn project_aggregator_plan(target: &Target) -> Result<Option<AggregatorPlan>
     let Some(path) = &target.aggregator_path else {
         return Ok(None);
     };
-    let action = match target.link_strategy {
-        LinkStrategy::Symlink => match aggregator_symlink_status(path, &target.canonical_path)? {
-            AggregatorStatus::Created => AggregatorPlanAction::Create,
-            AggregatorStatus::Updated => AggregatorPlanAction::Update,
-            AggregatorStatus::Unchanged => AggregatorPlanAction::Unchanged,
-        },
-        LinkStrategy::Hardlink => match hardlink_dir_status(&target.canonical_path, path)? {
-            HardlinkStatus::Missing => AggregatorPlanAction::Create,
-            HardlinkStatus::Foreign => AggregatorPlanAction::Update,
-            HardlinkStatus::Identical => AggregatorPlanAction::Unchanged,
-            HardlinkStatus::Severed { files } => AggregatorPlanAction::Relink { files },
-            HardlinkStatus::Diverged { files } => AggregatorPlanAction::Diverged { files },
-        },
+    let action = if !project_canonical_drift(target)?.is_empty() {
+        AggregatorPlanAction::Update
+    } else if !target.canonical_path.exists() {
+        AggregatorPlanAction::Create
+    } else {
+        match target.link_strategy {
+            LinkStrategy::Symlink => match aggregator_symlink_status(path, &target.canonical_path)?
+            {
+                AggregatorStatus::Created => AggregatorPlanAction::Create,
+                AggregatorStatus::Updated => AggregatorPlanAction::Update,
+                AggregatorStatus::Unchanged => AggregatorPlanAction::Unchanged,
+            },
+            LinkStrategy::Hardlink => match hardlink_dir_status(&target.canonical_path, path)? {
+                HardlinkStatus::Missing => AggregatorPlanAction::Create,
+                HardlinkStatus::Foreign => AggregatorPlanAction::Update,
+                HardlinkStatus::Identical => AggregatorPlanAction::Unchanged,
+                HardlinkStatus::Severed { files } => AggregatorPlanAction::Relink { files },
+                HardlinkStatus::Diverged { files } => AggregatorPlanAction::Diverged { files },
+            },
+        }
     };
     Ok(Some(AggregatorPlan {
         strategy: target.link_strategy,
         path: path.clone(),
         canonical: target.canonical_path.clone(),
-        file_count: regular_file_count(&target.canonical_path)?,
+        file_count: regular_file_count(&target.canonical_path).unwrap_or(0),
         action,
     }))
 }
@@ -902,6 +974,270 @@ pub enum AggregatorPlanAction {
 struct AggregatorOutcome {
     status: AggregatorStatus,
     pending: Vec<AggregatorPending>,
+}
+
+fn ensure_project_canonical(target: &Target) -> Result<()> {
+    let Some(project_root) = &target.project_root else {
+        return Ok(());
+    };
+
+    let canonical = &target.canonical_path;
+    let source = project_bootstrap_source(target, project_root)?;
+    let repairable = project_canonical_is_bootstrap_repairable(canonical, source.as_ref())?;
+
+    if repairable {
+        if let Some(source) = source {
+            replace_project_canonical_from_source(&source, canonical)?;
+        } else {
+            fs::create_dir_all(canonical)
+                .with_context(|| format!("failed to create project canonical store {canonical}"))?;
+        }
+    } else if let (Some(source), Some(local_store)) =
+        (source.as_ref(), target.aggregator_path.as_ref())
+    {
+        if store_has_only_symlink_skill_entries(local_store, source)?
+            && has_real_skill_dirs(canonical)?
+            && real_skill_dirs_signature(source)? != real_skill_dirs_signature(canonical)?
+        {
+            bail!(
+                "project canonical store {canonical} already contains real content that diverges from legacy project skills at {source}; reconcile manually before syncing"
+            );
+        }
+    }
+
+    let symlink_entries = symlink_skill_entries(canonical)?;
+    if !symlink_entries.is_empty() {
+        bail!(
+            "project canonical store {canonical} contains symlink skill entries ({}); repair legacy project skills before syncing",
+            sample_paths(&symlink_entries)
+        );
+    }
+
+    Ok(())
+}
+
+fn project_bootstrap_source(
+    target: &Target,
+    project_root: &Utf8Path,
+) -> Result<Option<Utf8PathBuf>> {
+    let legacy = project_root.join(".skills");
+    if target.canonical_rel.as_deref() != Some(".skills") && has_real_skill_dirs(&legacy)? {
+        return Ok(Some(legacy));
+    }
+
+    let Some(local_store) = &target.aggregator_path else {
+        return Ok(None);
+    };
+    if has_real_skill_dirs(local_store)? {
+        Ok(Some(local_store.clone()))
+    } else {
+        Ok(None)
+    }
+}
+
+fn project_canonical_is_bootstrap_repairable(
+    canonical: &Utf8Path,
+    source: Option<&Utf8PathBuf>,
+) -> Result<bool> {
+    let metadata = match fs::symlink_metadata(canonical) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+        Err(err) => return Err(err).with_context(|| format!("failed to inspect {canonical}")),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        bail!("project canonical store {canonical} exists but is not a directory");
+    }
+
+    let entries = read_dir_utf8(canonical)?;
+    if entries.is_empty() {
+        return Ok(source.is_some());
+    }
+
+    source
+        .map(|source| store_has_only_symlink_skill_entries(canonical, source))
+        .transpose()
+        .map(|value| value.unwrap_or(false))
+}
+
+fn replace_project_canonical_from_source(source: &Utf8Path, canonical: &Utf8Path) -> Result<()> {
+    if path_exists_no_follow(canonical)? {
+        remove_view_entry(canonical)
+            .with_context(|| format!("failed to remove repairable canonical store {canonical}"))?;
+    }
+    fs::create_dir_all(canonical)
+        .with_context(|| format!("failed to create project canonical store {canonical}"))?;
+
+    for skill in real_skill_dirs(source)? {
+        let name = skill
+            .file_name()
+            .context("source skill path has no final component")?;
+        copy_dir(&skill, &canonical.join(name))
+            .with_context(|| format!("failed to import project skill `{name}` from {source}"))?;
+    }
+
+    Ok(())
+}
+
+fn has_real_skill_dirs(root: &Utf8Path) -> Result<bool> {
+    Ok(!real_skill_dirs(root)?.is_empty())
+}
+
+fn real_skill_dirs_signature(root: &Utf8Path) -> Result<String> {
+    let mut hasher = BTreeMap::new();
+    for skill in real_skill_dirs(root)? {
+        let name = skill
+            .file_name()
+            .context("source skill path has no final component")?
+            .to_string();
+        hasher.insert(name, content_signature(&skill)?);
+    }
+    Ok(format!("{hasher:?}"))
+}
+
+fn real_skill_dirs(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut dirs = Vec::new();
+    for entry in fs::read_dir(root).with_context(|| format!("failed to read {root}"))? {
+        let entry = entry?;
+        let path = Utf8PathBuf::from_path_buf(entry.path())
+            .map_err(|p| anyhow::anyhow!("non-UTF-8 path in project store: {}", p.display()))?;
+        let metadata = fs::symlink_metadata(&path)
+            .with_context(|| format!("failed to inspect project store entry {path}"))?;
+        if metadata.file_type().is_dir()
+            && !metadata.file_type().is_symlink()
+            && path.join("SKILL.md").is_file()
+        {
+            dirs.push(path);
+        }
+    }
+    dirs.sort();
+    Ok(dirs)
+}
+
+fn symlink_skill_entries(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(root).with_context(|| format!("failed to read {root}"))? {
+        let entry = entry?;
+        let path = Utf8PathBuf::from_path_buf(entry.path())
+            .map_err(|p| anyhow::anyhow!("non-UTF-8 path in project store: {}", p.display()))?;
+        let metadata = fs::symlink_metadata(&path)
+            .with_context(|| format!("failed to inspect project store entry {path}"))?;
+        if metadata.file_type().is_symlink() {
+            entries.push(path);
+        }
+    }
+    entries.sort();
+    Ok(entries)
+}
+
+fn store_has_only_symlink_skill_entries(root: &Utf8Path, source: &Utf8Path) -> Result<bool> {
+    if !root.exists() {
+        return Ok(false);
+    }
+    let source_names = real_skill_dirs(source)?
+        .into_iter()
+        .filter_map(|path| path.file_name().map(ToString::to_string))
+        .collect::<BTreeSet<_>>();
+    if source_names.is_empty() {
+        return Ok(false);
+    }
+
+    let entries = read_dir_utf8(root)?;
+    if entries.is_empty() {
+        return Ok(false);
+    }
+    for entry in entries {
+        let metadata = fs::symlink_metadata(&entry)
+            .with_context(|| format!("failed to inspect project store entry {entry}"))?;
+        if !metadata.file_type().is_symlink() {
+            return Ok(false);
+        }
+        let name = entry
+            .file_name()
+            .context("project store entry has no final component")?;
+        if !source_names.contains(name) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+pub(crate) fn project_canonical_drift(target: &Target) -> Result<Vec<DriftEntry>> {
+    let mut drift = Vec::new();
+    if !target.canonical_path.exists() {
+        drift.push(DriftEntry {
+            skill: "canonical".to_string(),
+            kind: DriftKind::Missing,
+            expected: Some(target.canonical_path.clone()),
+            actual: None,
+            view_mtime_nanos: None,
+            canonical_mtime_nanos: None,
+            view_sha: None,
+            canonical_sha: None,
+            reconcile_outcome: None,
+        });
+        return Ok(drift);
+    }
+    for entry in symlink_skill_entries(&target.canonical_path)? {
+        drift.push(DriftEntry {
+            skill: format!(
+                "canonical/{}",
+                entry
+                    .file_name()
+                    .context("project canonical entry has no final component")?
+            ),
+            kind: DriftKind::WrongTarget,
+            expected: Some(target.canonical_path.clone()),
+            actual: Some(entry),
+            view_mtime_nanos: None,
+            canonical_mtime_nanos: None,
+            view_sha: None,
+            canonical_sha: None,
+            reconcile_outcome: None,
+        });
+    }
+    Ok(drift)
+}
+
+fn path_exists_no_follow(path: &Utf8Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) => Err(err).with_context(|| format!("failed to inspect {path}")),
+    }
+}
+
+fn read_dir_utf8(path: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(path).with_context(|| format!("failed to read directory {path}"))? {
+        let entry = entry?;
+        entries.push(
+            Utf8PathBuf::from_path_buf(entry.path())
+                .map_err(|path| anyhow::anyhow!("non-UTF-8 path: {}", path.display()))?,
+        );
+    }
+    entries.sort();
+    Ok(entries)
+}
+
+fn sample_paths(paths: &[Utf8PathBuf]) -> String {
+    const LIMIT: usize = 3;
+    let mut names = paths
+        .iter()
+        .take(LIMIT)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    if paths.len() > LIMIT {
+        names.push(format!("+{} more", paths.len() - LIMIT));
+    }
+    names.join(", ")
 }
 
 fn now_nanos() -> Result<u128> {
@@ -1117,7 +1453,7 @@ fn aggregator_drift_entry(
     }
     let (kind, actual) = aggregator_drift_kind_and_actual(path, strategy, status);
     Ok(Some(DriftEntry {
-        skill: "aggregator".to_string(),
+        skill: "working-copy".to_string(),
         kind,
         expected: Some(canonical.to_path_buf()),
         actual,
@@ -1151,7 +1487,7 @@ fn aggregator_file_delta(
         (LinkStrategy::Hardlink, _) => Some(path.to_path_buf()),
     };
     Ok(Some(FileDelta {
-        skill: "aggregator".to_string(),
+        skill: "working-copy".to_string(),
         kind,
         expected: Some(canonical.to_path_buf()),
         actual,

@@ -774,10 +774,10 @@ path = "{}"
         .assert()
         .success()
         .stderr(
-            predicate::str::contains("legacy '.skills' canonical detected")
+            predicate::str::contains("legacy '.skills' store detected")
                 .count(1)
                 .and(predicate::str::contains(
-                    "Set canonical_rel = \".skills\" to keep the old layout",
+                    "run `skillnet sync --scope demo` to import it",
                 )),
         );
 
