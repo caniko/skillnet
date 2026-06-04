@@ -209,33 +209,17 @@ Only use fields that the catalog schema already accepts: `path_prefix`,
 `status`, `tags`, `related_skills`, `collision_note`, and the existing
 `settings.large_skill_line_threshold`.
 
-## Activation Toggles
+## CLI-Only Workflows
 
-Home Manager activation now calls top-level `skillnet sync` instead of the old
-`view sync` plus `project sync` pair.
+Home Manager installs the binary, renders optional config files, and exports
+session variables. It does not run `skillnet sync`, `skillnet hook install`, or
+other `skillnet` commands during activation. After `home-manager switch`, run
+materialisation and hook workflows explicitly:
 
-The default activation mode is consumer-safe:
-
-```nix
-programs.skillnet.activation = {
-  promote = false;
-  failOnConflict = true;
-  allowDelete = true;
-};
+```sh
+skillnet sync
+skillnet hook install
 ```
-
-`promote = false` passes `--no-promote`, so a routine `home-manager switch`
-does not rewrite canonical content. Set `promote = true` only on the host that
-owns the canonical skill store and is allowed to pull view-side edits back
-into canonical.
-
-`failOnConflict = true` makes activation fail loudly when `skillnet sync`
-returns non-zero. Set it to `false` only for a transition period where you
-prefer Home Manager to complete while `skillnet doctor` reports the drift.
-
-`allowDelete = true` preserves the existing activation pruning behaviour. Set
-it to `false` on hosts where deleting stale view entries during activation is
-too aggressive.
 
 ## HM-Managed Config Caveat
 

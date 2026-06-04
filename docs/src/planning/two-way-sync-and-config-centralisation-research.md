@@ -139,12 +139,8 @@ The schema gap with the user's existing files:
 
 What the HM module does _not_ yet expose:
 
-- A toggle that flips `skillnet sync` from "fail on non-symlink view" to
-  "promote view → canonical, then symlink". The prior dossier names it
-  `programs.skillnet.activation.reconcile`
-  ([reconcile-pull-research.md:342-345](reconcile-pull-research.md#L342-L345));
-  the user's new ask makes that toggle meaningless if promotion becomes the
-  always-on default.
+- Superseded activation wiring for promotion/reconcile. The current module
+  contract keeps these workflows as explicit `skillnet` CLI invocations.
 - A first-class way to declare "this host owns the canonical store" vs "this
   host only consumes views" — relevant if a future shared-canonical setup
   emerges and you want non-owning hosts to never promote.
@@ -283,18 +279,11 @@ default.
     and accept the risk explicitly.
   - Surface a per-target log line in the sync summary saying _exactly which
     canonical was overwritten and from where_.
-- **HM activation now mutates canonical.** Today,
-  `home-manager switch` calls `skillnet view sync --all --allow-delete`
-  ([hm-module.nix:324-325](../../../nix/hm-module.nix#L324-L325)). If
-  promotion becomes default in `skillnet sync`, then on every HM switch a
-  view's stray real-directory entry would silently rewrite canonical. That is
-  too quiet for a hands-off activation flow. Mitigations:
-  - HM activation invokes `skillnet sync --no-promote` by default; opt-in
-    via `programs.skillnet.activation.promote = true|false` (default
-    `false`).
-  - This inverts the prior dossier's `programs.skillnet.activation.reconcile`
-    suggestion: opt-in is now needed to _enable_ the default CLI behaviour
-    during activation, not to enable a separate subcommand.
+- **Superseded: HM activation must not run skillnet workflows.** This dossier
+  originally recommended activation toggles for `skillnet sync`. Current policy
+  is stricter: Home Manager installs the binary and renders configuration only.
+  Users run `skillnet sync` and other mutating workflows explicitly through the
+  CLI after rebuilds.
 - **Config-file location of a mutating CLI vs. a read-only `/nix/store`.**
   `programs.skillnet.settings != null` writes the config into
   `/nix/store/...` (read-only). The mutating commands —
@@ -400,7 +389,7 @@ Same intent as the prior dossier but adjusted severities:
 
 - `NonSymlink` with `view newer mtime` → `Severity::Warn`, hint
   `"next 'skillnet sync --apply-promote' will pull view-side edits into
- canonical and re-link"`.
+canonical and re-link"`.
 - `NonSymlink` with `canonical newer mtime` or `Identical` → keep
   `Severity::Error`. These remain demolition candidates; promotion does not
   rescue them.
@@ -442,19 +431,14 @@ F1. **Translate the live files into a Nix expression.** Produce a
 the user-level HM configuration). Document this as the recommended adoption
 path in `docs/src/quickstart.md`.
 
-F2. **Add `programs.skillnet.activation.promote`** (default `false`). When
-`true`, HM activation runs `skillnet sync --apply-promote`. When `false` (the
-default), activation runs `skillnet sync --no-promote --allow-delete` so the
-read-only path stays loud-on-conflict but never mutates canonical from a
-nightly switch.
+F2. **Superseded: do not add activation sync toggles.** The current HM module
+contract is CLI-only. It must not run `skillnet sync` from activation; users
+choose `skillnet sync`, `skillnet sync --apply-promote`, or other mutating
+commands explicitly.
 
-F3. **Surface `programs.skillnet.activation.failOnConflict`** (default
-`true`). Today the activation script already uses `|| true` on the
-project-sync step
-([hm-module.nix:325](../../../nix/hm-module.nix#L325)), which masks failures.
-Tie this to the new default exit-code-on-conflict behaviour so users opt into
-either "loud activation that can wedge home-manager switch" or "quiet
-activation that needs `skillnet doctor` for visibility".
+F3. **Superseded: do not mask activation conflicts.** Because activation no
+longer invokes `skillnet`, sync conflicts belong to explicit CLI runs and should
+be handled by the CLI exit status and diagnostics.
 
 ### Phase G — Docs, tests, release
 
@@ -486,14 +470,14 @@ against a fixture host and `nix flake check` against the canix repo.
 Each of the six open questions is closed; the concrete specs in
 [Final Design](#final-design) below assume these answers.
 
-| #   | Decision                                                 | Choice                                                                                                                                 | Why                                                                                                                                 |
-| --- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --- | ----- |
-| 1   | Default behaviour of `skillnet sync` on non-symlink view | **Dry-run-on-conflict**: print the proposed promotion, do not mutate canonical, exit `2`. Mutation requires explicit `--apply-promote` | Idempotent reruns are safe; HM activation cannot silently rewrite canonical; mtime-spoof has no force-multiplier effect             |
-| 2   | Adoption policy for unknown view skills                  | Never adopt without `--adopt-new`. `Stale` semantics on view-only entries unchanged                                                    | Foreign content stays foreign; promotion path stays explicit                                                                        |
-| 3   | Migration command vs. manual `mv`                        | Ship `skillnet config migrate`                                                                                                         | Small, idempotent, handles the both-locations-present-and-different edge case the user will hit at least once                       |
-| 4   | HM activation default                                    | `programs.skillnet.activation.promote = false`, `programs.skillnet.activation.failOnConflict = true`                                   | Multi-host safe; mutation only on hosts that explicitly opt in; loud activation surfaces drift instead of masking it like today's ` |     | true` |
-| 5   | Per-target `--allow-dirty-destination`                   | Extend the existing global flag to gate every canonical write (mirror + per-project repo)                                              | Smallest surface; no concrete need yet for per-scope override                                                                       |
-| 6   | Legacy CWD config discovery sunset                       | Deprecation warning in `0.6.0`, drop in `0.7.0`                                                                                        | Two-release window matches the cadence of every other breaking change in this CHANGELOG                                             |
+| #   | Decision                                                 | Choice                                                                                                                                 | Why                                                                                                                     |
+| --- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 1   | Default behaviour of `skillnet sync` on non-symlink view | **Dry-run-on-conflict**: print the proposed promotion, do not mutate canonical, exit `2`. Mutation requires explicit `--apply-promote` | Idempotent reruns are safe; HM activation cannot silently rewrite canonical; mtime-spoof has no force-multiplier effect |
+| 2   | Adoption policy for unknown view skills                  | Never adopt without `--adopt-new`. `Stale` semantics on view-only entries unchanged                                                    | Foreign content stays foreign; promotion path stays explicit                                                            |
+| 3   | Migration command vs. manual `mv`                        | Ship `skillnet config migrate`                                                                                                         | Small, idempotent, handles the both-locations-present-and-different edge case the user will hit at least once           |
+| 4   | HM activation default                                    | Superseded by CLI-only module contract                                                                                                 | Rebuilds should not run skillnet workflows; mutation and conflict handling belong to explicit CLI commands              |
+| 5   | Per-target `--allow-dirty-destination`                   | Extend the existing global flag to gate every canonical write (mirror + per-project repo)                                              | Smallest surface; no concrete need yet for per-scope override                                                           |
+| 6   | Legacy CWD config discovery sunset                       | Deprecation warning in `0.6.0`, drop in `0.7.0`                                                                                        | Two-release window matches the cadence of every other breaking change in this CHANGELOG                                 |
 
 ## Final Design
 
@@ -667,66 +651,10 @@ This check fires only on commands that write the config. Read commands
 
 ### 8. HM module additions
 
-Three new options on `programs.skillnet`:
-
-```nix
-activation.promote = lib.mkOption {
-  type = lib.types.bool;
-  default = false;
-  description = ''
-    Whether `home-manager switch` runs `skillnet sync --apply-promote`
-    or `skillnet sync --no-promote`. Set to true only on the host that
-    owns the canonical skill store; consumer-only hosts must leave it
-    false to avoid silently mutating canonical from a routine switch.
-  '';
-};
-
-activation.failOnConflict = lib.mkOption {
-  type = lib.types.bool;
-  default = true;
-  description = ''
-    Whether a non-zero exit from `skillnet sync` during activation
-    fails the `home-manager switch`. Default true surfaces drift loudly;
-    set false to restore the pre-0.6.0 silent-on-conflict behaviour.
-  '';
-};
-
-activation.allowDelete = lib.mkOption {
-  type = lib.types.bool;
-  default = true;
-  description = ''
-    Whether activation passes --allow-delete. Existing default; broken
-    out so a consumer-only host can disable it without rewriting the
-    activation script.
-  '';
-};
-```
-
-The activation script ([hm-module.nix:311-327](../../../nix/hm-module.nix#L311-L327))
-is rewritten to derive its flags from those options:
-
-```nix
-home.activation.skillnet-views = lib.hm.dag.entryAfter ["writeBoundary" "skillnet-skills-root"] ''
-  if [ -z "''${SKILLNET_MIRROR_ROOT-}" ]; then
-    mirror=${lib.escapeShellArg (if cfg.mirrorRoot != null then cfg.mirrorRoot else "")}
-  else
-    mirror="$SKILLNET_MIRROR_ROOT"
-  fi
-  if [ -z "$mirror" ] || [ ! -d "$mirror/global" ]; then
-    echo "WARNING: skillnet: mirror not found at $mirror; skipping sync" >&2
-  else
-    $DRY_RUN_CMD ${cfg.package}/bin/skillnet sync \
-      ${lib.optionalString cfg.activation.promote "--apply-promote"} \
-      ${lib.optionalString (!cfg.activation.promote) "--no-promote"} \
-      ${lib.optionalString cfg.activation.allowDelete "--allow-delete"} \
-      ${lib.optionalString (!cfg.activation.failOnConflict) "|| true"}
-  fi
-'';
-```
-
-The `view sync` + `project sync` pair collapses to one `skillnet sync` call
-because the top-level command already chains both. The `|| true` is
-conditional, defaulting off.
+Superseded. The current Home Manager contract is CLI-only: install the package,
+render optional TOML files, and export session variables. Do not add activation
+entries that invoke `skillnet sync`, `skillnet hook install`, or other skillnet
+commands.
 
 No new option is added for the catalog or the migration command — those
 flow through the existing `programs.skillnet.settings` / `catalogSettings`
@@ -781,10 +709,10 @@ No code change needed. Document this in the new
 
 ### 12. Migration and release sequencing
 
-| Version | Ships                                                                                                                                                                                                                                                                                                       |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0.6.0` | All twelve sections above, including `skillnet config migrate`. Legacy cwd config discovery still works but prints a deprecation warning every invocation that falls through to rank 4. `programs.skillnet.activation.promote` defaults to `false` so HM hosts upgrading to `0.6.0` see no behaviour change |
-| `0.7.0` | Rank-4 legacy cwd discovery is removed. `skillnet config migrate` is kept (idempotent no-op once XDG is populated). Single CHANGELOG line plus a one-paragraph note in `docs/src/migration/centralised-config.md`                                                                                           |
+| Version | Ships                                                                                                                                                                                                                                                                                   |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0.6.0` | All twelve sections above, including `skillnet config migrate`. Legacy cwd config discovery still works but prints a deprecation warning every invocation that falls through to rank 4. The original HM activation-toggle recommendation is superseded by the CLI-only module contract. |
+| `0.7.0` | Rank-4 legacy cwd discovery is removed. `skillnet config migrate` is kept (idempotent no-op once XDG is populated). Single CHANGELOG line plus a one-paragraph note in `docs/src/migration/centralised-config.md`                                                                       |
 
 No `0.5.x` patch release. The migration command is small enough to ship
 inside the `0.6.0` cut and gives users a one-shot path that will not break.
@@ -810,10 +738,9 @@ group these into phases as it likes.
 - A new `tests/dirty_gate.rs` covers the per-target gate by initialising
   a project repo as a separate `git init` inside a tempdir and asserting
   promotion refuses without `--allow-dirty-destination`.
-- `nix/test-hm-module.nix` (existing harness) gains assertions that
-  `programs.skillnet.activation.promote = true|false` and
-  `failOnConflict = true|false` produce the correct activation script
-  flags. One snapshot test per combination.
+- `nix/test-hm-module.nix` (existing harness) asserts the module installs the
+  binary and renders configuration without placing `skillnet` command
+  invocations in the activation script.
 
 ### 14. Out of scope, deliberately
 

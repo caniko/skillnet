@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--scope all`.
 - `projects` and `all` are reserved selector tokens and can no longer be used
   as new project names.
+- The Home Manager module is now CLI-only: it installs the package, renders
+  optional config, and exports session variables without running `skillnet`
+  commands during activation. Activation-time sync options and declarative hook
+  installation options were removed; run `skillnet sync` and
+  `skillnet hook install` explicitly.
 
 ### Fixed
 

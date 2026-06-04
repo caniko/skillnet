@@ -225,11 +225,10 @@ None blocking. Two soft inputs deserve a decision before phase 1 starts:
   rules apply to canonical paths; reconcile-pull writes into canonical, so
   any rule status changes (e.g. `status = "active"` based on `path_prefix`)
   apply automatically post-pull. No catalog change is needed in this phase.
-- **HM module surface.** [nix/hm-module.nix](../../../nix/hm-module.nix)
-  drives the install on the host; if reconcile-pull becomes part of the HM
-  activation script (e.g., a default `sync` extended with `--reconcile`),
-  it must be opt-in to avoid silent canonical mutation on every
-  `home-manager switch`.
+- **Superseded: HM module surface.** [nix/hm-module.nix](../../../nix/hm-module.nix)
+  installs the CLI and renders configuration only. Reconcile, sync, and hook
+  workflows must stay explicit CLI commands rather than Home Manager activation
+  steps.
 
 ## Candidate Next Steps
 
@@ -290,6 +289,7 @@ Two-tier surface, no breaking changes:
 
 1. **New per-scope subcommand** `skillnet view reconcile` and
    `skillnet project reconcile` (parallel to `sync`/`status`/`diff`):
+
    ```
    skillnet view reconcile --all
        [--allow-delete] [--force-canonical] [--prefer view|canonical]
@@ -304,6 +304,7 @@ Two-tier surface, no breaking changes:
      rename it to `--force-canonical` here for clarity and accept the old
      name as a deprecated alias for one release.
    - `--adopt-new`: promote unknown view skills into canonical.
+
 2. **Top-level convenience** `skillnet sync --pull`: runs `view reconcile
 --all` then `project reconcile --all` then the existing
    `materialize_view`/`materialize_project` pass. Default of
@@ -340,10 +341,9 @@ mutation.
 - [CHANGELOG.md](../../../CHANGELOG.md): record the new commands and flag
   defaults under `[Unreleased]`; cut a `0.6.0` release because the new
   behaviour rewords the v0.5.0 advertised "no reconcile" stance.
-- [nix/hm-module.nix](../../../nix/hm-module.nix): expose an opt-in
-  `programs.skillnet.activation.reconcile = true|false` so users can wire
-  reconcile-pull into `home-manager switch` activation if desired. Default
-  must be `false`.
+- [nix/hm-module.nix](../../../nix/hm-module.nix): superseded. Do not add
+  activation wiring for reconcile-pull; users run mutating workflows through
+  the CLI explicitly.
 - [tests/](../../../tests/): add `tests/reconcile_pull.rs` covering each
   outcome class; extend `tests/cli.rs` to assert the new `--pull` flag is
   parsed; add a CLI default-shape test analogous to

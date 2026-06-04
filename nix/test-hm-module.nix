@@ -81,45 +81,6 @@
       urlFile = urlFile;
     };
   };
-  hooksSettingsFile = "${homeDirectory}/.claude/settings.json";
-  hooksConfig = mkHmConfig {
-    database.backend = "sqlite";
-    hooks = {
-      enable = true;
-      settingsFile = hooksSettingsFile;
-      events = ["PostToolUse"];
-      matchers = ["Skill"];
-    };
-  };
-  hooksDisabledMasterConfig = home-manager.lib.homeManagerConfiguration {
-    inherit pkgs;
-    modules = [
-      module
-      {
-        home.username = "skillnet-test";
-        home.homeDirectory = homeDirectory;
-        home.stateVersion = "24.11";
-
-        programs.skillnet = {
-          enable = false;
-          package = package;
-          hooks.enable = true;
-        };
-      }
-    ];
-  };
-  promoteConfig = mkHmConfig {
-    database.backend = "sqlite";
-    activation.promote = true;
-  };
-  quietConflictConfig = mkHmConfig {
-    database.backend = "sqlite";
-    activation.failOnConflict = false;
-  };
-  noDeleteConfig = mkHmConfig {
-    database.backend = "sqlite";
-    activation.allowDelete = false;
-  };
 in
   pkgs.runCommand "skillnet-hm-module-test"
   {
@@ -144,31 +105,16 @@ in
     export USER=skillnet-test
     export PATH="${package}/bin:$PATH"
 
-    grep -F 'Activating %s" "skillnet-data-dir"' ${sqliteConfig.activationPackage}/activate >/dev/null
-    grep -F 'mkdir -p ${dataDir}' ${sqliteConfig.activationPackage}/activate >/dev/null
-    grep -F 'Activating %s" "skillnet-skills-root"' ${sqliteConfig.activationPackage}/activate >/dev/null
-    grep -F 'Activating %s" "skillnet-views"' ${sqliteConfig.activationPackage}/activate >/dev/null
-    test "$(grep -F '${package}/bin/skillnet sync' ${sqliteConfig.activationPackage}/activate | wc -l)" = 1
-    grep -F '${package}/bin/skillnet sync \' ${sqliteConfig.activationPackage}/activate >/dev/null
-    grep -F -- '--no-promote \' ${sqliteConfig.activationPackage}/activate >/dev/null
-    grep -F -- '--allow-delete' ${sqliteConfig.activationPackage}/activate >/dev/null
-    ! grep -F -- '--apply-promote' ${sqliteConfig.activationPackage}/activate >/dev/null
-    ! grep -F '|| true' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F 'Activating %s" "skillnet-' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F '${package}/bin/skillnet' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F 'skillnet sync' ${sqliteConfig.activationPackage}/activate >/dev/null
     ! grep -F 'skillnet view sync' ${sqliteConfig.activationPackage}/activate >/dev/null
     ! grep -F 'skillnet project sync' ${sqliteConfig.activationPackage}/activate >/dev/null
-    grep -F 'skipping for now.' ${sqliteConfig.activationPackage}/activate >/dev/null
-    grep -F 'mirror not found at' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F 'skillnet hook install' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F 'mirror not found at' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F 'skipping for now.' ${sqliteConfig.activationPackage}/activate >/dev/null
     mkdir -p ${dataDir}
     test -d ${dataDir}
-
-    grep -F '${package}/bin/skillnet sync \' ${promoteConfig.activationPackage}/activate >/dev/null
-    grep -F -- '--apply-promote \' ${promoteConfig.activationPackage}/activate >/dev/null
-    ! grep -F -- '--no-promote' ${promoteConfig.activationPackage}/activate >/dev/null
-
-    grep -F -- '--allow-delete || true' ${quietConflictConfig.activationPackage}/activate >/dev/null
-    ! grep -F '|| true' ${sqliteConfig.activationPackage}/activate >/dev/null
-
-    ! grep -F -- '--allow-delete' ${noDeleteConfig.activationPackage}/activate >/dev/null
 
     test -x ${sqliteConfig.activationPackage}/home-path/bin/skillnet
     unset __HM_SESS_VARS_SOURCED
@@ -188,10 +134,9 @@ in
     unset AI_SKILLS_REPO
     unset SKILLNET_DATABASE_URL
 
-    ! grep -F 'Activating %s" "skillnet-data-dir"' ${postgresConfig.activationPackage}/activate >/dev/null
+    ! grep -F 'Activating %s" "skillnet-' ${postgresConfig.activationPackage}/activate >/dev/null
     ! grep -F 'mkdir -p ${dataDir}' ${postgresConfig.activationPackage}/activate >/dev/null
-    grep -F 'Activating %s" "skillnet-skills-root"' ${postgresConfig.activationPackage}/activate >/dev/null
-    grep -F 'skipping for now.' ${postgresConfig.activationPackage}/activate >/dev/null
+    ! grep -F 'skipping for now.' ${postgresConfig.activationPackage}/activate >/dev/null
     test -x ${postgresConfig.activationPackage}/home-path/bin/skillnet
     unset __HM_SESS_VARS_SOURCED
     . ${postgresConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
@@ -211,17 +156,9 @@ in
     grep -R -F 'SKILLNET_DATABASE_URL' ${urlFileConfig.activationPackage}/home-files >/dev/null
     grep -R -F '${urlFile}' ${urlFileConfig.activationPackage}/home-files >/dev/null
 
-    grep -F 'Activating %s" "skillnetInstallHook"' ${hooksConfig.activationPackage}/activate >/dev/null
-    grep -F '$DRY_RUN_CMD ${package}/bin/skillnet hook install' ${hooksConfig.activationPackage}/activate >/dev/null
-    grep -F -- '--settings ${hooksSettingsFile}' ${hooksConfig.activationPackage}/activate >/dev/null
-    grep -F -- '--events PostToolUse' ${hooksConfig.activationPackage}/activate >/dev/null
-    grep -F -- '--matchers Skill' ${hooksConfig.activationPackage}/activate >/dev/null
-    ! grep -F 'skillnet hook install' ${hooksDisabledMasterConfig.activationPackage}/activate >/dev/null
-
     rm -rf ${skillsRoot}
     DRY_RUN=1 ${declarativeConfig.activationPackage}/activate --driver-version 1 2>activation-stderr.log
-    grep -F 'skipping for now.' activation-stderr.log >/dev/null
-    grep -F 'mirror not found at ${skillsRoot}; skipping sync' activation-stderr.log >/dev/null
+    ! grep -F 'skillnet:' activation-stderr.log >/dev/null
 
     unset __HM_SESS_VARS_SOURCED
     . ${declarativeConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh

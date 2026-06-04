@@ -60,25 +60,16 @@ skillnet hook uninstall
 
 ## Home Manager
 
-The Home Manager module can run the same install command during activation:
+The Home Manager module installs the `skillnet` binary and can render database
+configuration, but it does not edit Claude Code settings during activation. Run
+the hook workflow explicitly after changing configuration:
 
-```nix
-programs.skillnet = {
-  enable = true;
-  hooks = {
-    enable = true;
-    events = [ "PostToolUse" ];
-    matchers = [ "Skill" ];
-    settingsFile = "${config.home.homeDirectory}/.claude/settings.json";
-  };
-};
+```sh
+skillnet hook install
+skillnet hook status
 ```
 
-The activation hook runs after `writeBoundary` and is prefixed with
-`$DRY_RUN_CMD`, so `home-manager switch --dry-run` does not mutate the settings
-file. Setting `programs.skillnet.hooks.enable = false` later does not
-auto-uninstall existing managed entries; run `skillnet hook uninstall`
-explicitly when you want removal.
+Run `skillnet hook uninstall` explicitly when you want to remove managed entries.
 
 ## Troubleshooting
 

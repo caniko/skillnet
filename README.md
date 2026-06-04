@@ -29,7 +29,7 @@ cargo install --path .
 `skillnet hook ingest`, storing rows in `skill_invocations`. Use
 `skillnet hook status` to confirm the managed hook entries are installed. See
 the mdBook chapter at [docs/src/hook-ingestion.md](docs/src/hook-ingestion.md)
-for Postgres, SQLite, and Home Manager setup.
+for Postgres, SQLite, and CLI setup.
 
 ### Nix Home Manager
 
@@ -66,9 +66,9 @@ default. When `catalogSettings` is declared, it renders
 declarative database options are folded into generated `skillnet.toml`, so a
 normal declarative Home Manager install does not depend on shell-specific env
 imports. Without `settings`, you can still drop your own TOMLs and point
-`programs.skillnet.configFile` at them. When SQLite is selected, the module also
-creates the runtime data directory and exports `skillnet_DATA_DIR` and
-`SKILLNET_DATA_DIR` for compatibility.
+`programs.skillnet.configFile` at them. When SQLite is selected, the module
+exports `skillnet_DATA_DIR` and `SKILLNET_DATA_DIR` for compatibility; the CLI
+creates runtime database directories when commands need them.
 
 If you also want the module to define where the `ai-skills` checkout lives,
 set `skillsRoot`. On atlas, that path is:
@@ -78,9 +78,8 @@ programs.skillnet.skillsRoot = "/data/nvme0/can/Projects/ai-skills";
 ```
 
 When configured, the module writes `skills_root` into `skillnet.toml`, exports
-`AI_SKILLS_REPO` for compatibility, and warns if the checkout directory is
-missing. `skillsRoot` points at the skills checkout and VCS working tree;
-`dataDir` remains skillnet's runtime database location.
+`AI_SKILLS_REPO` for compatibility. `skillsRoot` points at the skills checkout
+and VCS working tree; `dataDir` remains skillnet's runtime database location.
 
 Postgres is the default calibration backend and requires a connection URL.
 SQLite is also supported by selecting it explicitly:
@@ -104,24 +103,13 @@ The `database.url` value is written into the Nix store. For production secrets,
 prefer `database.urlFile`, which reads the Postgres URL from a file at shell
 initialization time.
 
-Claude Code hook ingestion can also be installed declaratively:
+Home Manager does not run `skillnet` commands during activation. After a rebuild
+or `home-manager switch`, run materialisation and hook workflows explicitly:
 
-```nix
-programs.skillnet = {
-  enable = true;
-  hooks = {
-    enable = true;
-    events = [ "PostToolUse" ];
-    matchers = [ "Skill" ];
-    settingsFile = "${config.home.homeDirectory}/.claude/settings.json";
-  };
-};
+```sh
+skillnet sync
+skillnet hook install
 ```
-
-When enabled, Home Manager runs `skillnet hook install` during activation after
-`writeBoundary`, so the change is idempotent and respects `home-manager switch
---dry-run`. Setting `hooks.enable = false` later leaves the settings file
-untouched; run `skillnet hook uninstall` explicitly to remove managed entries.
 
 Options:
 
@@ -147,13 +135,6 @@ Options:
   `skillnet.toml` and `skillnet.catalog.toml` from Nix.
 - `programs.skillnet.configFile` and `programs.skillnet.catalogConfigFile`
   point the CLI at user-managed TOML files.
-- `programs.skillnet.activation.promote`, `failOnConflict`, and `allowDelete`
-  control Home Manager's activation-time `skillnet sync` invocation. Promotion
-  is off by default for consumer-host safety.
-- `programs.skillnet.hooks.enable` installs skillnet-managed Claude Code hook
-  entries in `programs.skillnet.hooks.settingsFile`.
-- `programs.skillnet.hooks.events` and `programs.skillnet.hooks.matchers`
-  control the event/matcher pairs passed to `skillnet hook install`.
 - `programs.skillnet.package` overrides the package. If `pkgs.skillnet` is not
   available in your package set, use
   `inputs.skillnet.packages.${pkgs.system}.skillnet`.
