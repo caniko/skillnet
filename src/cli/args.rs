@@ -17,7 +17,7 @@ pub(super) struct Cli {
     #[arg(long, env = "SKILLNET_CONFIG", global = true)]
     pub(super) config: Option<Utf8PathBuf>,
 
-    /// Root directory containing the global/ and projects/ mirror directories.
+    /// Root directory containing the global skill mirror directory.
     #[arg(long, env = "SKILLNET_MIRROR_ROOT", global = true)]
     pub(super) mirror_root: Option<Utf8PathBuf>,
 
@@ -615,7 +615,7 @@ pub(super) enum ProjectCommand {
     Remove {
         /// Project name to remove.
         name: String,
-        /// Also delete projects/<name> from the mirror if it exists.
+        /// Also delete the project's canonical .skills directory if it exists.
         #[arg(long)]
         prune_mirror: bool,
     },

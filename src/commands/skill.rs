@@ -72,8 +72,8 @@ pub fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
 }
 
 pub fn new(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()> {
-    ctx.ensure_destination_clean()?;
     let target = ctx.target(&skill_path.scope)?;
+    ensure_canonical_clean(ctx, &target)?;
     let path = target.canonical_path.join(&skill_path.skill);
     if path.exists() {
         bail!("skill `{}` already exists at {path}", skill_path.skill);
@@ -93,8 +93,8 @@ pub fn new(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()>
 }
 
 pub fn delete(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()> {
-    ctx.ensure_destination_clean()?;
     let target = ctx.target(&skill_path.scope)?;
+    ensure_canonical_clean(ctx, &target)?;
     let path = target.canonical_path.join(&skill_path.skill);
     ensure_skill_exists(skill_path, &path)?;
     if ctx.dry_run {
@@ -115,8 +115,8 @@ pub fn rename(
     force: bool,
     view_sync: bool,
 ) -> Result<()> {
-    ctx.ensure_destination_clean()?;
     let target = ctx.target(&skill_path.scope)?;
+    ensure_canonical_clean(ctx, &target)?;
     let src = target.canonical_path.join(&skill_path.skill);
     let dest = target.canonical_path.join(new);
     ensure_skill_exists(skill_path, &src)?;
@@ -145,9 +145,10 @@ pub fn move_skill(
     force: bool,
     view_sync: bool,
 ) -> Result<()> {
-    ctx.ensure_destination_clean()?;
     let from = ctx.target(&from_path.scope)?;
     let to = ctx.target(to_scope)?;
+    ensure_canonical_clean(ctx, &from)?;
+    ensure_canonical_clean(ctx, &to)?;
     let src = from.canonical_path.join(&from_path.skill);
     let dest = to.canonical_path.join(as_name.unwrap_or(&from_path.skill));
     ensure_skill_exists(from_path, &src)?;
@@ -174,6 +175,10 @@ pub fn move_skill(
         }
     }
     Ok(())
+}
+
+fn ensure_canonical_clean(ctx: &Context, target: &crate::model::Target) -> Result<()> {
+    ctx.ensure_target_clean(&target.canonical_path)
 }
 
 fn sync_after_mutation(ctx: &Context, scope: &Scope, allow_delete: bool) -> Result<()> {

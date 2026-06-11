@@ -18,8 +18,9 @@ These fields are rejected when loading `skillnet.toml`:
 ## Replacement schema
 
 Global skills live in `global/` under `mirror_root` by default, or in
-`[global].canonical_path` when set. Configure every generated global view under
-`[global].views`:
+`[global].canonical_path` when set. The `ai-skills` repository uses
+`global_skills/` as its configured global canonical directory. Configure every
+generated global view under `[global].views`:
 
 ```toml
 [global]
@@ -29,25 +30,25 @@ views = [
 ]
 ```
 
-Project skills live under each project root. `canonical_rel` defaults to
-`.skills`; project views default to `.claude/skills` and `.agents/skills`:
+Project skills live under each project root at `.skills`. `canonical_rel`
+defaults to `.agents/skills` and names the generated working copy; project
+views default to `.claude/skills`:
 
 ```toml
 [[projects]]
 name = "demo"
 path = "/home/alice/Projects/demo"
-canonical_rel = ".skills"
+canonical_rel = ".agents/skills"
 views = [
   { rel = ".claude/skills", label = "claude" },
-  { rel = ".agents/skills", label = "agents" },
 ]
 ```
 
 ## Workflow changes
 
 - Use `skillnet view sync --all` to materialise global views.
-- Use `skillnet project sync --all` to materialise project views and project
-  aggregators.
+- Use `skillnet project sync --all` to materialise project working copies and
+  views from project `.skills` stores.
 - Use `skillnet skill new|delete|rename|move` to mutate canonical stores.
   These commands sync affected views by default.
 - `mirror_root/.skillnet/cache.toml` is obsolete. Delete it if present.

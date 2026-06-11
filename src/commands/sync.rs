@@ -88,9 +88,7 @@ fn run_with_promotion(
                 }
             }
             TargetScope::Project => {
-                if target.aggregator_path.is_some() {
-                    ctx.ensure_destination_clean()?;
-                }
+                ctx.ensure_target_clean(&target.canonical_path)?;
                 let summary = view::materialize_project_with_promotion(
                     &target,
                     PromotionOptions {

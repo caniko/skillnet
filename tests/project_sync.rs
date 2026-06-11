@@ -23,7 +23,7 @@ fn project_target(root: &Utf8Path, strategy: LinkStrategy) -> Target {
         name: "demo".into(),
         scope: TargetScope::Project,
         link_strategy: strategy,
-        canonical_path: root.join("mirror/projects/demo"),
+        canonical_path: project.join(".skills"),
         views: vec![ViewTarget {
             label: "claude".into(),
             path: project.join(".claude/skills"),
@@ -172,52 +172,34 @@ fn materialize_project_repairs_symlink_only_canonical_from_legacy_skills() {
     let tmp = tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
     let target = project_target(&root, LinkStrategy::Hardlink);
-    let project_root = target.project_root.as_ref().unwrap();
-    let legacy = project_root.join(".skills");
-
     for skill in ["alpha", "beta", "gamma"] {
-        write_skill(&legacy, skill);
         fs::create_dir_all(&target.canonical_path).unwrap();
         unix_fs::symlink(
-            format!("../../.skills/{skill}"),
+            format!("../../legacy-skills/{skill}"),
             target.canonical_path.join(skill),
         )
         .unwrap();
+        let legacy = target.project_root.as_ref().unwrap().join("legacy-skills");
+        write_skill(&legacy, skill);
         fs::create_dir_all(target.aggregator_path.as_ref().unwrap()).unwrap();
         unix_fs::symlink(
-            format!("../../.skills/{skill}"),
+            format!("../../legacy-skills/{skill}"),
             target.aggregator_path.as_ref().unwrap().join(skill),
         )
         .unwrap();
     }
 
-    let summary = materialize_project(&target).unwrap();
-
-    assert_eq!(summary.aggregator, Some(AggregatorStatus::Updated));
-    assert!(summary.aggregator_pending.is_empty());
-    assert_relative_project_views(&target);
-    assert!(legacy.join("alpha/SKILL.md").is_file());
-    assert!(!fs::symlink_metadata(target.canonical_path.join("alpha"))
-        .unwrap()
-        .file_type()
-        .is_symlink());
-    assert_same_inode(
-        &target.canonical_path.join("alpha/SKILL.md"),
-        &target
-            .aggregator_path
-            .as_ref()
-            .unwrap()
-            .join("alpha/SKILL.md"),
-    );
+    let err = materialize_project(&target).unwrap_err();
+    assert!(err.to_string().contains("contains symlink skill entries"));
 }
 
 #[test]
-fn materialize_project_refuses_divergent_real_canonical_during_legacy_repair() {
+fn materialize_project_does_not_import_from_legacy_skills() {
     let tmp = tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
     let target = project_target(&root, LinkStrategy::Hardlink);
     let project_root = target.project_root.as_ref().unwrap();
-    let legacy = project_root.join(".skills");
+    let legacy = project_root.join("legacy-skills");
 
     write_skill(&legacy, "alpha");
     fs::write(legacy.join("alpha/SKILL.md"), "legacy").unwrap();
@@ -230,11 +212,9 @@ fn materialize_project_refuses_divergent_real_canonical_during_legacy_repair() {
     )
     .unwrap();
 
-    let err = materialize_project(&target).unwrap_err();
+    let summary = materialize_project(&target).unwrap();
 
-    assert!(err
-        .to_string()
-        .contains("already contains real content that diverges"));
+    assert_eq!(summary.aggregator, Some(AggregatorStatus::Updated));
     assert_eq!(
         fs::read_to_string(target.canonical_path.join("alpha/SKILL.md")).unwrap(),
         "canonical"

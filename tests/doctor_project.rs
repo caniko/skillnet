@@ -11,7 +11,6 @@ struct Fixture {
 
 struct ProjectFixture {
     config: std::path::PathBuf,
-    project_root: std::path::PathBuf,
     canonical: std::path::PathBuf,
     aggregator: std::path::PathBuf,
 }
@@ -51,7 +50,7 @@ impl Fixture {
     fn project(&self, project_config: &str) -> ProjectFixture {
         fs::create_dir_all(self.path("mirror/global")).unwrap();
         let project = self.path("repos/demo");
-        let canonical = self.path("mirror/projects/demo");
+        let canonical = project.join(".skills");
         write_skill(&canonical, "alpha");
         write_skill(&canonical, "beta");
 
@@ -78,7 +77,6 @@ views = [{{ rel = ".claude/skills", label = "claude" }}]
 
         ProjectFixture {
             config,
-            project_root: project,
             canonical,
             aggregator,
         }
@@ -237,12 +235,11 @@ fn doctor_reports_legacy_skills_as_info_only() {
     let fixture = Fixture::new();
     let project = fixture.project("");
     hardlink_aggregator(&project.canonical, &project.aggregator);
-    write_skill(&project.project_root.join(".skills"), "alpha");
 
     fixture
         .command(&project.config)
         .arg("doctor")
         .assert()
         .success()
-        .stderr(predicate::str::contains("legacy project skill store"));
+        .stderr(predicate::str::contains("legacy project skill store").not());
 }

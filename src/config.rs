@@ -8,8 +8,8 @@ use crate::calibration::Db;
 use crate::link::{resolve_link_strategy, LinkStrategy};
 use crate::model::{Target, TargetScope, ViewTarget};
 
-pub const DEFAULT_PROJECT_CANONICAL_REL: &str = ".agents/skills";
-pub const LEGACY_PROJECT_CANONICAL_REL: &str = ".skills";
+pub const PROJECT_CANONICAL_REL: &str = ".skills";
+pub const DEFAULT_PROJECT_WORKING_COPY_REL: &str = ".agents/skills";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -101,7 +101,7 @@ pub struct ProjectConfig {
     /// Optional link strategy override for this project scope.
     #[serde(default)]
     pub link_strategy: Option<LinkStrategy>,
-    /// Relative path inside the project repo holding canonical skills.
+    /// Relative path inside the project repo holding the generated working copy.
     #[serde(default = "default_canonical_rel")]
     pub canonical_rel: String,
     /// In-repo views to materialise via `project sync`.
@@ -118,7 +118,7 @@ pub struct ProjectViewConfig {
 }
 
 fn default_canonical_rel() -> String {
-    DEFAULT_PROJECT_CANONICAL_REL.into()
+    DEFAULT_PROJECT_WORKING_COPY_REL.into()
 }
 
 fn default_project_views() -> Vec<ProjectViewConfig> {
@@ -290,13 +290,16 @@ impl Config {
 
     pub fn project_target_with_link_override(
         &self,
-        mirror_root: &Utf8Path,
+        _mirror_root: &Utf8Path,
         project: &ProjectConfig,
         cli_link_strategy: Option<LinkStrategy>,
     ) -> Result<Target> {
         let project_root = expand_path(&project.path)?;
         reject_project_view_canonical_overlap(project)?;
-        let canonical_path = mirror_root.join("projects").join(&project.name);
+        let canonical_path = project_root.join(PROJECT_CANONICAL_REL);
+        let aggregator_path = (normalize_project_rel(&project.canonical_rel)
+            != PROJECT_CANONICAL_REL)
+            .then(|| project_root.join(&project.canonical_rel));
 
         Ok(Target {
             name: project.name.clone(),
@@ -321,7 +324,7 @@ impl Config {
                     })
                 })
                 .collect::<Result<Vec<_>>>()?,
-            aggregator_path: Some(project_root.join(&project.canonical_rel)),
+            aggregator_path,
             project_root: Some(project_root),
             canonical_rel: Some(project.canonical_rel.clone()),
             origin: project.origin.clone(),
@@ -330,18 +333,12 @@ impl Config {
 }
 
 pub fn legacy_project_canonical_warning(target: &Target) -> Option<String> {
-    let project_root = target.project_root.as_ref()?;
-    if target.canonical_rel.as_deref() != Some(DEFAULT_PROJECT_CANONICAL_REL) {
-        return None;
-    }
-
-    let legacy_path = project_root.join(LEGACY_PROJECT_CANONICAL_REL);
-    if legacy_path.is_dir() && !target.canonical_path.exists() {
+    if !target.canonical_path.is_dir() {
         Some(format!(
-            "project {}: legacy '.skills' store detected and mirror canonical is missing; \
-run `skillnet sync --scope {}` to import it, or set canonical_rel = \".skills\" to use \
-'.skills' as the generated working-copy path. See docs/src/migration/agents-canonical.md.",
-            target.name, target.name
+            "project {}: canonical '.skills' store is missing at {}; create it or run `skillnet skill new {}/<name>`.",
+            target.name,
+            target.canonical_path,
+            target.name
         ))
     } else {
         None
@@ -349,12 +346,20 @@ run `skillnet sync --scope {}` to import it, or set canonical_rel = \".skills\" 
 }
 
 fn reject_project_view_canonical_overlap(project: &ProjectConfig) -> Result<()> {
-    let canonical = normalize_project_rel(&project.canonical_rel);
+    let canonical = normalize_project_rel(PROJECT_CANONICAL_REL);
+    let working_copy = normalize_project_rel(&project.canonical_rel);
     for view in &project.views {
         let view_rel = normalize_project_rel(&view.rel);
         if view_rel == canonical {
             bail!(
-                "project `{}` view rel `{}` equals canonical_rel `{}`; remove it from views or choose a different canonical_rel",
+                "project `{}` view rel `{}` equals canonical skill store `.skills`; remove it from views",
+                project.name,
+                view.rel
+            );
+        }
+        if view_rel == working_copy {
+            bail!(
+                "project `{}` view rel `{}` equals working-copy rel `{}`; remove it from views or choose a different canonical_rel",
                 project.name,
                 view.rel,
                 project.canonical_rel
@@ -674,7 +679,7 @@ path = "/tmp/demo"
             .unwrap();
         assert_eq!(
             target.canonical_path,
-            Utf8PathBuf::from("/tmp/mirror/projects/demo")
+            Utf8PathBuf::from("/tmp/demo/.skills")
         );
         assert_eq!(
             target.aggregator_path,
@@ -708,7 +713,9 @@ views = [{ rel = ".agents/skills", label = "agents" }]
             )
             .unwrap_err();
         let message = err.to_string();
-        assert!(message.contains("view rel `.agents/skills` equals canonical_rel `.agents/skills`"));
+        assert!(
+            message.contains("view rel `.agents/skills` equals working-copy rel `.agents/skills`")
+        );
     }
 
     #[test]
@@ -734,12 +741,9 @@ canonical_rel = ".skills"
             .unwrap();
         assert_eq!(
             target.canonical_path,
-            Utf8PathBuf::from("/tmp/mirror/projects/demo")
+            Utf8PathBuf::from("/tmp/demo/.skills")
         );
-        assert_eq!(
-            target.aggregator_path,
-            Some(Utf8PathBuf::from("/tmp/demo/.skills"))
-        );
+        assert_eq!(target.aggregator_path, None);
         assert_eq!(target.canonical_rel.as_deref(), Some(".skills"));
     }
 

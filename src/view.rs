@@ -977,33 +977,9 @@ struct AggregatorOutcome {
 }
 
 fn ensure_project_canonical(target: &Target) -> Result<()> {
-    let Some(project_root) = &target.project_root else {
-        return Ok(());
-    };
-
     let canonical = &target.canonical_path;
-    let source = project_bootstrap_source(target, project_root)?;
-    let repairable = project_canonical_is_bootstrap_repairable(canonical, source.as_ref())?;
-
-    if repairable {
-        if let Some(source) = source {
-            replace_project_canonical_from_source(&source, canonical)?;
-        } else {
-            fs::create_dir_all(canonical)
-                .with_context(|| format!("failed to create project canonical store {canonical}"))?;
-        }
-    } else if let (Some(source), Some(local_store)) =
-        (source.as_ref(), target.aggregator_path.as_ref())
-    {
-        if store_has_only_symlink_skill_entries(local_store, source)?
-            && has_real_skill_dirs(canonical)?
-            && real_skill_dirs_signature(source)? != real_skill_dirs_signature(canonical)?
-        {
-            bail!(
-                "project canonical store {canonical} already contains real content that diverges from legacy project skills at {source}; reconcile manually before syncing"
-            );
-        }
-    }
+    fs::create_dir_all(canonical)
+        .with_context(|| format!("failed to create project canonical store {canonical}"))?;
 
     let symlink_entries = symlink_skill_entries(canonical)?;
     if !symlink_entries.is_empty() {
@@ -1014,107 +990,6 @@ fn ensure_project_canonical(target: &Target) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn project_bootstrap_source(
-    target: &Target,
-    project_root: &Utf8Path,
-) -> Result<Option<Utf8PathBuf>> {
-    let legacy = project_root.join(".skills");
-    if target.canonical_rel.as_deref() != Some(".skills") && has_real_skill_dirs(&legacy)? {
-        return Ok(Some(legacy));
-    }
-
-    let Some(local_store) = &target.aggregator_path else {
-        return Ok(None);
-    };
-    if has_real_skill_dirs(local_store)? {
-        Ok(Some(local_store.clone()))
-    } else {
-        Ok(None)
-    }
-}
-
-fn project_canonical_is_bootstrap_repairable(
-    canonical: &Utf8Path,
-    source: Option<&Utf8PathBuf>,
-) -> Result<bool> {
-    let metadata = match fs::symlink_metadata(canonical) {
-        Ok(metadata) => metadata,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(true),
-        Err(err) => return Err(err).with_context(|| format!("failed to inspect {canonical}")),
-    };
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        bail!("project canonical store {canonical} exists but is not a directory");
-    }
-
-    let entries = read_dir_utf8(canonical)?;
-    if entries.is_empty() {
-        return Ok(source.is_some());
-    }
-
-    source
-        .map(|source| store_has_only_symlink_skill_entries(canonical, source))
-        .transpose()
-        .map(|value| value.unwrap_or(false))
-}
-
-fn replace_project_canonical_from_source(source: &Utf8Path, canonical: &Utf8Path) -> Result<()> {
-    if path_exists_no_follow(canonical)? {
-        remove_view_entry(canonical)
-            .with_context(|| format!("failed to remove repairable canonical store {canonical}"))?;
-    }
-    fs::create_dir_all(canonical)
-        .with_context(|| format!("failed to create project canonical store {canonical}"))?;
-
-    for skill in real_skill_dirs(source)? {
-        let name = skill
-            .file_name()
-            .context("source skill path has no final component")?;
-        copy_dir(&skill, &canonical.join(name))
-            .with_context(|| format!("failed to import project skill `{name}` from {source}"))?;
-    }
-
-    Ok(())
-}
-
-fn has_real_skill_dirs(root: &Utf8Path) -> Result<bool> {
-    Ok(!real_skill_dirs(root)?.is_empty())
-}
-
-fn real_skill_dirs_signature(root: &Utf8Path) -> Result<String> {
-    let mut hasher = BTreeMap::new();
-    for skill in real_skill_dirs(root)? {
-        let name = skill
-            .file_name()
-            .context("source skill path has no final component")?
-            .to_string();
-        hasher.insert(name, content_signature(&skill)?);
-    }
-    Ok(format!("{hasher:?}"))
-}
-
-fn real_skill_dirs(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
-    if !root.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut dirs = Vec::new();
-    for entry in fs::read_dir(root).with_context(|| format!("failed to read {root}"))? {
-        let entry = entry?;
-        let path = Utf8PathBuf::from_path_buf(entry.path())
-            .map_err(|p| anyhow::anyhow!("non-UTF-8 path in project store: {}", p.display()))?;
-        let metadata = fs::symlink_metadata(&path)
-            .with_context(|| format!("failed to inspect project store entry {path}"))?;
-        if metadata.file_type().is_dir()
-            && !metadata.file_type().is_symlink()
-            && path.join("SKILL.md").is_file()
-        {
-            dirs.push(path);
-        }
-    }
-    dirs.sort();
-    Ok(dirs)
 }
 
 fn symlink_skill_entries(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
@@ -1135,38 +1010,6 @@ fn symlink_skill_entries(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
     }
     entries.sort();
     Ok(entries)
-}
-
-fn store_has_only_symlink_skill_entries(root: &Utf8Path, source: &Utf8Path) -> Result<bool> {
-    if !root.exists() {
-        return Ok(false);
-    }
-    let source_names = real_skill_dirs(source)?
-        .into_iter()
-        .filter_map(|path| path.file_name().map(ToString::to_string))
-        .collect::<BTreeSet<_>>();
-    if source_names.is_empty() {
-        return Ok(false);
-    }
-
-    let entries = read_dir_utf8(root)?;
-    if entries.is_empty() {
-        return Ok(false);
-    }
-    for entry in entries {
-        let metadata = fs::symlink_metadata(&entry)
-            .with_context(|| format!("failed to inspect project store entry {entry}"))?;
-        if !metadata.file_type().is_symlink() {
-            return Ok(false);
-        }
-        let name = entry
-            .file_name()
-            .context("project store entry has no final component")?;
-        if !source_names.contains(name) {
-            return Ok(false);
-        }
-    }
-    Ok(true)
 }
 
 pub(crate) fn project_canonical_drift(target: &Target) -> Result<Vec<DriftEntry>> {
@@ -1204,27 +1047,6 @@ pub(crate) fn project_canonical_drift(target: &Target) -> Result<Vec<DriftEntry>
         });
     }
     Ok(drift)
-}
-
-fn path_exists_no_follow(path: &Utf8Path) -> Result<bool> {
-    match fs::symlink_metadata(path) {
-        Ok(_) => Ok(true),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(err) => Err(err).with_context(|| format!("failed to inspect {path}")),
-    }
-}
-
-fn read_dir_utf8(path: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
-    let mut entries = Vec::new();
-    for entry in fs::read_dir(path).with_context(|| format!("failed to read directory {path}"))? {
-        let entry = entry?;
-        entries.push(
-            Utf8PathBuf::from_path_buf(entry.path())
-                .map_err(|path| anyhow::anyhow!("non-UTF-8 path: {}", path.display()))?,
-        );
-    }
-    entries.sort();
-    Ok(entries)
 }
 
 fn sample_paths(paths: &[Utf8PathBuf]) -> String {

@@ -9,15 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Project canonical stores now live under `<mirror_root>/projects/<name>`,
-  giving the `ai-skills` checkout real committable files. Project-local
-  working copies default to `<project>/.agents/skills` and are hardlinked from
-  canonical; `<project>/.claude/skills` remains the default per-skill symlink
-  view into `.agents/skills`.
-- Project sync can repair the legacy symlink-only state by importing real skill
-  directories from `.skills` into `<mirror_root>/projects/<name>`, while leaving
-  `.skills` as a backup. Divergent real mirror content is refused for manual
-  reconciliation.
+- Project canonical stores now live in each configured project repository at
+  `<project>/.skills`; project-local `.agents/skills` remains the default
+  generated working copy and `<project>/.claude/skills` remains the default
+  symlink view.
+- Project sync no longer imports project skills into
+  `<mirror_root>/projects/<name>` or writes project index files there; catalog
+  discovery reads configured project `.skills` stores directly.
 - Link strategy is configurable through top-level `link_strategy`, per-project
   `link_strategy`, and the `--link symlink|hardlink` flag on materialisation
   commands. Defaults are symlink for global scopes and hardlink for project

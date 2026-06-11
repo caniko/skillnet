@@ -66,12 +66,12 @@ pub fn project_remove(ctx: &Context, name: &str, prune_mirror: bool) -> Result<(
     let project = ctx
         .project(name)
         .with_context(|| format!("unknown project `{name}`"))?;
-    let mirror_path = ctx.mirror_root.join("projects").join(&project.name);
+    let target = ctx.config.project_target(&ctx.mirror_root, project)?;
 
     if ctx.dry_run {
         println!("remove project {name}");
         if prune_mirror {
-            println!("delete mirror {mirror_path}");
+            println!("delete project canonical {}", target.canonical_path);
         }
         return Ok(());
     }
@@ -80,8 +80,8 @@ pub fn project_remove(ctx: &Context, name: &str, prune_mirror: bool) -> Result<(
     remove_project_from_doc(&mut doc, name)?;
     write_config_doc(&ctx.config_path, &doc)?;
 
-    if prune_mirror && mirror_path.exists() {
-        fs::remove_dir_all(&mirror_path)?;
+    if prune_mirror && target.canonical_path.exists() {
+        fs::remove_dir_all(&target.canonical_path)?;
     }
 
     println!("removed project {name}");
@@ -121,9 +121,7 @@ pub fn project_sync(
             }
             continue;
         }
-        if target.aggregator_path.is_some() {
-            ctx.ensure_destination_clean()?;
-        }
+        ctx.ensure_target_clean(&target.canonical_path)?;
 
         let summary = materialize_project_with_options(
             &target,

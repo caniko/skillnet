@@ -13,9 +13,7 @@ use crate::commands::Context;
 use config::CatalogConfig;
 use discover::load_entries;
 use entry::SkillEntry;
-use render::{
-    render_catalog, render_conflicts, render_routing, write_generated_doc, write_project_indexes,
-};
+use render::{render_catalog, render_conflicts, render_routing, write_generated_doc};
 use validate::validate_entries;
 
 pub(crate) use frontmatter::parse_frontmatter;
@@ -41,7 +39,6 @@ pub fn generate(ctx: &Context) -> Result<()> {
         &ctx.mirror_root.join("SKILL_CONFLICTS.md"),
         &render_conflicts(&entries),
     )?;
-    write_project_indexes(ctx, &entries)?;
     println!("generated catalog for {} skills", entries.len());
     Ok(())
 }

@@ -256,7 +256,6 @@ fn check_project(target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
         )?;
     }
     check_project_aggregator(target, issues)?;
-    check_legacy_project_store(target, project_root, issues)?;
     Ok(())
 }
 
@@ -508,26 +507,6 @@ fn check_project_hardlink_aggregator(
             Severity::Error,
             format!("project working-copy path {path} is not a faithful copy (extra/missing entries)"),
         ),
-    }
-    Ok(())
-}
-
-fn check_legacy_project_store(
-    target: &Target,
-    project_root: &Utf8Path,
-    issues: &mut Vec<Issue>,
-) -> Result<()> {
-    if target.canonical_rel.as_deref() == Some(".skills") {
-        return Ok(());
-    }
-    let legacy = project_root.join(".skills");
-    if legacy.is_dir() {
-        issue(
-            issues,
-            target,
-            Severity::Info,
-            format!("legacy project skill store {legacy} remains as a backup"),
-        );
     }
     Ok(())
 }

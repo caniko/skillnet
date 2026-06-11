@@ -1,12 +1,12 @@
-# Agents Canonical Project Layout
+# Project `.skills` Canonical Layout
 
-Skillnet stores project canonical skills in the mirror checkout:
+Skillnet stores project canonical skills in each project repository:
 
 ```text
-<mirror_root>/projects/<name>
+<project>/.skills/<skill-name>
 ```
 
-The default project-local working copy is hardlinked from canonical:
+The default generated working copy is hardlinked from canonical:
 
 ```text
 <project>/.agents/skills
@@ -19,57 +19,25 @@ copy:
 <project>/.claude/skills
 ```
 
-`canonical_rel` still controls the project-local working-copy path and defaults
-to `.agents/skills`. Project sync can bootstrap the mirror canonical from
-legacy project-local real skill directories, then refresh `.agents/skills` as a
-hardlinked copy and `.claude/skills` as relative symlinks.
+`canonical_rel` is retained as the configured working-copy path and defaults to
+`.agents/skills`. Do not set project views to `.skills` or to the working-copy
+path; views must be separate generated symlink directories.
 
-## Keeping `.skills`
+## Validation
 
-If a project should keep the generated working copy at `.skills`, make that
-explicit:
-
-```toml
-[[projects]]
-name = "demo"
-path = "/path/to/demo"
-canonical_rel = ".skills"
-```
-
-Then validate without mutating:
+After changing project skills or materialising views, validate with:
 
 ```sh
-skillnet status --scope demo
+skillnet project status --all
 skillnet doctor
 ```
 
-## Migrating
+Expected shape:
 
-Skillnet preserves legacy `.skills` as a backup. To migrate deliberately, run
-sync and then inspect both repositories:
+- `<project>/.skills` contains real skill directories and no symlink skill entries.
+- `<project>/.agents/skills` is generated from `.skills`.
+- `<project>/.claude/skills` contains relative symlinks into `.agents/skills`.
 
-```sh
-git status --short
-skillnet sync --scope demo
-skillnet doctor
-git status --short
-```
-
-If `<mirror_root>/projects/<name>` is missing, empty, or contains only copied
-symlinks that match legacy `.skills` entries, sync imports real skill
-directories from `.skills`. If the mirror already contains divergent real
-content while the project is still in the old symlink-only shape, sync stops
-and requires manual reconciliation.
-
-After sync:
-
-- `<mirror_root>/projects/<name>` should contain real skill directories;
-- `<project>/.agents/skills` should be hardlinked to the mirror canonical;
-- `<project>/.claude/skills` should contain relative symlinks into
-  `.agents/skills`;
-- `<project>/.skills` may remain as an informational backup until removed
-  deliberately.
-
-If the project checkout and mirror checkout are on different filesystems,
-hardlinking fails instead of silently copying. Move one checkout or choose
+If the canonical store and working copy are on different filesystems,
+hardlinking fails instead of silently copying. Move one path or choose
 `link_strategy = "symlink"` for that project.

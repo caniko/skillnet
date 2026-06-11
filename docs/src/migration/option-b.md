@@ -37,15 +37,16 @@ views = [
 ```
 
 `origin` is optional and is used only by `skillnet project clone --all`.
-`canonical_rel` defaults to `.agents/skills`; project views default to
-`.claude/skills`. Projects keeping the older `.skills` canonical layout should
-set `canonical_rel = ".skills"` explicitly.
+Project canonical skills live at `.skills`. `canonical_rel` defaults to
+`.agents/skills` and names the generated project-local working copy. Project
+views default to `.claude/skills`.
 
 ## Layout
 
-- Global canonical store: `<mirror_root>/global/`
+- Global canonical store: `<mirror_root>/global/` by default, or the configured
+  `[global].canonical_path` such as `ai-skills/global_skills/`
 - Global views: configured `[global].views[*].path`
-- Project canonical store: `<mirror_root>/projects/<project-name>/`
+- Project canonical store: `<project>/.skills/`
 - Project working copy: `<project>/<canonical_rel>/`
 - Project committed views: `<project>/<view.rel>/`
 
@@ -67,9 +68,9 @@ skillnet doctor
 
 `project clone --all` skips existing project paths, warns for projects without
 `origin`, clones missing projects with configured origins, then runs
-`skillnet project sync --all` to materialise mirror canonicals, project
-working copies, and in-repo views. Project working copies default to hardlinked
-directory twins of `projects/<name>/`.
+`skillnet project sync --all` to materialise project working copies and in-repo
+views from each project's `.skills` store. Project working copies default to
+hardlinked directory twins of `.skills`.
 
 By default, HTTPS origins are refused. Use `--ssh-strict=false` only when an
 HTTPS clone is intentional.

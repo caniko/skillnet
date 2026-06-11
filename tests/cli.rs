@@ -463,22 +463,10 @@ impl SyncFixture {
 
         write_skill(&fixture.path("global"), "alpha", "global alpha");
         write_skill(&fixture.path("global"), "beta", "global beta");
-        write_skill(
-            &first_project.join(".agents/skills"),
-            "alpha",
-            "first alpha",
-        );
-        write_skill(&first_project.join(".agents/skills"), "beta", "first beta");
-        write_skill(
-            &second_project.join(".agents/skills"),
-            "alpha",
-            "second alpha",
-        );
-        write_skill(
-            &second_project.join(".agents/skills"),
-            "beta",
-            "second beta",
-        );
+        write_skill(&first_project.join(".skills"), "alpha", "first alpha");
+        write_skill(&first_project.join(".skills"), "beta", "first beta");
+        write_skill(&second_project.join(".skills"), "alpha", "second alpha");
+        write_skill(&second_project.join(".skills"), "beta", "second beta");
 
         init_git_repo(&first_project);
         commit_all(&first_project, "initial first project");
@@ -533,7 +521,11 @@ path = "{}"
     }
 
     fn aggregator(&self, project: &str) -> std::path::PathBuf {
-        self.fixture.path(&format!("projects/{project}"))
+        match project {
+            "first" => self.first_project.join(".agents/skills"),
+            "second" => self.second_project.join(".agents/skills"),
+            _ => self.fixture.path(&format!("work/{project}/.agents/skills")),
+        }
     }
 }
 
@@ -752,7 +744,7 @@ fn status_accepts_scope_projects_and_all_selectors() {
 }
 
 #[test]
-fn status_warns_once_for_legacy_default_project_layout() {
+fn status_accepts_project_skills_as_canonical() {
     let fixture = Fixture::new();
     let project = fixture.path("work/demo");
     write_skill(&project.join(".skills"), "alpha", "legacy alpha");
@@ -773,13 +765,7 @@ path = "{}"
         .args(["status", "--scope", "demo"])
         .assert()
         .success()
-        .stderr(
-            predicate::str::contains("legacy '.skills' store detected")
-                .count(1)
-                .and(predicate::str::contains(
-                    "run `skillnet sync --scope demo` to import it",
-                )),
-        );
+        .stderr(predicate::str::contains("legacy '.skills' store detected").not());
 
     assert!(project.join(".skills/alpha/SKILL.md").is_file());
     assert!(!project.join(".agents/skills").exists());
@@ -850,7 +836,7 @@ fn sync_forwards_allow_delete_and_force() {
         FileTime::from_unix_time(1_700_000_000, 0),
     );
     set_skill_file_times(
-        &sync.first_project.join(".agents/skills"),
+        &sync.first_project.join(".skills"),
         "alpha",
         FileTime::from_unix_time(1_700_003_600, 0),
     );

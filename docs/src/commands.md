@@ -84,7 +84,7 @@ Example:
 ```sh
 skillnet sync
 # global:claude  /home/alice/.claude/skills (+0 ~0 =1 -0)
-# would promote /home/alice/.claude/skills/rust-project-flake -> /home/alice/skills/global/rust-project-flake (view_mtime=..., canonical_mtime=...)
+# would promote /home/alice/.claude/skills/rust-project-flake -> /home/alice/skills/global_skills/rust-project-flake (view_mtime=..., canonical_mtime=...)
 # exits 2
 
 skillnet sync --apply-promote
@@ -103,9 +103,9 @@ centralised XDG config migration and Home Manager pattern, see
 canonical global store. It accepts `--link symlink|hardlink` for parity with
 the materialisation interface, but global views default to generated symlinks.
 
-`skillnet project sync --all` materialises project canonical stores under
-`mirror_root/projects/`, project-local working copies at each project's
-`canonical_rel` (default `.agents/skills`), and configured project views.
+`skillnet project sync --all` materialises project-local working copies at
+each project's `canonical_rel` (default `.agents/skills`) from the canonical
+`<project>/.skills` store, then materialises configured project views.
 Project views such as `.claude/skills` remain per-skill relative symlinks into
 the project working copy. Project working copies default to hardlinked
 directory twins of the canonical store. Use `--link symlink` or
@@ -169,7 +169,7 @@ decisions can be inspected without mutating the filesystem.
 `skillnet doctor` checks the Option B canonical/view/working-copy invariants:
 
 - global canonical store existence and global view symlinks;
-- mirror project canonical stores, project working copies, and committed
+- project `.skills` canonical stores, project working copies, and committed
   in-repo view symlinks;
 - orphan view entries that do not correspond to canonical skill names;
 - broken or unexpected symlink targets.
@@ -182,12 +182,11 @@ the same comparator used by `skillnet sync`: `Identical`, `ViewNewer`,
 
 For project working copies, doctor follows the configured link strategy.
 Symlink strategy checks the configured working-copy path points at
-`mirror_root/projects/<name>`. Hardlink strategy verifies the project-local
+`<project>/.skills`. Hardlink strategy verifies the project-local
 working-copy directory's regular files are hardlinked twins of canonical files.
 Missing working copies, symlink working copies under hardlink strategy, foreign
 trees, and diverged files are errors. Severed-but-identical files are warnings
 because `skillnet project sync` can re-link them without discarding content.
-Legacy `.skills` directories are reported as informational backups.
 
 ## Config File Location
 

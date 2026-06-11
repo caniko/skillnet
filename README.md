@@ -1,15 +1,20 @@
 # skillnet
 
+<!-- simit:badges:start -->
+
+[![CI](https://img.shields.io/badge/CI-managed-2088ff)](.forgejo/workflows/ci.yaml) [![Nix](https://img.shields.io/badge/Nix-managed-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs) [![crates.io](https://img.shields.io/badge/crates.io-ready-f46623)](https://crates.io/crates/skillnet)
+
+<!-- simit:badges:end -->
+
 `skillnet` is a CLI for managing canonical AI skill stores, materialising derived agent views, and recording calibration data for `multi-phase-plan`.
 
 The supported interface in `0.6.0` is the `skillnet` binary. This crate does not commit to a stable embeddable Rust API yet.
 
 For project scopes, the canonical store is
-`<mirror_root>/projects/<name>`. The default project-local working copy is
+`<project>/.skills`. The default project-local working copy is
 `<project>/.agents/skills`, hardlinked from canonical, and the default Claude
 view is `<project>/.claude/skills` as per-skill relative symlinks into
-`.agents/skills`. Legacy `.skills` migration steps are documented in
-`docs/src/migration/agents-canonical.md`.
+`.agents/skills`.
 
 ## Install
 
@@ -241,7 +246,7 @@ cargo test-pg
 `skillnet` keeps canonical skill stores separate from generated agent views:
 
 - `global/` stores the canonical global skills by default.
-- Project canonical stores live under `<mirror_root>/projects/<name>`.
+- Project canonical stores live in each project repository at `<project>/.skills`.
 - Project-local working copies live at each project's `canonical_rel`,
   defaulting to `.agents/skills`, and are materialised from canonical.
 - Global and project views such as `.claude/skills` are generated symlink
@@ -252,8 +257,8 @@ cargo test-pg
   `link_strategy`, or pass `--link symlink|hardlink` to materialisation
   commands to override a run.
 
-Hardlink project working copies require the project checkout and mirror checkout to live
-on the same filesystem. Cross-device hardlink failures are reported as errors;
+Hardlink project working copies require `.skills` and the working-copy path to
+live on the same filesystem. Cross-device hardlink failures are reported as errors;
 skillnet does not silently fall back to copying or symlinking. If a Git pull or
 editor rewrite severs a hardlink but leaves matching content, `skillnet sync`
 or `skillnet project sync` re-links it. Project working copies are generated

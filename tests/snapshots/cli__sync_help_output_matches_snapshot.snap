@@ -15,7 +15,7 @@ Options:
       --all
           Sync every configured scope. Alias for `--scope all`
       --mirror-root <MIRROR_ROOT>
-          Root directory containing the global/ and projects/ mirror directories [env: SKILLNET_MIRROR_ROOT=]
+          Root directory containing the global skill mirror directory [env: SKILLNET_MIRROR_ROOT=]
       --apply-promote
           Promote view-side edits back into canonical skills
       --catalog-config <CATALOG_CONFIG>
