@@ -24,6 +24,11 @@
       url = "git+https://github.com/RustSec/advisory-db.git?ref=main";
       flake = false;
     };
+    plinth = {
+      url = "git+https://codeberg.org/caniko/plinth.git";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
   };
 
   outputs = {
@@ -31,6 +36,7 @@
     home-manager,
     nixpkgs,
     rs-harbor,
+    plinth,
     flake-utils,
     rust-overlay,
     treefmt-nix,
@@ -123,6 +129,12 @@
           cp -r docs/book $out
         '';
       };
+      website = plinth.lib.${system}.mkProjectSite {
+        pname = "skillnet-website";
+        domain = "skillnet.tartanoglu.com";
+        configPath = ./website/plinth-project.toml;
+        docsPackage = docs;
+      };
 
       hmModuleTest = import ./nix/test-hm-module.nix {
         inherit home-manager package pkgs;
@@ -133,7 +145,12 @@
         default = package;
         skillnet = package;
         docs = docs;
-        site = docs;
+        website = website;
+        site = website;
+      };
+
+      apps.deploy-pages = plinth.lib.${system}.mkDeployPagesApp {
+        domain = "skillnet.tartanoglu.com";
       };
 
       formatter = treefmtEval.config.build.wrapper;
