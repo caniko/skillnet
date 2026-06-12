@@ -200,6 +200,7 @@ mod tests {
             skills_root: None,
             mirror_root: None,
             database: DatabaseConfig::default(),
+            subscriptions: Default::default(),
             link_strategy: None,
             projects: project_names
                 .iter()

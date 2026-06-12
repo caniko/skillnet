@@ -2441,6 +2441,72 @@ status = "active"
     assert!(fixture.path("projects/demo/INDEX.md").is_file());
 }
 
+#[test]
+fn catalog_generate_dry_run_does_not_write_generated_docs() {
+    let fixture = Fixture::new();
+    let config = fixture.write_config(minimal_config());
+    let catalog_config = fixture.write_catalog_config(
+        r#"
+[[rules]]
+path_prefix = "global/"
+scope = "global"
+category = "agent-tools"
+status = "active"
+"#,
+    );
+    write_skill(
+        &fixture.path("global"),
+        "alpha",
+        "---\nname: alpha\ndescription: Alpha skill\n---\n",
+    );
+
+    fixture
+        .command_with_catalog(&config, &catalog_config)
+        .args(["--dry-run", "catalog", "generate"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("generated catalog for 1 skills"));
+
+    assert!(!fixture.path("CATALOG.md").exists());
+    assert!(!fixture.path("ROUTING.md").exists());
+    assert!(!fixture.path("SKILL_CONFLICTS.md").exists());
+}
+
+#[test]
+fn catalog_lint_uses_configured_global_canonical_path() {
+    let fixture = Fixture::new();
+    let canonical = fixture.path("canonical-global");
+    let config = fixture.write_config(format!(
+        r#"
+[global]
+canonical_path = "{}"
+views = []
+"#,
+        canonical.display()
+    ));
+    let catalog_config = fixture.write_catalog_config(
+        r#"
+[[rules]]
+path_prefix = "global/"
+scope = "global"
+category = "agent-tools"
+status = "active"
+"#,
+    );
+    write_skill(
+        &canonical,
+        "alpha",
+        "---\nname: alpha\ndescription: Alpha skill\n---\n",
+    );
+
+    fixture
+        .command_with_catalog(&config, &catalog_config)
+        .args(["catalog", "lint"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("catalog lint passed for 1 skills"));
+}
+
 // removed by P4: pre-Option-B reconcile CLI coverage
 #[ignore = "removed by P4: pre-Option-B reconcile CLI coverage"]
 #[test]

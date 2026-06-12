@@ -13,7 +13,9 @@ use crate::commands::Context;
 use config::CatalogConfig;
 use discover::load_entries;
 use entry::SkillEntry;
-use render::{render_catalog, render_conflicts, render_routing, write_generated_doc};
+use render::{
+    normalize_generated_doc, render_catalog, render_conflicts, render_routing, write_generated_doc,
+};
 use validate::validate_entries;
 
 pub(crate) use frontmatter::parse_frontmatter;
@@ -27,18 +29,15 @@ pub fn generate(ctx: &Context) -> Result<()> {
         bail!("catalog metadata is invalid:\n{}", lint_errors.join("\n"));
     }
 
-    write_generated_doc(
-        &ctx.mirror_root.join("CATALOG.md"),
-        &render_catalog(&entries)?,
-    )?;
-    write_generated_doc(
-        &ctx.mirror_root.join("ROUTING.md"),
-        &render_routing(&entries)?,
-    )?;
-    write_generated_doc(
-        &ctx.mirror_root.join("SKILL_CONFLICTS.md"),
-        &render_conflicts(&entries),
-    )?;
+    let catalog = normalize_generated_doc(&render_catalog(&entries)?);
+    let routing = normalize_generated_doc(&render_routing(&entries)?);
+    let conflicts = normalize_generated_doc(&render_conflicts(&entries));
+
+    if !ctx.dry_run {
+        write_generated_doc(&ctx.mirror_root.join("CATALOG.md"), &catalog)?;
+        write_generated_doc(&ctx.mirror_root.join("ROUTING.md"), &routing)?;
+        write_generated_doc(&ctx.mirror_root.join("SKILL_CONFLICTS.md"), &conflicts)?;
+    }
     println!("generated catalog for {} skills", entries.len());
     Ok(())
 }

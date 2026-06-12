@@ -108,6 +108,11 @@ pub(super) enum Command {
         #[command(subcommand)]
         command: ProjectCommand,
     },
+    /// Sync subscribed skill repositories into local skill directories.
+    Subscription {
+        #[command(subcommand)]
+        command: SubscriptionCommand,
+    },
     /// List, inspect, and edit mirrored skill directories.
     Skill {
         #[command(subcommand)]
@@ -669,6 +674,20 @@ pub(super) enum ProjectCommand {
         /// Refuse HTTP(S) origins. Use --ssh-strict=false to allow them.
         #[arg(long, default_value_t = true, num_args = 0..=1, default_missing_value = "true")]
         ssh_strict: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum SubscriptionCommand {
+    /// Sync configured subscriptions into their target skill directories.
+    Sync {
+        /// Subscription name to sync. May be repeated.
+        #[arg(value_name = "NAME")]
+        name: Vec<String>,
+        /// Sync every configured subscription.
+        #[arg(long)]
+        all: bool,
     },
 }
 

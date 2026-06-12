@@ -8,6 +8,7 @@ mod mirror;
 mod project;
 mod skill;
 pub mod status;
+pub mod subscription;
 pub mod sync;
 pub(crate) mod view;
 

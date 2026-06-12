@@ -19,7 +19,10 @@ use crate::{
     link::LinkStrategy,
 };
 
-use args::{CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, ViewCommand};
+use args::{
+    CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, SubscriptionCommand,
+    ViewCommand,
+};
 use scope::{resolve_scope, resolve_scopes};
 
 pub fn run() -> Result<()> {
@@ -124,6 +127,7 @@ pub fn run() -> Result<()> {
         Command::Skill { command } => run_skill_command(&ctx, command),
         Command::Scope { command } => run_scope_command(&ctx, command),
         Command::Project { command } => run_project_command(&ctx, command),
+        Command::Subscription { command } => run_subscription_command(&ctx, command),
         Command::Catalog { command } => run_catalog_command(&ctx, command),
         Command::Config { .. } => unreachable!("handled before config loading"),
         Command::Calibration(_) => unreachable!("handled before config loading"),
@@ -346,6 +350,12 @@ fn run_project_command(ctx: &Context, command: ProjectCommand) -> Result<()> {
             dry_run,
             ssh_strict,
         } => commands::project_clone_all(ctx, all, dry_run, ssh_strict),
+    }
+}
+
+fn run_subscription_command(ctx: &Context, command: SubscriptionCommand) -> Result<()> {
+    match command {
+        SubscriptionCommand::Sync { name, all } => commands::subscription::sync(ctx, &name, all),
     }
 }
 

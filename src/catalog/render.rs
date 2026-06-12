@@ -108,9 +108,14 @@ pub(super) fn render_conflicts(entries: &[SkillEntry]) -> String {
     out
 }
 
-pub(super) fn write_generated_doc(path: &Utf8Path, body: &str) -> Result<()> {
+pub(super) fn normalize_generated_doc(body: &str) -> String {
     let mut body = body.trim_end().to_string();
     body.push('\n');
+    body
+}
+
+pub(super) fn write_generated_doc(path: &Utf8Path, body: &str) -> Result<()> {
+    let body = normalize_generated_doc(body);
     fs::write(path, body).with_context(|| format!("failed to write {path}"))
 }
 

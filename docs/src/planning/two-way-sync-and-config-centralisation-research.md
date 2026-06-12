@@ -174,7 +174,7 @@ from the user's vantage:
 | [nix/hm-module.nix:311-327](../../../nix/hm-module.nix#L311-L327)         | HM activation already runs `view sync --all --allow-delete` and `project sync --all --allow-delete` — the entry point that today errors on non-symlinks                                  |
 | `cat /data/nvme0/can/Projects/ai-skills/skillnet.toml`                    | Live `skills_root = mirror_root = /data/nvme0/can/Projects/ai-skills`; 12 configured projects; views use the short `[{ label, path }]` form                                              |
 | `cat /data/nvme0/can/Projects/ai-skills/skillnet.catalog.toml`            | Catalog rules are all keyed by `path_prefix`/`name`/`project`; they reference paths relative to `skills_root`, so the file is portable to any host that points at the same `skills_root` |
-| `ls -la /home/can/.claude/skills/berg-codeberg-ci`                        | Existing view entries are already symlinks pointing into `ai-skills/global/...`; the promotion path is exercised only when something _else_ replaces a symlink with a real directory     |
+| `ls -la /home/can/.claude/skills/berg-codeberg-ci`                        | Existing view entries are already symlinks pointing into `ai-skills/global_skills/...`; the promotion path is exercised only when something _else_ replaces a symlink with a real directory |
 | `git show 15a1352:src/reconcile.rs` (via the existing dossier)            | Recovers the pre-0.5.0 staging+rename+manifest writer; the template for the canonical-side write                                                                                         |
 | [reconcile-pull-research.md](reconcile-pull-research.md) (full)           | Comparator ladder, dirty-state gating extension, doctor wiring, and test fixtures already designed. Avoid redoing this work.                                                             |
 
@@ -550,7 +550,7 @@ preview, never a gate.
 {
   "scope": "global",
   "kind": "global",
-  "canonical_path": "/data/nvme0/can/Projects/ai-skills/global",
+  "canonical_path": "/data/nvme0/can/Projects/ai-skills/global_skills",
   "skill_count": 42,
   "drift_entries": 0,
   "would_promote": 0,

@@ -1,4 +1,4 @@
-use std::{env, fs, path::PathBuf};
+use std::{collections::BTreeMap, env, fs, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -23,6 +23,8 @@ pub struct Config {
     pub link_strategy: Option<LinkStrategy>,
     #[serde(default)]
     pub projects: Vec<ProjectConfig>,
+    #[serde(default)]
+    pub subscriptions: BTreeMap<String, SubscriptionConfig>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -117,6 +119,27 @@ pub struct ProjectViewConfig {
     pub label: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct SubscriptionConfig {
+    pub url: String,
+    #[serde(default = "default_subscription_ref", rename = "ref")]
+    pub ref_name: String,
+    pub target: String,
+    #[serde(default = "default_subscription_source")]
+    pub source: String,
+    #[serde(default, alias = "deletePolicy")]
+    pub delete_policy: SubscriptionDeletePolicy,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SubscriptionDeletePolicy {
+    #[default]
+    Keep,
+    Prune,
+}
+
 fn default_canonical_rel() -> String {
     DEFAULT_PROJECT_WORKING_COPY_REL.into()
 }
@@ -126,6 +149,24 @@ fn default_project_views() -> Vec<ProjectViewConfig> {
         rel: ".claude/skills".into(),
         label: Some("claude".into()),
     }]
+}
+
+fn default_subscription_ref() -> String {
+    "main".into()
+}
+
+fn default_subscription_source() -> String {
+    "global_skills".into()
+}
+
+pub fn default_data_dir() -> PathBuf {
+    for var in ["skillnet_DATA_DIR", "SKILLNET_DATA_DIR"] {
+        if let Some(dir) = env::var_os(var) {
+            return PathBuf::from(dir);
+        }
+    }
+
+    xdg_data_home().join("skillnet")
 }
 
 fn label_from_rel(rel: &str) -> String {
@@ -563,6 +604,18 @@ fn default_xdg_config_path(file_name: &str) -> Result<Utf8PathBuf> {
         None => home_dir()?.join(".config"),
     };
     Ok(config_home.join("skillnet").join(file_name))
+}
+
+fn xdg_data_home() -> PathBuf {
+    if let Some(dir) = env::var_os("XDG_DATA_HOME") {
+        return PathBuf::from(dir);
+    }
+
+    PathBuf::from(
+        env::var_os("HOME")
+            .map(|home| PathBuf::from(home).join(".local/share"))
+            .unwrap_or_else(|| PathBuf::from(".local/share")),
+    )
 }
 
 fn home_dir() -> Result<Utf8PathBuf> {

@@ -76,7 +76,8 @@ writes — same pattern we need on the canonical side.
 
 ### Source of truth and dirty-state gating
 
-- Canonical store lives at `<mirror_root>/global/` and
+- Canonical store lives at `<mirror_root>/global/` by default, or the configured
+  `[global].canonical_path`, and
   `<project>/<canonical_rel>/` (per
   [docs/src/migration/option-b.md:46-52](../migration/option-b.md#L46-L52)).
 - Writes to canonical are gated by `Context::ensure_destination_clean`

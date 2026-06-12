@@ -9,7 +9,7 @@
   generatedConfigFile = "${config.xdg.configHome}/skillnet/skillnet.toml";
   generatedCatalogConfigFile = "${config.xdg.configHome}/skillnet/skillnet.catalog.toml";
   generatedDatabaseSettings =
-    (cfg.settings.database or {})
+    ((cfg.settings or {}).database or {})
     // {
       backend = cfg.database.backend;
     }
@@ -20,7 +20,7 @@
       url = cfg.database.url;
     };
   generatedSettings =
-    cfg.settings
+    (cfg.settings or {})
     // {
       database = generatedDatabaseSettings;
     }
@@ -29,6 +29,16 @@
     }
     // lib.optionalAttrs (cfg.skillsRoot != null) {
       skills_root = cfg.skillsRoot;
+    }
+    // lib.optionalAttrs (cfg.subscriptions != {}) {
+      subscriptions =
+        lib.mapAttrs
+        (_: subscription: {
+          inherit (subscription) url target source;
+          ref = subscription.ref;
+          delete_policy = subscription.deletePolicy;
+        })
+        cfg.subscriptions;
     };
 in {
   options.programs.skillnet = {
@@ -103,6 +113,46 @@ in {
 
         Leave null, and leave configFile null, to use a user-managed config
         file.
+      '';
+    };
+
+    subscriptions = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          url = lib.mkOption {
+            type = lib.types.str;
+            description = "Git URL for the subscribed skill repository.";
+          };
+
+          ref = lib.mkOption {
+            type = lib.types.str;
+            default = "main";
+            description = "Git ref to fetch and materialise for this subscription.";
+          };
+
+          target = lib.mkOption {
+            type = lib.types.str;
+            description = "Local skill directory that receives this subscription's skills.";
+          };
+
+          source = lib.mkOption {
+            type = lib.types.str;
+            default = "global_skills";
+            description = "Path inside the subscribed repository containing skill directories.";
+          };
+
+          deletePolicy = lib.mkOption {
+            type = lib.types.enum ["keep" "prune"];
+            default = "keep";
+            description = "Whether target skills deleted upstream are kept locally or pruned.";
+          };
+        };
+      });
+      default = {};
+      description = ''
+        Declarative skill repository subscriptions rendered into
+        skillnet.toml. Home Manager only writes config; run
+        `skillnet subscription sync --all` explicitly to materialise them.
       '';
     };
 
@@ -215,7 +265,7 @@ in {
       home.packages = [cfg.package];
     }
 
-    (lib.mkIf (cfg.settings != null) {
+    (lib.mkIf (cfg.settings != null || cfg.subscriptions != {}) {
       xdg.enable = lib.mkDefault true;
       xdg.configFile."skillnet/skillnet.toml".source =
         tomlFormat.generate "skillnet.toml" generatedSettings;
