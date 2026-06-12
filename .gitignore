@@ -1,6 +1,11 @@
 __pycache__/
 *.pyc
-target/
-result
-result-*
-.pre-commit-config.yaml
+/target/
+/result
+/result-*
+/.direnv/
+/.pre-commit-config.yaml
+
+# Generated documentation and site output.
+/docs/book/
+/website/public/
