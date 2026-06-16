@@ -39,8 +39,15 @@
     enable = true;
     name = "cargo audit";
     entry = "cargo audit";
-    extraPackages =
-      pkgs.lib.optional (rustToolchain != null) rustToolchain ++ [pkgs.cargo-audit];
+    extraPackages = pkgs.lib.optional (rustToolchain != null) rustToolchain ++ [pkgs.cargo-audit];
+    pass_filenames = false;
+  };
+
+  cargo-deny = {
+    enable = true;
+    name = "cargo deny";
+    entry = "cargo deny check bans licenses sources";
+    extraPackages = pkgs.lib.optional (rustToolchain != null) rustToolchain ++ [pkgs.cargo-deny];
     pass_filenames = false;
   };
 

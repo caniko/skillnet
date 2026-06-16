@@ -52,6 +52,7 @@
       };
 
       toolchain = rs-harbor.lib.mkToolchain {inherit pkgs;};
+      cross = rs-harbor.lib.mkCross {inherit pkgs system;};
       inherit (toolchain) craneLib rustToolchain;
 
       src = pkgs.lib.cleanSourceWith {
@@ -169,22 +170,36 @@
         hm-module = hmModuleTest;
       };
 
-      devShells.default = craneLib.devShell {
-        packages = with pkgs;
-          [
-            alejandra
-            cargo-audit
-            cargo-deny
-            cargo-nextest
-            git
+      devShells = {
+        default = craneLib.devShell {
+          packages = with pkgs;
+            [
+              alejandra
+              cargo-audit
+              cargo-deny
+              cargo-nextest
+              git
+              mdbook
+              prettier
+              pre-commit
+              rust-analyzer
+              taplo
+            ]
+            ++ pre-commit-check.enabledPackages;
+          shellHook = pre-commit-check.shellHook;
+        };
+
+        docs = rs-harbor.lib.mkDocsShell {
+          inherit pkgs cross;
+          inherit (toolchain) craneLib;
+          packages = with pkgs; [
             mdbook
-            prettier
+            plinth.packages.${system}.plinth-project
             pre-commit
             rust-analyzer
-            taplo
-          ]
-          ++ pre-commit-check.enabledPackages;
-        shellHook = pre-commit-check.shellHook;
+          ] ++ pre-commit-check.enabledPackages;
+          extraShellHook = pre-commit-check.shellHook;
+        };
       };
     })
     // {
