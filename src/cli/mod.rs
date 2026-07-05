@@ -124,6 +124,12 @@ pub fn run() -> Result<()> {
             }
             Ok(())
         }
+        Command::Export {
+            source,
+            skill,
+            prune,
+            no_view_sync,
+        } => commands::export::run(&ctx, Some(&source), &skill, prune, !no_view_sync),
         Command::Skill { command } => run_skill_command(&ctx, command),
         Command::Scope { command } => run_scope_command(&ctx, command),
         Command::Project { command } => run_project_command(&ctx, command),

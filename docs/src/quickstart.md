@@ -11,6 +11,7 @@ Common first commands:
 ```sh
 skillnet status
 skillnet scope list
+skillnet export
 skillnet view sync --all
 skillnet project sync --all
 skillnet skill list --scope global

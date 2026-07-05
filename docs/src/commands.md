@@ -8,6 +8,8 @@ Top-level commands:
 - `sync`: materialise every configured view, promoting view to canonical when
   a view entry is a real directory newer than canonical and promotion is
   explicitly applied.
+- `export`: copy repo-stored skills from `skills/` into the configured global
+  canonical store, then sync global views.
 - `view`: materialise and inspect global view symlinks.
 - `skill`: list, inspect, and edit canonical skill directories.
 - `scope`: inspect configured canonical scopes.
@@ -21,6 +23,7 @@ Examples:
 
 ```sh
 skillnet sync
+skillnet export
 skillnet view sync --all
 skillnet project sync --all
 skillnet doctor
@@ -35,6 +38,25 @@ skillnet hook status
 ```
 
 ## View And Project Commands
+
+`skillnet export` is for repositories that intentionally VCS their own
+globally useful skills under `skills/`. From the repository root, run:
+
+```sh
+skillnet export
+skillnet export --skill visual-rubric
+skillnet --dry-run export --source skills
+```
+
+The command exports every immediate child directory containing `SKILL.md` to
+the configured global canonical store, then materialises configured global
+views such as `~/.agents/skills`. Use `--source <PATH>` for non-default source
+directories, `--no-view-sync` to skip the view pass, and `--prune` to remove
+valid global skill directories absent from the source listing. Repos observed
+with this shape include `fragpipe/skills/*`, `tzu/skills/*`, and
+`visual-rubric/skills/visual-rubric`. Existing `.skills/` directories are
+usually project-scoped skillnet stores; export them only with an explicit
+`--source .skills` when the intent is truly global.
 
 `skillnet sync` is the top-level materialisation command. It resolves every
 selected global view and project view from `skillnet.toml`, materialises the

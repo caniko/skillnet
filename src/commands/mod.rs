@@ -2,6 +2,7 @@ pub mod calibration;
 pub mod config;
 mod context;
 pub mod doctor;
+pub mod export;
 pub mod hook;
 pub mod hook_install;
 mod mirror;

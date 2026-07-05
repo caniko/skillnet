@@ -2,7 +2,7 @@
   description = "skillnet AI skill mirror manager";
 
   inputs = {
-    rs-harbor.url = "git+https://codeberg.org/caniko/rs-harbor.git";
+    rs-harbor.url = "git+https://codeberg.org/caniko/rs-harbor.git?ref=trunk";
 
     nixpkgs.follows = "rs-harbor/nixpkgs";
     rust-overlay.follows = "rs-harbor/rust-overlay";
@@ -192,12 +192,14 @@
         docs = rs-harbor.lib.mkDocsShell {
           inherit pkgs cross;
           inherit (toolchain) craneLib;
-          packages = with pkgs; [
-            mdbook
-            plinth.packages.${system}.plinth-project
-            pre-commit
-            rust-analyzer
-          ] ++ pre-commit-check.enabledPackages;
+          packages = with pkgs;
+            [
+              mdbook
+              plinth.packages.${system}.plinth-project
+              pre-commit
+              rust-analyzer
+            ]
+            ++ pre-commit-check.enabledPackages;
           extraShellHook = pre-commit-check.shellHook;
         };
       };

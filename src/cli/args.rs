@@ -98,6 +98,21 @@ pub(super) enum Command {
         #[arg(long, value_enum)]
         link: Option<LinkArg>,
     },
+    /// Export repo-stored skills into the configured global skill store.
+    Export {
+        /// Source directory containing one directory per skill.
+        #[arg(long, default_value = "skills")]
+        source: Utf8PathBuf,
+        /// Skill name to export. May be repeated; defaults to every skill in source.
+        #[arg(long, value_name = "NAME", action = ArgAction::Append)]
+        skill: Vec<String>,
+        /// Remove destination skill directories absent from the source listing.
+        #[arg(long)]
+        prune: bool,
+        /// Do not materialise global views after export.
+        #[arg(long)]
+        no_view_sync: bool,
+    },
     /// Manage skillnet's configuration files.
     Config {
         #[command(subcommand)]
@@ -885,10 +900,54 @@ mod tests {
     }
 
     #[test]
+    fn export_command_parses_source_skills_and_flags() {
+        let cli = Cli::parse_from([
+            "skillnet",
+            "export",
+            "--source",
+            "repo-skills",
+            "--skill",
+            "alpha",
+            "--skill",
+            "beta",
+            "--prune",
+            "--no-view-sync",
+        ]);
+
+        assert!(matches!(
+            cli.command,
+            Some(Command::Export {
+                source,
+                skill,
+                prune: true,
+                no_view_sync: true,
+            }) if source == Utf8PathBuf::from("repo-skills")
+                && skill == vec!["alpha".to_string(), "beta".to_string()]
+        ));
+    }
+
+    #[test]
+    fn export_command_defaults_to_skills_source() {
+        let cli = Cli::parse_from(["skillnet", "export"]);
+
+        assert!(matches!(
+            cli.command,
+            Some(Command::Export {
+                source,
+                skill,
+                prune: false,
+                no_view_sync: false,
+            }) if source == Utf8PathBuf::from("skills") && skill.is_empty()
+        ));
+    }
+
+    #[test]
     fn long_help_lists_sync_command() {
         let help = Cli::command().render_long_help().to_string();
 
         assert!(help.contains("sync"));
         assert!(help.contains("Materialise every configured global view and project view"));
+        assert!(help.contains("export"));
+        assert!(help.contains("Export repo-stored skills"));
     }
 }
