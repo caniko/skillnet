@@ -37,6 +37,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "003-skill-invocations.sql",
         include_str!("../../data/multi-phase-plan/schema/003-skill-invocations.sql"),
     ),
+    (
+        4,
+        "004-skill-usage-normalization.sql",
+        include_str!("../../data/multi-phase-plan/schema/004-skill-usage-normalization.sql"),
+    ),
 ];
 #[cfg(feature = "postgres")]
 const POSTGRES_MIGRATIONS: &[(i64, &str, &str)] = &[
@@ -54,6 +59,11 @@ const POSTGRES_MIGRATIONS: &[(i64, &str, &str)] = &[
         3,
         "003-skill-invocations.sql",
         include_str!("../../data/multi-phase-plan/schema-pg/003-skill-invocations.sql"),
+    ),
+    (
+        4,
+        "004-skill-usage-normalization.sql",
+        include_str!("../../data/multi-phase-plan/schema-pg/004-skill-usage-normalization.sql"),
     ),
 ];
 
@@ -218,6 +228,53 @@ impl Db {
         }
     }
 
+    pub fn usage_aggregate(&self, since_unix: Option<i64>) -> anyhow::Result<Vec<UsageAggregate>> {
+        let (sql, params) = match (self.backend_kind(), since_unix) {
+            (BackendKind::Sqlite, Some(since)) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
+                        MIN(started_at), MAX(started_at) FROM skill_invocations \
+                 WHERE started_at >= datetime(?1, 'unixepoch') \
+                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
+                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
+                vec![DbParam::Integer(since)],
+            ),
+            (BackendKind::Sqlite, None) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
+                        MIN(started_at), MAX(started_at) FROM skill_invocations \
+                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
+                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
+                Vec::new(),
+            ),
+            #[cfg(feature = "postgres")]
+            (BackendKind::Postgres, Some(since)) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
+                        MIN(started_at)::text, MAX(started_at)::text FROM skill_invocations \
+                 WHERE started_at >= to_timestamp($1::double precision) \
+                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
+                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
+                vec![DbParam::Integer(since)],
+            ),
+            #[cfg(feature = "postgres")]
+            (BackendKind::Postgres, None) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
+                        MIN(started_at)::text, MAX(started_at)::text FROM skill_invocations \
+                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
+                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
+                Vec::new(),
+            ),
+        };
+        self.query_all(sql, &params, |row| {
+            Ok(UsageAggregate {
+                skill_name: row.get_string(0)?,
+                harness: row.get_string(1)?,
+                uses: row.get_i64(2)?,
+                sessions: row.get_i64(3)?,
+                first_seen: row.get_string(4)?,
+                last_seen: row.get_string(5)?,
+            })
+        })
+    }
+
     pub fn transaction<T>(
         &mut self,
         f: impl FnOnce(&mut Tx<'_>) -> anyhow::Result<T>,
@@ -334,6 +391,16 @@ impl Db {
             Backend::Postgres(_) => BackendKind::Postgres,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UsageAggregate {
+    pub skill_name: String,
+    pub harness: String,
+    pub uses: i64,
+    pub sessions: i64,
+    pub first_seen: String,
+    pub last_seen: String,
 }
 
 impl<'db> Tx<'db> {

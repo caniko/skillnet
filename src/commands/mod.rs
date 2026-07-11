@@ -11,6 +11,7 @@ mod skill;
 pub mod status;
 pub mod subscription;
 pub mod sync;
+pub mod usage;
 pub(crate) mod view;
 
 pub use context::Context;

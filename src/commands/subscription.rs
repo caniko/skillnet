@@ -56,6 +56,7 @@ fn sync_one(ctx: &Context, name: &str, subscription: &SubscriptionConfig) -> Res
     let source = checkout.join(subscription.source.trim_matches('/'));
     let target = expand_path(&subscription.target)
         .with_context(|| format!("failed to resolve target for subscription `{name}`"))?;
+    reject_canonical_target(ctx, name, &target)?;
 
     if ctx.dry_run {
         if checkout.join(".git").exists() {
@@ -91,6 +92,20 @@ fn sync_one(ctx: &Context, name: &str, subscription: &SubscriptionConfig) -> Res
     materialize_source(&source, &target, subscription.delete_policy)
         .with_context(|| format!("failed to sync subscription `{name}` to {target}"))?;
     println!("synced subscription {name} -> {target}");
+    Ok(())
+}
+
+fn reject_canonical_target(ctx: &Context, name: &str, target: &Utf8Path) -> Result<()> {
+    for scope in ctx.config.targets(&ctx.mirror_root)? {
+        if target == scope.canonical_path || target.starts_with(&scope.canonical_path) {
+            bail!(
+                "subscription `{name}` target `{target}` is inside canonical scope `{scope}`; subscriptions must write to a separate non-canonical directory",
+                name = name,
+                target = target,
+                scope = scope.canonical_path
+            );
+        }
+    }
     Ok(())
 }
 

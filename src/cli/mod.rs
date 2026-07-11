@@ -21,7 +21,7 @@ use crate::{
 
 use args::{
     CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, SubscriptionCommand,
-    ViewCommand,
+    UsageCommand, ViewCommand,
 };
 use scope::{resolve_scope, resolve_scopes};
 
@@ -70,6 +70,23 @@ pub fn run() -> Result<()> {
             None
         };
         return commands::hook::run(args, target);
+    }
+
+    if let Command::Usage(args) = command {
+        let database = Config::load_database_or_default(&config)?;
+        let target = database.resolve_db_with_overrides(&DbOverrides { database_url })?;
+        let context = if matches!(args.command, UsageCommand::Report { .. }) {
+            Some(Context::load(
+                &config,
+                mirror_root.as_ref(),
+                &catalog_config,
+                dry_run,
+                allow_dirty_destination,
+            )?)
+        } else {
+            None
+        };
+        return commands::usage::run(args, target, context.as_ref());
     }
 
     let ctx = Context::load(
@@ -138,6 +155,7 @@ pub fn run() -> Result<()> {
         Command::Config { .. } => unreachable!("handled before config loading"),
         Command::Calibration(_) => unreachable!("handled before config loading"),
         Command::Hook(_) => unreachable!("handled before config loading"),
+        Command::Usage(_) => unreachable!("handled before context loading"),
         Command::Completions { .. } => unreachable!("handled before config loading"),
     }
 }

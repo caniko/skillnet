@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Normalized `skillnet usage record` and `skillnet usage report` commands for
+  privacy-preserving, idempotent harness telemetry, including SQLite and
+  PostgreSQL migration support.
+
 ### Changed
 
 - Project canonical stores now live in each configured project repository at

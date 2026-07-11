@@ -144,3 +144,34 @@ fn subscription_sync_prune_removes_skills_deleted_upstream() {
         "beta v1"
     );
 }
+
+#[test]
+fn subscription_sync_rejects_canonical_targets() {
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    let target = fixture.path("mirror/global_skills");
+    init_source_repo(&source);
+    let config = fixture.write_config(format!(
+        r#"
+[global]
+canonical_path = "{}"
+views = []
+
+[subscriptions.ai-skills]
+url = "{}"
+ref = "main"
+target = "{}"
+delete_policy = "keep"
+"#,
+        target.display(),
+        source.display(),
+        target.display(),
+    ));
+
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("inside canonical scope"));
+}

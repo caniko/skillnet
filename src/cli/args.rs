@@ -147,6 +147,58 @@ pub(super) enum Command {
     Calibration(CalibrationArgs),
     /// Ingest shell hook payloads.
     Hook(HookArgs),
+    /// Record and report normalized skill usage.
+    Usage(UsageArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct UsageArgs {
+    #[command(subcommand)]
+    pub command: UsageCommand,
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(crate) enum UsageCommand {
+    /// Record one normalized skill activation.
+    Record {
+        /// Canonical or harness-local skill name.
+        #[arg(long)]
+        skill: String,
+        /// Harness emitting the event, for example claude, codex, opencode, or crush.
+        #[arg(long)]
+        harness: String,
+        /// Stable session identifier or privacy-preserving session hash.
+        #[arg(long)]
+        session: String,
+        /// Optional project directory or project identifier.
+        #[arg(long)]
+        project: Option<String>,
+        /// Stable source event identifier used for idempotency.
+        #[arg(long)]
+        event_id: String,
+        /// Event outcome.
+        #[arg(long, default_value = "ok")]
+        outcome: String,
+        /// Adapter version emitting the event.
+        #[arg(long, default_value = "1")]
+        adapter_version: String,
+    },
+    /// Report usage for every currently catalogued skill.
+    Report {
+        /// Include events at or after a relative duration such as 90d or 24h.
+        #[arg(long)]
+        since: Option<String>,
+        /// Output format.
+        #[arg(long, default_value = "table")]
+        format: UsageFormat,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum UsageFormat {
+    Table,
+    Json,
 }
 
 #[derive(Debug, Args)]
@@ -921,7 +973,7 @@ mod tests {
                 skill,
                 prune: true,
                 no_view_sync: true,
-            }) if source == Utf8PathBuf::from("repo-skills")
+            }) if source == "repo-skills"
                 && skill == vec!["alpha".to_string(), "beta".to_string()]
         ));
     }
@@ -937,7 +989,7 @@ mod tests {
                 skill,
                 prune: false,
                 no_view_sync: false,
-            }) if source == Utf8PathBuf::from("skills") && skill.is_empty()
+            }) if source == "skills" && skill.is_empty()
         ));
     }
 

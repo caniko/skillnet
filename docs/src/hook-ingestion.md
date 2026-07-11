@@ -4,6 +4,8 @@
 `skill_invocations` table. This captures every configured skill invocation as
 it happens, without requiring a later `skillnet calibration record` pass and
 without mixing raw hook events into the multi-phase-plan calibration tables.
+The normalized `skillnet usage record` command provides the same storage
+contract to other harness adapters.
 
 ## Quick start
 
@@ -39,6 +41,16 @@ without mixing raw hook events into the multi-phase-plan calibration tables.
    psql "$DATABASE_URL" -c \
      'select skill_name, hook_event, started_at from skill_invocations order by id desc limit 5;'
    ```
+
+For a catalog-wide, zero-filled report:
+
+```sh
+skillnet usage report --since 90d --format table
+```
+
+Use `skillnet usage record` from a native harness activation event. Supply a
+stable `--event-id`; retries with the same ID are ignored. Do not parse
+transcripts or retain prompts as a substitute for a native event.
 
 ## Managed entries
 

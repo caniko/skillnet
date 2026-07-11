@@ -34,6 +34,19 @@ cargo install --path .
 the mdBook chapter at [docs/src/hook-ingestion.md](docs/src/hook-ingestion.md)
 for Postgres, SQLite, and CLI setup.
 
+Normalized harness adapters can record directly with:
+
+```sh
+skillnet usage record --skill global/example --harness codex \
+  --session SESSION_HASH --event-id UNIQUE_EVENT_ID
+skillnet usage report --since 90d --format table
+```
+
+Reports include every current catalog skill, including zero-use skills. A zero
+count is only evidence of non-use when the corresponding harness coverage has
+been healthy for the entire requested window. Events store metadata only;
+source-event IDs make adapter retries idempotent.
+
 ### Nix Home Manager
 
 Add the flake input and import the module:

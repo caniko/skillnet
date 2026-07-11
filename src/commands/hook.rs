@@ -71,6 +71,12 @@ fn ingest(target: DbTarget, event: &str, payload_file: Option<Utf8PathBuf>) -> R
         .ok()
         .filter(|value| !value.trim().is_empty());
 
+    let source_event_id = format!(
+        "claude:{}:{}:{}",
+        session_id,
+        event,
+        blake3::hash(payload.as_bytes()).to_hex()
+    );
     let db = open_db(target)?;
     db.execute(
         "INSERT INTO skill_invocations (
@@ -83,7 +89,11 @@ fn ingest(target: DbTarget, event: &str, payload_file: Option<Utf8PathBuf>) -> R
             outcome,
             plan_id,
             payload,
-            hook_event
+            hook_event,
+            harness,
+            source_event_id,
+            adapter_version,
+            canonical_skill_name
         ) VALUES (
             $1,
             $2,
@@ -94,16 +104,22 @@ fn ingest(target: DbTarget, event: &str, payload_file: Option<Utf8PathBuf>) -> R
             $5,
             NULL,
             $6,
-            $7
-        )",
+            $7,
+            'claude',
+            $8,
+            '1',
+            $2
+        )
+        ON CONFLICT DO NOTHING",
         &[
             P::from(session_id.as_str()),
             P::from(extracted.skill_name.as_str()),
             P::nullable_text(extracted.tool_name.as_deref()),
             P::nullable_text(project_dir.as_deref()),
             P::from(extracted.outcome.as_str()),
-            P::from(payload.as_str()),
+            P::from("{}"),
             P::from(event),
+            P::from(source_event_id.as_str()),
         ],
     )?;
     Ok(())

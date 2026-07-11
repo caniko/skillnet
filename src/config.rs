@@ -611,11 +611,9 @@ fn xdg_data_home() -> PathBuf {
         return PathBuf::from(dir);
     }
 
-    PathBuf::from(
-        env::var_os("HOME")
-            .map(|home| PathBuf::from(home).join(".local/share"))
-            .unwrap_or_else(|| PathBuf::from(".local/share")),
-    )
+    env::var_os("HOME")
+        .map(|home| PathBuf::from(home).join(".local/share"))
+        .unwrap_or_else(|| PathBuf::from(".local/share"))
 }
 
 fn home_dir() -> Result<Utf8PathBuf> {
