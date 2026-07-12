@@ -22,8 +22,8 @@ User asked, in one breath, for three changes:
    invocation that "resolves all of the paths from its configuration", not a
    multi-step recipe.
 3. **Centralised, NM-definable configs.** The two config files currently
-   sitting at `/data/nvme0/can/Projects/ai-skills/skillnet.toml` and
-   `/data/nvme0/can/Projects/ai-skills/skillnet.catalog.toml` must move to the
+   sitting at `/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills/skillnet.toml` and
+   `/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills/skillnet.catalog.toml` must move to the
    user-level config location and be definable through the Nix module ("NM").
 
 This dossier feeds a multi-phase plan to amend skillnet + its Home Manager
@@ -95,8 +95,8 @@ Config discovery is already XDG-first
 The same precedence applies to `--catalog-config` /
 `SKILLNET_CATALOG_CONFIG` (`skillnet.catalog.toml`).
 
-Today the files live at `/data/nvme0/can/Projects/ai-skills/skillnet.toml`
-and `/data/nvme0/can/Projects/ai-skills/skillnet.catalog.toml`. They are only
+Today the files live at `/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills/skillnet.toml`
+and `/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills/skillnet.catalog.toml`. They are only
 picked up because the user typically runs `skillnet` from inside that
 directory (rank 4 in the table). On a fresh shell in any other cwd, the CLI
 silently falls through to the XDG path that does not yet exist and fails with
@@ -172,8 +172,8 @@ from the user's vantage:
 | [nix/hm-module.nix:71-114, 236-246](../../../nix/hm-module.nix#L71-L114)  | `programs.skillnet.settings` and `catalogSettings` are TOML pass-throughs; the schema the user already has is supported as-is                                                               |
 | [nix/hm-module.nix:198-231](../../../nix/hm-module.nix#L198-L231)         | Module assertions enforce absolute paths for `skillsRoot`/`mirrorRoot`/`configFile`/`catalogConfigFile`; no surprise rewrite                                                                |
 | [nix/hm-module.nix:311-327](../../../nix/hm-module.nix#L311-L327)         | HM activation already runs `view sync --all --allow-delete` and `project sync --all --allow-delete` — the entry point that today errors on non-symlinks                                     |
-| `cat /data/nvme0/can/Projects/ai-skills/skillnet.toml`                    | Live `skills_root = mirror_root = /data/nvme0/can/Projects/ai-skills`; 12 configured projects; views use the short `[{ label, path }]` form                                                 |
-| `cat /data/nvme0/can/Projects/ai-skills/skillnet.catalog.toml`            | Catalog rules are all keyed by `path_prefix`/`name`/`project`; they reference paths relative to `skills_root`, so the file is portable to any host that points at the same `skills_root`    |
+| `cat /data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills/skillnet.toml`                    | Live `skills_root = mirror_root = /data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills`; 12 configured projects; views use the short `[{ label, path }]` form                                                 |
+| `cat /data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills/skillnet.catalog.toml`            | Catalog rules are all keyed by `path_prefix`/`name`/`project`; they reference paths relative to `skills_root`, so the file is portable to any host that points at the same `skills_root`    |
 | `ls -la /home/can/.claude/skills/berg-codeberg-ci`                        | Existing view entries are already symlinks pointing into `ai-skills/global_skills/...`; the promotion path is exercised only when something _else_ replaces a symlink with a real directory |
 | `git show 15a1352:src/reconcile.rs` (via the existing dossier)            | Recovers the pre-0.5.0 staging+rename+manifest writer; the template for the canonical-side write                                                                                            |
 | [reconcile-pull-research.md](reconcile-pull-research.md) (full)           | Comparator ladder, dirty-state gating extension, doctor wiring, and test fixtures already designed. Avoid redoing this work.                                                                |
@@ -297,7 +297,7 @@ default.
     bookkeeping) — _do not pursue without a strong reason_; it adds schema
     complexity for limited gain.
 - **`skills_root` host-coupling.** The live `skillnet.toml` hard-codes
-  `/data/nvme0/can/Projects/ai-skills`. Moving the config to HM means this
+  `/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills`. Moving the config to HM means this
   path is now in the Nix expression too. Other hosts adopting the same module
   will need to override `programs.skillnet.skillsRoot`. Already supported
   ([hm-module.nix:136-140](../../../nix/hm-module.nix#L136-L140)); flag for
@@ -311,7 +311,7 @@ default.
   a skill from `active` to `retired` if the promoted version sets a frontmatter
   status the rules look at.
 - **Legacy CWD discovery drop is a breaking change for non-NM users.** The
-  user runs `skillnet` from inside `/data/nvme0/can/Projects/ai-skills`
+  user runs `skillnet` from inside `/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills`
   today. After centralisation, that pickup still works through the
   deprecation window. Once it drops, anyone with the same habit on a fresh
   install will see a confusing "no config" error. Mitigations:
@@ -413,7 +413,7 @@ E1. **Add a one-shot migration command.**
 - `--dry-run` and `--force` flags. No automatic execution from `sync`.
 
 E2. **Land the actual move.** Run `skillnet config migrate` against the
-live `/data/nvme0/can/Projects/ai-skills/skillnet*.toml` files. Update
+live `/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills/skillnet*.toml` files. Update
 `ai-skills/README.md` if it references the in-repo paths.
 
 E3. **Drop legacy CWD discovery in `0.7.0` (not `0.6.0`)**. Promotion lands
@@ -550,7 +550,7 @@ preview, never a gate.
 {
   "scope": "global",
   "kind": "global",
-  "canonical_path": "/data/nvme0/can/Projects/ai-skills/global_skills",
+  "canonical_path": "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills/global_skills",
   "skill_count": 42,
   "drift_entries": 0,
   "would_promote": 0,

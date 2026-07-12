@@ -71,8 +71,8 @@ The current `skillnet.toml` from the ai-skills checkout translates to:
 ```nix
 programs.skillnet = {
   enable = true;
-  skillsRoot = "/data/nvme0/can/Projects/ai-skills";
-  mirrorRoot = "/data/nvme0/can/Projects/ai-skills";
+  skillsRoot = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills";
+  mirrorRoot = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills";
 
   settings = {
     global = {
@@ -91,51 +91,51 @@ programs.skillnet = {
     projects = [
       {
         name = "SynDB";
-        path = "/data/nvme0/can/Projects/SynDB";
+        path = "/data/nvme0/can/canix/projects/repos/owned/github.com/memorycircuits/SynDB";
       }
       {
         name = "ai-yolo-nix";
-        path = "/data/nvme0/can/Projects/ai-yolo-nix";
+        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/yee-haw";
       }
       {
         name = "canix";
-        path = "/data/nvme0/can/Projects/canix";
+        path = "/data/nvme0/can/canix";
       }
       {
         name = "codex";
-        path = "/data/nvme0/can/Projects/codex";
+        path = "/data/nvme0/can/canix/projects/repos/forks/openai/codex";
       }
       {
         name = "CourseOfLife";
-        path = "/data/nvme0/can/Projects/CourseOfLife";
+        path = "/data/nvme0/can/canix/projects/personal/professional/CourseOfLife";
       }
       {
         name = "fragpipe-mcp";
-        path = "/data/nvme0/can/Projects/fragpipe-mcp";
+        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/fragpipe-mcp";
       }
       {
         name = "goose";
-        path = "/data/nvme0/can/Projects/upstream/goose";
+        path = "/data/nvme0/can/canix/projects/repos/forks/aaif-goose/goose";
       }
       {
         name = "nix-crossbow";
-        path = "/data/nvme0/can/Projects/nix-crossbow";
+        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/nix-crossbow";
       }
       {
         name = "plinth";
-        path = "/data/nvme0/can/Projects/solo/plinth";
+        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/plinth";
       }
       {
         name = "regicide";
-        path = "/data/nvme0/can/Projects/solo/game-dev/regicide";
+        path = "/data/nvme0/can/canix/projects/repos/owned/gitlab.com/clg-gaming/regicide";
       }
       {
         name = "rs-modde";
-        path = "/data/nvme0/can/Projects/rs-modde";
+        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/rs-modde";
       }
       {
         name = "rs_bouldy";
-        path = "/data/nvme0/can/Projects/rs_bouldy";
+        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/rs-bouldy";
       }
     ];
   };

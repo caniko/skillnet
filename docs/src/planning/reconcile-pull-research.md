@@ -24,7 +24,7 @@ the recovery path for the failure mode "symlink got overwritten by another
 source and we kept working in the copy."
 
 This dossier feeds a multi-phase plan to modify skillnet itself (across
-`/data/nvme0/can/Projects/skillnet` source + the Nix HM module + the
+`/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/skillnet` source + the Nix HM module + the
 documentation). The change set spans Rust library code, CLI surface, tests,
 docs/mdBook, and the Home Manager activation flow.
 
@@ -110,7 +110,7 @@ external tool replaces the symlink with a directory.
 | Source                                                                    | Lines                                                                    | What it proves                                                                                                                                                                                                                           |
 | ------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `which skillnet && readlink -f $(which skillnet)`                         | n/a                                                                      | Installed binary is `skillnet-0.5.1` from a Nix store path; source matches local repo at HEAD                                                                                                                                            |
-| `cd /data/nvme0/can/Projects/skillnet && git log --oneline -20`           | n/a                                                                      | Recent commits show `21f1f83 Add top-level sync command` (current `sync`), `15a1352 feat!: delete reconcile, sync pull/roundtrip; release 0.5.0` (the deletion this dossier partially reverses), `00ada1a feat!: Option B config schema` |
+| `cd /data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/skillnet && git log --oneline -20`           | n/a                                                                      | Recent commits show `21f1f83 Add top-level sync command` (current `sync`), `15a1352 feat!: delete reconcile, sync pull/roundtrip; release 0.5.0` (the deletion this dossier partially reverses), `00ada1a feat!: Option B config schema` |
 | `git show 15a1352 --stat`                                                 | n/a                                                                      | Shows `src/reconcile.rs` (534 lines), `src/commands/sync.rs` (787 lines), `src/cache.rs`, `src/codex.rs` were the major deletions                                                                                                        |
 | `git show 15a1352^:src/reconcile.rs`                                      | full file                                                                | Recovers the prior reconcile model — `Candidate`, `Choice`, `choose_latest`, `overwrite_action`, `write_skill_set`, `RECONCILIATION.md` manifest writer                                                                                  |
 | [src/view.rs:32-76](../../../src/view.rs#L32-L76)                         | DriftKind enum + structs                                                 | Confirms `NonSymlink` is already a first-class drift class                                                                                                                                                                               |
@@ -129,7 +129,7 @@ Only one prior plan set is materially related, and it has been retired:
 
 - `docs/planning/mirror-canonical-store/` and `docs/planning/mirror-canonical-store-research.md`
   in the `ai-skills` repo. All staged for deletion on `main`
-  (`git status` in `/data/nvme0/can/Projects/ai-skills` shows 22 `D` rows
+  (`git status` in `/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills` shows 22 `D` rows
   under `docs/planning/`). The plan that originally drove the v0.5.0 removal
   of reconcile is **done and being garbage-collected** — its premise was
   "canonical is the only writer, reconcile is unnecessary." This dossier

@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Documentation now describes the centralized configuration migration and
+  reconciler research findings consistently.
 - Project canonical stores now live in each configured project repository at
   `<project>/.skills`; project-local `.agents/skills` remains the default
   generated working copy and `<project>/.claude/skills` remains the default
