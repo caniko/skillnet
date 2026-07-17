@@ -1,9 +1,9 @@
 //! View materialisation primitives.
 //!
-//! A view is a flat directory of symlinks, one symlink per canonical skill
-//! directory. Global views use absolute symlink targets because they live under
-//! user homes. Project views use relative symlink targets so checked-in project
-//! links remain portable across machines.
+//! A view is a flat directory with one materialised entry per canonical skill
+//! directory. Symlink views use absolute global targets and relative project
+//! targets; hardlink views copy the directory shape while sharing regular-file
+//! inodes with the canonical store.
 //!
 //! Atomicity is per skill: each link is checked and, if needed, replaced by
 //! creating a temporary symlink in the same directory and renaming it into
@@ -191,6 +191,34 @@ pub fn materialize_view_with_options(
     let mut summary = ViewSyncSummary::default();
     for (skill, target) in &expected {
         let link = view.path.join(skill);
+        if options.link_strategy == LinkStrategy::Hardlink {
+            match hardlink_dir_status(target, &link)
+                .with_context(|| format!("failed to inspect hardlinked skill `{skill}`"))?
+            {
+                HardlinkStatus::Identical => summary.unchanged += 1,
+                HardlinkStatus::Severed { files } => {
+                    relink_files(target, &link, &files)
+                        .with_context(|| format!("failed to relink skill `{skill}`"))?;
+                    summary.updated += 1;
+                }
+                HardlinkStatus::Diverged { .. } if !options.force => {
+                    bail!(
+                        "hardlinked view entry {link} diverged from canonical skill; pass --force to replace it"
+                    );
+                }
+                HardlinkStatus::Missing => {
+                    hardlink_dir(target, &link)
+                        .with_context(|| format!("failed to hardlink skill `{skill}`"))?;
+                    summary.created += 1;
+                }
+                HardlinkStatus::Foreign | HardlinkStatus::Diverged { .. } => {
+                    hardlink_dir(target, &link)
+                        .with_context(|| format!("failed to replace hardlinked skill `{skill}`"))?;
+                    summary.updated += 1;
+                }
+            }
+            continue;
+        }
         let desired = desired_link_target(&view.path, target, options.relative_links)?;
         match ensure_symlink(&link, &desired, options.force)
             .with_context(|| format!("failed to sync skill `{skill}` into {}", view.path))?
@@ -219,6 +247,26 @@ pub fn materialize_view_with_promotion(
     ensure_clean: impl Fn(&Utf8Path) -> Result<()>,
 ) -> Result<PromotionSummary> {
     ensure_clean(canonical_root)?;
+
+    // Hardlinked views are derived materialisations, not editable promotion
+    // surfaces. Keep them convergent and preserve the hardlink strategy rather
+    // than demoting them to symlinks through the legacy promotion path.
+    if options.link_strategy == LinkStrategy::Hardlink {
+        let view = materialize_view_with_options(
+            canonical_root,
+            view,
+            ViewSyncOptions {
+                allow_delete: options.allow_delete,
+                force: options.force_demote,
+                relative_links: options.relative_links,
+                link_strategy: LinkStrategy::Hardlink,
+            },
+        )?;
+        return Ok(PromotionSummary {
+            view,
+            ..PromotionSummary::default()
+        });
+    }
 
     let expected = expected_skill_links(canonical_root)?;
     fs::create_dir_all(&view.path)
@@ -510,6 +558,32 @@ pub fn view_status_with_options(
 
     for (skill, target) in &expected {
         let link = view.path.join(skill);
+        if options.link_strategy == LinkStrategy::Hardlink {
+            let status = hardlink_dir_status(target, &link)
+                .with_context(|| format!("failed to inspect hardlinked skill `{skill}`"))?;
+            if !matches!(status, HardlinkStatus::Identical) {
+                let kind = match status {
+                    HardlinkStatus::Missing => DriftKind::Missing,
+                    HardlinkStatus::Severed { .. } | HardlinkStatus::Diverged { .. } => {
+                        DriftKind::NonSymlink
+                    }
+                    HardlinkStatus::Foreign => DriftKind::NonSymlink,
+                    HardlinkStatus::Identical => unreachable!(),
+                };
+                drift.push(DriftEntry {
+                    skill: skill.clone(),
+                    kind,
+                    expected: Some(target.clone()),
+                    actual: fs::symlink_metadata(&link).ok().map(|_| link.clone()),
+                    view_mtime_nanos: None,
+                    canonical_mtime_nanos: None,
+                    view_sha: None,
+                    canonical_sha: None,
+                    reconcile_outcome: None,
+                });
+            }
+            continue;
+        }
         let desired = desired_link_target(&view.path, target, options.relative_links)?;
         let metadata = match fs::symlink_metadata(&link) {
             Ok(metadata) => metadata,
@@ -699,7 +773,9 @@ pub fn materialize_project_with_options(
                 allow_delete: options.allow_delete,
                 force: options.force,
                 relative_links: true,
-                link_strategy: options.link_strategy,
+                // Project aggregators may be hardlinked, but their checked-in
+                // agent views remain portable relative symlinks.
+                link_strategy: LinkStrategy::Symlink,
             },
         )?;
         views.push(ProjectViewSummary {
@@ -746,7 +822,9 @@ pub fn materialize_project_with_promotion(
             view,
             PromotionOptions {
                 relative_links: true,
-                link_strategy: options.link_strategy,
+                // Keep project views as relative symlinks; only the working
+                // copy aggregator follows the project's link strategy.
+                link_strategy: LinkStrategy::Symlink,
                 project_root: target.project_root.clone(),
                 link_root: target.aggregator_path.clone(),
                 ..options.clone()
@@ -1353,6 +1431,9 @@ fn stale_view_entries<'a>(
             .file_name()
             .context("view entry has no final component")?
             .to_string();
+        if name == ".skillnet-tmp" || name.starts_with('.') && name.ends_with(".skillnet-tmp") {
+            continue;
+        }
         if !expected.contains(&name) {
             stale.push(path);
         }

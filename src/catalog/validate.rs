@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
 
 use super::config::{
     CatalogConfig, VALID_GLOBAL_CATEGORIES, VALID_PROJECT_CATEGORIES, VALID_SCOPES, VALID_STATUSES,
@@ -45,6 +46,37 @@ pub(super) fn validate_entries(entries: &[SkillEntry], config: &CatalogConfig) -
                 entry.qualified_name, entry.status
             ));
         }
+        let implicit_disabled = implicit_invocation_disabled(entry);
+        if entry.status == "routed" {
+            if !implicit_disabled {
+                errors.push(format!(
+                    "{}: routed skill must set policy.allow_implicit_invocation = false",
+                    entry.qualified_name
+                ));
+            }
+            if entry.related_skills.is_empty() {
+                errors.push(format!(
+                    "{}: routed skill must name its router in related_skills",
+                    entry.qualified_name
+                ));
+            }
+        }
+        if implicit_disabled && matches!(entry.status.as_str(), "active" | "experimental") {
+            errors.push(format!(
+                "{}: implicit-only skill has active status; classify it as routed, reference, internal, or retired",
+                entry.qualified_name
+            ));
+        }
+        if let Some(limit) = config.settings.metadata_description_char_limit {
+            let budget_scope = entry.scope == "global" || entry.project.as_deref() == Some("canix");
+            if budget_scope && !implicit_disabled && entry.description.chars().count() > limit {
+                errors.push(format!(
+                    "{}: description is {} characters (limit {limit})",
+                    entry.qualified_name,
+                    entry.description.chars().count()
+                ));
+            }
+        }
         for related in &entry.related_skills {
             if !qualified_names.contains(related.as_str()) && !names.contains(related.as_str()) {
                 errors.push(format!(
@@ -79,7 +111,57 @@ pub(super) fn validate_entries(entries: &[SkillEntry], config: &CatalogConfig) -
             ));
         }
     }
+    errors.extend(validate_metadata_budget(entries, config));
     errors
+}
+
+fn implicit_invocation_disabled(entry: &SkillEntry) -> bool {
+    let path = entry.path.join("agents/openai.yaml");
+    fs::read_to_string(path).is_ok_and(|body| {
+        body.lines()
+            .any(|line| line.trim().replace(' ', "") == "allow_implicit_invocation:false")
+    })
+}
+
+fn validate_metadata_budget(entries: &[SkillEntry], config: &CatalogConfig) -> Vec<String> {
+    let settings = &config.settings;
+    let (Some(context), Some(percent), Some(headroom), Some(reserved)) = (
+        settings.metadata_context_window_tokens,
+        settings.metadata_budget_percent,
+        settings.metadata_headroom_percent,
+        settings.metadata_reserved_tokens,
+    ) else {
+        return Vec::new();
+    };
+    if percent > 100 || headroom > 100 {
+        return vec!["metadata budget percentages must be between 0 and 100".into()];
+    }
+    let budget = context.saturating_mul(percent) / 100;
+    let headroom_ceiling = budget.saturating_mul(100usize.saturating_sub(headroom)) / 100;
+    let ceiling = headroom_ceiling.min(budget.saturating_sub(reserved));
+    let estimated = entries
+        .iter()
+        .filter(|entry| {
+            (entry.scope == "global" || entry.project.as_deref() == Some("canix"))
+                && matches!(entry.status.as_str(), "active" | "experimental")
+                && !implicit_invocation_disabled(entry)
+        })
+        .map(estimated_metadata_tokens)
+        .sum::<usize>();
+    if estimated > ceiling {
+        vec![format!(
+            "implicit skill metadata estimate is {estimated} tokens, above effective ceiling {ceiling} ({}% of {context}, {}% headroom, {reserved} reserved)",
+            percent, headroom
+        )]
+    } else {
+        Vec::new()
+    }
+}
+
+fn estimated_metadata_tokens(entry: &SkillEntry) -> usize {
+    // Codex renders one compact line containing the qualified skill name and
+    // description. Four UTF-8 bytes per token is intentionally conservative.
+    (entry.qualified_name.len() + entry.description.len() + 8).div_ceil(4)
 }
 
 pub(super) fn duplicates_by_name(entries: &[SkillEntry]) -> BTreeMap<&str, Vec<&SkillEntry>> {

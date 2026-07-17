@@ -27,8 +27,14 @@ pub(super) const VALID_PROJECT_CATEGORIES: &[&str] = &[
     "domain-workflow",
 ];
 pub(super) const VALID_SCOPES: &[&str] = &["global", "project", "plugin", "vendor"];
-pub(super) const VALID_STATUSES: &[&str] =
-    &["active", "reference", "internal", "experimental", "retired"];
+pub(super) const VALID_STATUSES: &[&str] = &[
+    "active",
+    "reference",
+    "internal",
+    "experimental",
+    "routed",
+    "retired",
+];
 
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct CatalogConfig {
@@ -42,12 +48,27 @@ pub(super) struct CatalogConfig {
 pub(super) struct CatalogSettings {
     #[serde(default = "default_large_skill_line_threshold")]
     pub(super) large_skill_line_threshold: usize,
+    #[serde(default)]
+    pub(super) metadata_context_window_tokens: Option<usize>,
+    #[serde(default)]
+    pub(super) metadata_budget_percent: Option<usize>,
+    #[serde(default)]
+    pub(super) metadata_headroom_percent: Option<usize>,
+    #[serde(default)]
+    pub(super) metadata_reserved_tokens: Option<usize>,
+    #[serde(default)]
+    pub(super) metadata_description_char_limit: Option<usize>,
 }
 
 impl Default for CatalogSettings {
     fn default() -> Self {
         Self {
             large_skill_line_threshold: default_large_skill_line_threshold(),
+            metadata_context_window_tokens: None,
+            metadata_budget_percent: None,
+            metadata_headroom_percent: None,
+            metadata_reserved_tokens: None,
+            metadata_description_char_limit: None,
         }
     }
 }

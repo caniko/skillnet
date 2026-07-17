@@ -1,17 +1,19 @@
 use std::{
     fs,
     os::unix::fs as unix_fs,
+    os::unix::fs::MetadataExt,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
 use filetime::{set_file_mtime, FileTime};
 use skillnet::{
+    link::LinkStrategy,
     model::ViewTarget,
     view::{
-        compare_view_entry, materialize_view, materialize_view_with_promotion,
-        promote_view_to_canonical, DriftEntry, DriftKind, Preference, PromotionOptions,
-        ReconcileOutcome,
+        compare_view_entry, materialize_view, materialize_view_with_options,
+        materialize_view_with_promotion, promote_view_to_canonical, DriftEntry, DriftKind,
+        Preference, PromotionOptions, ReconcileOutcome,
     },
 };
 use tempfile::{tempdir, TempDir};
@@ -116,6 +118,40 @@ fn materialize_view_creates_idempotent_symlinks_and_fixes_wrong_targets() {
         fs::read_link(fixture.view_path.join("beta")).unwrap(),
         fixture.canonical.join("beta")
     );
+}
+
+#[test]
+fn materialize_view_supports_hardlinked_global_views() {
+    let fixture = Fixture::new();
+    let canonical = write_skill(&fixture.canonical, "hardlinked", "same", 100);
+    let first = materialize_view_with_options(
+        &fixture.canonical,
+        &fixture.view,
+        skillnet::view::ViewSyncOptions {
+            link_strategy: LinkStrategy::Hardlink,
+            ..skillnet::view::ViewSyncOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(first.created, 1);
+    assert!(!is_symlink(&fixture.view_path.join("hardlinked")));
+    let view_file = fixture.view_path.join("hardlinked/SKILL.md");
+    let canonical_file = canonical.join("SKILL.md");
+    assert_eq!(
+        fs::metadata(view_file).unwrap().ino(),
+        fs::metadata(canonical_file).unwrap().ino()
+    );
+
+    let second = materialize_view_with_options(
+        &fixture.canonical,
+        &fixture.view,
+        skillnet::view::ViewSyncOptions {
+            link_strategy: LinkStrategy::Hardlink,
+            ..skillnet::view::ViewSyncOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(second.unchanged, 1);
 }
 
 #[test]

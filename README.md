@@ -6,6 +6,11 @@
 
 `skillnet` is a CLI for managing canonical AI skill stores, materialising derived agent views, and recording calibration data for `multi-phase-plan`.
 
+Global views may use `link_strategy = "hardlink"` when multiple agent roots
+should share immutable skill files without duplicating their contents. Hardlink
+views are derived and converge from the canonical mirror; use the canonical
+store for edits.
+
 The supported interface in `0.6.0` is the `skillnet` binary. This crate does not commit to a stable embeddable Rust API yet.
 
 For project scopes, the canonical store is

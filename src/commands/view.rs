@@ -10,8 +10,8 @@ use crate::{
     link::LinkStrategy,
     model::{Target, ViewTarget},
     view::{
-        materialize_view_with_options, materialize_view_with_promotion, view_diff, view_status,
-        DriftEntry, DriftKind, FileDeltaKind, PromotionOptions, PromotionSummary, ReconcileOutcome,
+        self, materialize_view_with_options, materialize_view_with_promotion, DriftEntry,
+        DriftKind, FileDeltaKind, PromotionOptions, PromotionSummary, ReconcileOutcome,
         ViewSyncOptions, ViewSyncSummary,
     },
 };
@@ -143,7 +143,14 @@ fn print_promotion_dry_run(target: &Target, allow_delete: bool, force: bool) -> 
     println!("adopt_new: true");
     for view in &target.views {
         println!("to: {}\t{}", view.label, view.path);
-        for entry in view_status(&target.canonical_path, view)? {
+        for entry in view::view_status_with_options(
+            &target.canonical_path,
+            view,
+            ViewSyncOptions {
+                link_strategy: target.link_strategy,
+                ..ViewSyncOptions::default()
+            },
+        )? {
             println!(
                 "  {}",
                 describe_dry_run_action(view, &entry, allow_delete, force)
@@ -202,7 +209,14 @@ pub fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
     let target = ctx.config.global_target(&ctx.mirror_root)?;
     let mut rows = Vec::new();
     for view in &target.views {
-        let drift = view_status(&target.canonical_path, view)?;
+        let drift = view::view_status_with_options(
+            &target.canonical_path,
+            view,
+            ViewSyncOptions {
+                link_strategy: target.link_strategy,
+                ..ViewSyncOptions::default()
+            },
+        )?;
         let promotion_status = promotion_status_counts(&drift);
         rows.push(ViewStatusRow {
             label: view.label.clone(),
@@ -238,7 +252,14 @@ pub fn diff(ctx: &Context) -> Result<()> {
     let target = ctx.config.global_target(&ctx.mirror_root)?;
     for view in &target.views {
         println!("# {}", view.label);
-        let deltas = view_diff(&target.canonical_path, view)?;
+        let deltas = view::view_diff_with_options(
+            &target.canonical_path,
+            view,
+            ViewSyncOptions {
+                link_strategy: target.link_strategy,
+                ..ViewSyncOptions::default()
+            },
+        )?;
         if deltas.is_empty() {
             println!("clean");
             continue;

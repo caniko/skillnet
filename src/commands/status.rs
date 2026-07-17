@@ -68,7 +68,16 @@ fn status_row(target: Target) -> Result<StatusRow> {
         TargetScope::Global => target
             .views
             .iter()
-            .map(|view| crate::view::view_status(&target.canonical_path, view))
+            .map(|view| {
+                crate::view::view_status_with_options(
+                    &target.canonical_path,
+                    view,
+                    crate::view::ViewSyncOptions {
+                        link_strategy: target.link_strategy,
+                        ..crate::view::ViewSyncOptions::default()
+                    },
+                )
+            })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .flatten()
