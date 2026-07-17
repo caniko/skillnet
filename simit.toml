@@ -2,7 +2,7 @@
 scope = "hooks-only"
 
 [ci]
-runner = "atlas"
+runner = "atlas-nix-trusted"
 with_audit = true
 with_deny = true
 with_docs = true
