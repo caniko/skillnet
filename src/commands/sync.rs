@@ -9,7 +9,8 @@ use crate::{
     model::{Target, TargetScope, ViewTarget},
     view::{
         self, AggregatorPending, AggregatorPendingKind, AggregatorPlanAction, AggregatorStatus,
-        DriftKind, PromotionOptions, PromotionSummary, ReconcileOutcome, WouldEntry,
+        DriftKind, PromotionOptions, PromotionSummary, ReconcileOutcome, ViewSyncOptions,
+        WouldEntry,
     },
 };
 
@@ -72,19 +73,50 @@ fn run_with_promotion(
 
         match target.scope {
             TargetScope::Global => {
-                for view in &target.views {
-                    let summary = view::materialize_view_with_promotion(
-                        &target.canonical_path,
-                        view,
-                        PromotionOptions {
-                            relative_links: false,
-                            link_strategy: target.link_strategy,
-                            project_root: None,
-                            ..options.clone()
-                        },
-                        |target_path| ctx.ensure_target_clean(target_path),
-                    )?;
-                    report.add_summary(&target, view, &summary);
+                if let Some(bundle) = ctx.bundle_plan(&target)? {
+                    if target.link_strategy != LinkStrategy::Symlink {
+                        anyhow::bail!(
+                            "Skillnet manifest bundles require symlink views; target `{}` is configured for {:?}",
+                            target.name,
+                            target.link_strategy
+                        );
+                    }
+                    bundle.materialize()?;
+                    for view in &target.views {
+                        let view_summary = view::materialize_view_with_expected(
+                            bundle.expected_links(),
+                            view,
+                            ViewSyncOptions {
+                                allow_delete: options.allow_delete,
+                                force: options.force_demote,
+                                link_strategy: LinkStrategy::Symlink,
+                                ..ViewSyncOptions::default()
+                            },
+                        )?;
+                        report.add_summary(
+                            &target,
+                            view,
+                            &PromotionSummary {
+                                view: view_summary,
+                                ..PromotionSummary::default()
+                            },
+                        );
+                    }
+                } else {
+                    for view in &target.views {
+                        let summary = view::materialize_view_with_promotion(
+                            &target.canonical_path,
+                            view,
+                            PromotionOptions {
+                                relative_links: false,
+                                link_strategy: target.link_strategy,
+                                project_root: None,
+                                ..options.clone()
+                            },
+                            |target_path| ctx.ensure_target_clean(target_path),
+                        )?;
+                        report.add_summary(&target, view, &summary);
+                    }
                 }
             }
             TargetScope::Project => {
@@ -170,7 +202,7 @@ fn scoped_targets(
 }
 
 fn dry_run_target(
-    _ctx: &Context,
+    ctx: &Context,
     target: &Target,
     options: &PromotionOptions,
     report: &mut OverallReport,
@@ -180,6 +212,12 @@ fn dry_run_target(
     println!("allow_delete: {}", options.allow_delete);
     println!("force: {}", options.force_demote);
     println!("apply_promote: {}", options.apply_promote);
+    if target.scope == TargetScope::Global {
+        if let Some(bundle) = ctx.bundle_plan(target)? {
+            println!("bundle_root: {}", bundle.bundle_root);
+            println!("bundle_mode: generated bundles; promotion disabled");
+        }
+    }
     if target.scope == TargetScope::Project {
         for entry in view::project_canonical_drift(target)? {
             println!("canonical: {} {}", drift_marker(entry.kind), entry.skill);
@@ -192,10 +230,26 @@ fn dry_run_target(
             .unwrap_or(&target.canonical_path),
         TargetScope::Global => &target.canonical_path,
     };
+    let bundle = if target.scope == TargetScope::Global {
+        ctx.bundle_plan(target)?
+    } else {
+        None
+    };
     for view in &target.views {
         println!("to: {}\t{}", view.label, view.path);
         let mut summary = PromotionSummary::default();
-        for entry in view::view_status(view_root, view)? {
+        let drift = match &bundle {
+            Some(bundle) => view::view_status_with_expected(
+                bundle.expected_links(),
+                view,
+                ViewSyncOptions {
+                    link_strategy: LinkStrategy::Symlink,
+                    ..ViewSyncOptions::default()
+                },
+            )?,
+            None => view::view_status(view_root, view)?,
+        };
+        for entry in drift {
             if entry.kind != DriftKind::NonSymlink {
                 continue;
             }

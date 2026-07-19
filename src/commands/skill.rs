@@ -74,6 +74,7 @@ pub fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
 pub fn new(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()> {
     let target = ctx.target(&skill_path.scope)?;
     ensure_canonical_clean(ctx, &target)?;
+    ensure_manifest_mutation_allowed(&target, &skill_path.skill, "create")?;
     let path = target.canonical_path.join(&skill_path.skill);
     if path.exists() {
         bail!("skill `{}` already exists at {path}", skill_path.skill);
@@ -95,6 +96,7 @@ pub fn new(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()>
 pub fn delete(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()> {
     let target = ctx.target(&skill_path.scope)?;
     ensure_canonical_clean(ctx, &target)?;
+    ensure_manifest_mutation_allowed(&target, &skill_path.skill, "delete")?;
     let path = target.canonical_path.join(&skill_path.skill);
     ensure_skill_exists(skill_path, &path)?;
     if ctx.dry_run {
@@ -117,6 +119,8 @@ pub fn rename(
 ) -> Result<()> {
     let target = ctx.target(&skill_path.scope)?;
     ensure_canonical_clean(ctx, &target)?;
+    ensure_manifest_mutation_allowed(&target, &skill_path.skill, "rename")?;
+    ensure_manifest_mutation_allowed(&target, new, "rename destination")?;
     let src = target.canonical_path.join(&skill_path.skill);
     let dest = target.canonical_path.join(new);
     ensure_skill_exists(skill_path, &src)?;
@@ -149,6 +153,8 @@ pub fn move_skill(
     let to = ctx.target(to_scope)?;
     ensure_canonical_clean(ctx, &from)?;
     ensure_canonical_clean(ctx, &to)?;
+    ensure_manifest_mutation_allowed(&from, &from_path.skill, "move")?;
+    ensure_manifest_mutation_allowed(&to, as_name.unwrap_or(&from_path.skill), "move destination")?;
     let src = from.canonical_path.join(&from_path.skill);
     let dest = to.canonical_path.join(as_name.unwrap_or(&from_path.skill));
     ensure_skill_exists(from_path, &src)?;
@@ -190,16 +196,34 @@ fn sync_after_mutation(ctx: &Context, scope: &Scope, allow_delete: bool) -> Resu
     let target = ctx.target(scope)?;
     match scope {
         Scope::Global => {
-            for view in &target.views {
-                materialize_view_with_options(
-                    &target.canonical_path,
-                    view,
-                    ViewSyncOptions {
-                        allow_delete,
-                        link_strategy: target.link_strategy,
-                        ..ViewSyncOptions::default()
-                    },
-                )?;
+            if let Some(bundle) = ctx.bundle_plan(&target)? {
+                if target.link_strategy != crate::link::LinkStrategy::Symlink {
+                    bail!("Skillnet manifest bundles require symlink views");
+                }
+                bundle.materialize()?;
+                for view in &target.views {
+                    crate::view::materialize_view_with_expected(
+                        bundle.expected_links(),
+                        view,
+                        ViewSyncOptions {
+                            allow_delete,
+                            link_strategy: crate::link::LinkStrategy::Symlink,
+                            ..ViewSyncOptions::default()
+                        },
+                    )?;
+                }
+            } else {
+                for view in &target.views {
+                    materialize_view_with_options(
+                        &target.canonical_path,
+                        view,
+                        ViewSyncOptions {
+                            allow_delete,
+                            link_strategy: target.link_strategy,
+                            ..ViewSyncOptions::default()
+                        },
+                    )?;
+                }
             }
         }
         Scope::Project(_) => {
@@ -212,6 +236,23 @@ fn sync_after_mutation(ctx: &Context, scope: &Scope, allow_delete: bool) -> Resu
                 },
             )?;
         }
+    }
+    Ok(())
+}
+
+fn ensure_manifest_mutation_allowed(
+    target: &crate::model::Target,
+    skill: &str,
+    operation: &str,
+) -> Result<()> {
+    let Some(manifest) = crate::manifest::load(&target.canonical_path)? else {
+        return Ok(());
+    };
+    if manifest.document.skills.contains_key(skill) {
+        bail!(
+            "cannot {operation} manifest-managed skill `{skill}`; update {} first",
+            manifest.path
+        );
     }
     Ok(())
 }

@@ -4,6 +4,7 @@
 //! The supported interface in `0.6.0` is the `skillnet` binary. This crate
 //! does not commit to a stable embeddable Rust API yet.
 
+pub(crate) mod bundle;
 pub mod calibration;
 mod catalog;
 pub mod cli;
@@ -12,6 +13,7 @@ mod config;
 pub mod exit;
 mod fs_ops;
 pub mod link;
+pub(crate) mod manifest;
 pub mod mirror;
 pub mod model;
 mod vcs;

@@ -177,17 +177,18 @@ in
     ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.catalog.toml ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
     test -f ${homeDirectory}/.config/skillnet/skillnet.toml
     test -f ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
-    grep -F "mirror_root = '${skillsRoot}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "skills_root = '${skillsRoot}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "backend = 'sqlite'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "label = 'claude'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "label = 'agents'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "name = 'myproject'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "path = '${declarativeProject}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'mirror_root = "'${skillsRoot}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'skills_root = "'${skillsRoot}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'data_dir = "'${dataDir}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'backend = "sqlite"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'label = "claude"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'label = "agents"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'name = "myproject"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'path = "'${declarativeProject}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F "[subscriptions.ai-skills]" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "url = 'ssh://git@codeberg.org/caniko/ai-skills.git'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "target = '${declarativeSubscriptionTarget}'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "delete_policy = 'keep'" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'url = "ssh://git@codeberg.org/caniko/ai-skills.git"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'target = "'${declarativeSubscriptionTarget}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'delete_policy = "keep"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     ! grep -F "sync_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     ! grep -F "stale_codex_skill_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
 

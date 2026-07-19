@@ -22,6 +22,7 @@
   generatedSettings =
     (cfg.settings or {})
     // {
+      data_dir = cfg.dataDir;
       database = generatedDatabaseSettings;
     }
     // lib.optionalAttrs (cfg.mirrorRoot != null) {
@@ -67,7 +68,7 @@ in {
     dataDir = lib.mkOption {
       type = lib.types.str;
       default = "${config.xdg.dataHome}/skillnet";
-      description = "Root data directory for skillnet; per-skill calibration databases live under <dataDir>/<skill>/.";
+      description = "Root data directory for skillnet; generated bundles and local calibration data live below it.";
     };
 
     mirrorRoot = lib.mkOption {

@@ -55,33 +55,44 @@ pub fn run(ctx: &Context, scopes: &[Scope], format: StatusFormat) -> Result<()> 
 fn status_rows(ctx: &Context, scopes: &[Scope]) -> Result<Vec<StatusRow>> {
     ctx.targets(scopes)?
         .into_iter()
-        .map(status_row)
+        .map(|target| status_row(ctx, target))
         .collect::<Result<Vec<_>>>()
 }
 
-fn status_row(target: Target) -> Result<StatusRow> {
+fn status_row(ctx: &Context, target: Target) -> Result<StatusRow> {
     warn_legacy_project_layout(&target);
     let skill_count = crate::mirror::mirror_skill_dirs(&target.canonical_path)
         .map(|skills| skills.len())
         .unwrap_or(0);
     let drift = match target.scope {
-        TargetScope::Global => target
-            .views
-            .iter()
-            .map(|view| {
-                crate::view::view_status_with_options(
-                    &target.canonical_path,
-                    view,
-                    crate::view::ViewSyncOptions {
-                        link_strategy: target.link_strategy,
-                        ..crate::view::ViewSyncOptions::default()
-                    },
-                )
-            })
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>(),
+        TargetScope::Global => {
+            let bundle = ctx.bundle_plan(&target)?;
+            target
+                .views
+                .iter()
+                .map(|view| match &bundle {
+                    Some(bundle) => crate::view::view_status_with_expected(
+                        bundle.expected_links(),
+                        view,
+                        crate::view::ViewSyncOptions {
+                            link_strategy: crate::link::LinkStrategy::Symlink,
+                            ..crate::view::ViewSyncOptions::default()
+                        },
+                    ),
+                    None => crate::view::view_status_with_options(
+                        &target.canonical_path,
+                        view,
+                        crate::view::ViewSyncOptions {
+                            link_strategy: target.link_strategy,
+                            ..crate::view::ViewSyncOptions::default()
+                        },
+                    ),
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+        }
         TargetScope::Project => crate::view::project_status(&target)?,
     };
     let promotion_status = promotion_status_counts(&drift);

@@ -61,7 +61,7 @@ pub fn lint(ctx: &Context) -> Result<Vec<Issue>> {
     for target in ctx.all_targets()? {
         warn_legacy_project_layout(&target);
         match target.scope {
-            TargetScope::Global => check_global(&target, &mut issues)?,
+            TargetScope::Global => check_global(ctx, &target, &mut issues)?,
             TargetScope::Project => check_project(&target, &mut issues)?,
         }
     }
@@ -80,7 +80,7 @@ fn warn_legacy_project_layout(target: &Target) {
     }
 }
 
-fn check_global(target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
+fn check_global(ctx: &Context, target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
     if !target.canonical_path.is_dir() {
         issue(
             issues,
@@ -96,8 +96,157 @@ fn check_global(target: &Target, issues: &mut Vec<Issue>) -> Result<()> {
 
     let canonical_real = canonicalize_utf8(&target.canonical_path)?;
     let canonical_skills = canonical_skill_names(&target.canonical_path)?;
+    let bundle = crate::bundle::plan(&target.canonical_path, &target.name, &ctx.data_dir)?;
+    if let Some(bundle) = &bundle {
+        check_bundle_materialization(target, bundle, issues)?;
+    }
     for view in &target.views {
-        check_global_view(target, view, &canonical_real, &canonical_skills, issues)?;
+        if let Some(bundle) = &bundle {
+            check_bundle_view(target, view, bundle, issues)?;
+        } else {
+            check_global_view(target, view, &canonical_real, &canonical_skills, issues)?;
+        }
+    }
+    Ok(())
+}
+
+fn check_bundle_materialization(
+    target: &Target,
+    bundle: &crate::bundle::BundlePlan,
+    issues: &mut Vec<Issue>,
+) -> Result<()> {
+    if !bundle.bundle_root.is_dir() {
+        issue(
+            issues,
+            target,
+            Severity::Error,
+            format!(
+                "generated bundle root {} is missing; run `skillnet view sync`",
+                bundle.bundle_root
+            ),
+        );
+        return Ok(());
+    }
+    for skill in bundle.skill_names() {
+        let path = bundle.bundle_root.join(skill);
+        if !path.is_dir() || !path.join("SKILL.md").is_file() {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!("generated bundle for `{skill}` is missing at {path}"),
+            );
+        }
+        for dependency in bundle.dependencies(skill).unwrap_or(&[]) {
+            let link = path.join(".skillnet/deps").join(dependency);
+            if !link.is_symlink() {
+                issue(
+                    issues,
+                    target,
+                    Severity::Error,
+                    format!(
+                        "generated dependency `{skill}` -> `{dependency}` is missing at {link}"
+                    ),
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_bundle_view(
+    target: &Target,
+    view: &ViewTarget,
+    bundle: &crate::bundle::BundlePlan,
+    issues: &mut Vec<Issue>,
+) -> Result<()> {
+    if !view.path.is_dir() {
+        issue(
+            issues,
+            target,
+            Severity::Error,
+            format!(
+                "view `{}` at {} is missing or not a directory",
+                view.label, view.path
+            ),
+        );
+        return Ok(());
+    }
+    let expected = bundle.expected_links();
+    let mut entries = BTreeSet::new();
+    for entry in read_dir_utf8(&view.path)? {
+        let name = entry_name(&entry)?;
+        entries.insert(name.clone());
+        let metadata = fs::symlink_metadata(&entry)
+            .with_context(|| format!("failed to inspect view entry {entry}"))?;
+        if !metadata.file_type().is_symlink() {
+            issue_non_symlink(
+                issues,
+                target,
+                &bundle.bundle_root.join(&name),
+                &entry,
+                format!(
+                    "bundle view `{}` entry `{name}` is not a symlink: {entry}",
+                    view.label
+                ),
+            );
+            continue;
+        }
+        let Some(expected_target) = expected.get(&name) else {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "bundle view `{}` exposes non-entrypoint `{name}`",
+                    view.label
+                ),
+            );
+            continue;
+        };
+        match (
+            canonicalize_utf8(&entry),
+            canonicalize_utf8(expected_target),
+        ) {
+            (Ok(actual), Ok(expected_real)) if actual == expected_real => {}
+            (Ok(actual), Ok(expected_real)) => issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "bundle view `{}` entry `{name}` points to {actual}, expected {expected_real}",
+                    view.label
+                ),
+            ),
+            (Err(err), _) => issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "bundle view `{}` entry `{name}` is broken: {err}",
+                    view.label
+                ),
+            ),
+            (_, Err(err)) => issue(
+                issues,
+                target,
+                Severity::Error,
+                format!("generated bundle target `{name}` is unavailable: {err}"),
+            ),
+        }
+    }
+    for name in expected.keys() {
+        if !entries.contains(name) {
+            issue(
+                issues,
+                target,
+                Severity::Error,
+                format!(
+                    "entrypoint `{name}` is missing from bundle view `{}`",
+                    view.label
+                ),
+            );
+        }
     }
     Ok(())
 }

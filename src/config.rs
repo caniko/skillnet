@@ -15,6 +15,9 @@ pub const DEFAULT_PROJECT_WORKING_COPY_REL: &str = ".agents/skills";
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub global: GlobalConfig,
+    /// Runtime data directory for generated bundles and local state.
+    #[serde(default)]
+    pub data_dir: Option<String>,
     pub skills_root: Option<String>,
     pub mirror_root: Option<String>,
     #[serde(default)]
@@ -651,6 +654,20 @@ bogus = true
         )
         .unwrap_err();
         assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn accepts_explicit_runtime_data_dir() {
+        let config: Config = toml::from_str(
+            r#"
+data_dir = "/var/lib/skillnet"
+
+[global]
+views = []
+"#,
+        )
+        .unwrap();
+        assert_eq!(config.data_dir.as_deref(), Some("/var/lib/skillnet"));
     }
 
     #[test]

@@ -185,11 +185,19 @@ pub fn materialize_view_with_options(
     options: ViewSyncOptions,
 ) -> Result<ViewSyncSummary> {
     let expected = expected_skill_links(canonical)?;
+    materialize_view_with_expected(&expected, view, options)
+}
+
+pub fn materialize_view_with_expected(
+    expected: &BTreeMap<String, Utf8PathBuf>,
+    view: &ViewTarget,
+    options: ViewSyncOptions,
+) -> Result<ViewSyncSummary> {
     fs::create_dir_all(&view.path)
         .with_context(|| format!("failed to create view directory {}", view.path))?;
 
     let mut summary = ViewSyncSummary::default();
-    for (skill, target) in &expected {
+    for (skill, target) in expected {
         let link = view.path.join(skill);
         if options.link_strategy == LinkStrategy::Hardlink {
             match hardlink_dir_status(target, &link)
@@ -554,9 +562,17 @@ pub fn view_status_with_options(
     options: ViewSyncOptions,
 ) -> Result<Vec<DriftEntry>> {
     let expected = expected_skill_links(canonical)?;
+    view_status_with_expected(&expected, view, options)
+}
+
+pub fn view_status_with_expected(
+    expected: &BTreeMap<String, Utf8PathBuf>,
+    view: &ViewTarget,
+    options: ViewSyncOptions,
+) -> Result<Vec<DriftEntry>> {
     let mut drift = Vec::new();
 
-    for (skill, target) in &expected {
+    for (skill, target) in expected {
         let link = view.path.join(skill);
         if options.link_strategy == LinkStrategy::Hardlink {
             let status = hardlink_dir_status(target, &link)
@@ -573,7 +589,7 @@ pub fn view_status_with_options(
                 drift.push(DriftEntry {
                     skill: skill.clone(),
                     kind,
-                    expected: Some(target.clone()),
+                    expected: Some(target.to_path_buf()),
                     actual: fs::symlink_metadata(&link).ok().map(|_| link.clone()),
                     view_mtime_nanos: None,
                     canonical_mtime_nanos: None,
@@ -706,7 +722,16 @@ pub fn view_diff_with_options(
     view: &ViewTarget,
     options: ViewSyncOptions,
 ) -> Result<Vec<FileDelta>> {
-    view_status_with_options(canonical, view, options).map(|entries| {
+    let expected = expected_skill_links(canonical)?;
+    view_diff_with_expected(&expected, view, options)
+}
+
+pub fn view_diff_with_expected(
+    expected: &BTreeMap<String, Utf8PathBuf>,
+    view: &ViewTarget,
+    options: ViewSyncOptions,
+) -> Result<Vec<FileDelta>> {
+    view_status_with_expected(expected, view, options).map(|entries| {
         entries
             .into_iter()
             .map(|entry| FileDelta {

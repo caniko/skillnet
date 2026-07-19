@@ -12,6 +12,7 @@ pub struct Context {
     pub catalog_config_path: Utf8PathBuf,
     pub config: Config,
     pub mirror_root: Utf8PathBuf,
+    pub data_dir: Utf8PathBuf,
     pub dry_run: bool,
     pub allow_dirty_destination: bool,
 }
@@ -26,12 +27,20 @@ impl Context {
     ) -> Result<Self> {
         let config = Config::load(config_path)?;
         let mirror_root = crate::cli::resolve_mirror_root(&config, mirror_root)?;
+        let data_dir =
+            match config.data_dir.as_deref() {
+                Some(path) => crate::config::expand_path(path)?,
+                None => Utf8PathBuf::from_path_buf(crate::config::default_data_dir()).map_err(
+                    |path| anyhow::anyhow!("skillnet data directory is not UTF-8: {path:?}"),
+                )?,
+            };
 
         Ok(Self {
             config_path: config_path.to_path_buf(),
             catalog_config_path: catalog_config_path.to_path_buf(),
             config,
             mirror_root,
+            data_dir,
             dry_run,
             allow_dirty_destination,
         })
@@ -74,5 +83,9 @@ impl Context {
             .projects
             .iter()
             .find(|project| project.name == name)
+    }
+
+    pub(crate) fn bundle_plan(&self, target: &Target) -> Result<Option<crate::bundle::BundlePlan>> {
+        crate::bundle::plan(&target.canonical_path, &target.name, &self.data_dir)
     }
 }

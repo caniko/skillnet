@@ -10,9 +10,9 @@ use crate::{
     link::LinkStrategy,
     model::{Target, ViewTarget},
     view::{
-        self, materialize_view_with_options, materialize_view_with_promotion, DriftEntry,
-        DriftKind, FileDeltaKind, PromotionOptions, PromotionSummary, ReconcileOutcome,
-        ViewSyncOptions, ViewSyncSummary,
+        self, materialize_view_with_expected, materialize_view_with_options,
+        materialize_view_with_promotion, DriftEntry, DriftKind, FileDeltaKind, PromotionOptions,
+        PromotionSummary, ReconcileOutcome, ViewSyncOptions, ViewSyncSummary,
     },
 };
 
@@ -25,22 +25,23 @@ pub fn sync(
     let target = ctx
         .config
         .global_target_with_link_override(&ctx.mirror_root, link_strategy)?;
+    let bundle = prepare_bundle(ctx, &target)?;
     if ctx.dry_run {
-        print_dry_run(&target, allow_delete, force);
+        print_dry_run(&target, allow_delete, force, bundle.as_ref());
         return Ok(());
     }
 
     for view in &target.views {
-        let summary = materialize_view_with_options(
-            &target.canonical_path,
-            view,
-            ViewSyncOptions {
-                allow_delete,
-                force,
-                link_strategy: target.link_strategy,
-                ..ViewSyncOptions::default()
-            },
-        )?;
+        let options = ViewSyncOptions {
+            allow_delete,
+            force,
+            link_strategy: target.link_strategy,
+            ..ViewSyncOptions::default()
+        };
+        let summary = match &bundle {
+            Some(bundle) => materialize_view_with_expected(bundle.expected_links(), view, options)?,
+            None => materialize_view_with_options(&target.canonical_path, view, options)?,
+        };
         println!(
             "{}  {}",
             view.label,
@@ -65,8 +66,29 @@ pub fn sync_with_promotion(
     let target = ctx
         .config
         .global_target_with_link_override(&ctx.mirror_root, link_strategy)?;
+    let bundle = prepare_bundle(ctx, &target)?;
     if ctx.dry_run {
-        return print_promotion_dry_run(&target, allow_delete, force);
+        return print_promotion_dry_run(&target, allow_delete, force, bundle.as_ref());
+    }
+    if let Some(bundle) = &bundle {
+        for view in &target.views {
+            let summary = materialize_view_with_expected(
+                bundle.expected_links(),
+                view,
+                ViewSyncOptions {
+                    allow_delete,
+                    force,
+                    link_strategy: LinkStrategy::Symlink,
+                    ..ViewSyncOptions::default()
+                },
+            )?;
+            println!(
+                "{}  {} (bundle; promotion disabled)",
+                view.label,
+                format_view_summary(&view.path, &summary)
+            );
+        }
+        return Ok(());
     }
 
     let options = PromotionOptions {
@@ -134,23 +156,43 @@ fn print_promotion_summary(view: &ViewTarget, summary: &PromotionSummary) {
     }
 }
 
-fn print_promotion_dry_run(target: &Target, allow_delete: bool, force: bool) -> Result<()> {
+fn print_promotion_dry_run(
+    target: &Target,
+    allow_delete: bool,
+    force: bool,
+    bundle: Option<&crate::bundle::BundlePlan>,
+) -> Result<()> {
     println!("# view sync global (adopt + back-sync)");
     println!("from: {}", target.canonical_path);
     println!("allow_delete: {allow_delete}");
     println!("force: {force}");
     println!("apply_promote: true");
     println!("adopt_new: true");
+    if let Some(bundle) = bundle {
+        println!("bundle_root: {}", bundle.bundle_root);
+        println!("bundle_mode: promotion disabled; generated bundles are read-only");
+    }
     for view in &target.views {
         println!("to: {}\t{}", view.label, view.path);
-        for entry in view::view_status_with_options(
-            &target.canonical_path,
-            view,
-            ViewSyncOptions {
-                link_strategy: target.link_strategy,
-                ..ViewSyncOptions::default()
-            },
-        )? {
+        let drift = match bundle {
+            Some(bundle) => view::view_status_with_expected(
+                bundle.expected_links(),
+                view,
+                ViewSyncOptions {
+                    link_strategy: LinkStrategy::Symlink,
+                    ..ViewSyncOptions::default()
+                },
+            )?,
+            None => view::view_status_with_options(
+                &target.canonical_path,
+                view,
+                ViewSyncOptions {
+                    link_strategy: target.link_strategy,
+                    ..ViewSyncOptions::default()
+                },
+            )?,
+        };
+        for entry in drift {
             println!(
                 "  {}",
                 describe_dry_run_action(view, &entry, allow_delete, force)
@@ -207,16 +249,27 @@ fn describe_dry_run_action(
 
 pub fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
     let target = ctx.config.global_target(&ctx.mirror_root)?;
+    let bundle = ctx.bundle_plan(&target)?;
     let mut rows = Vec::new();
     for view in &target.views {
-        let drift = view::view_status_with_options(
-            &target.canonical_path,
-            view,
-            ViewSyncOptions {
-                link_strategy: target.link_strategy,
-                ..ViewSyncOptions::default()
-            },
-        )?;
+        let drift = match &bundle {
+            Some(bundle) => view::view_status_with_expected(
+                bundle.expected_links(),
+                view,
+                ViewSyncOptions {
+                    link_strategy: LinkStrategy::Symlink,
+                    ..ViewSyncOptions::default()
+                },
+            )?,
+            None => view::view_status_with_options(
+                &target.canonical_path,
+                view,
+                ViewSyncOptions {
+                    link_strategy: target.link_strategy,
+                    ..ViewSyncOptions::default()
+                },
+            )?,
+        };
         let promotion_status = promotion_status_counts(&drift);
         rows.push(ViewStatusRow {
             label: view.label.clone(),
@@ -250,16 +303,27 @@ pub fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
 
 pub fn diff(ctx: &Context) -> Result<()> {
     let target = ctx.config.global_target(&ctx.mirror_root)?;
+    let bundle = ctx.bundle_plan(&target)?;
     for view in &target.views {
         println!("# {}", view.label);
-        let deltas = view::view_diff_with_options(
-            &target.canonical_path,
-            view,
-            ViewSyncOptions {
-                link_strategy: target.link_strategy,
-                ..ViewSyncOptions::default()
-            },
-        )?;
+        let deltas = match &bundle {
+            Some(bundle) => view::view_diff_with_expected(
+                bundle.expected_links(),
+                view,
+                ViewSyncOptions {
+                    link_strategy: LinkStrategy::Symlink,
+                    ..ViewSyncOptions::default()
+                },
+            )?,
+            None => view::view_diff_with_options(
+                &target.canonical_path,
+                view,
+                ViewSyncOptions {
+                    link_strategy: target.link_strategy,
+                    ..ViewSyncOptions::default()
+                },
+            )?,
+        };
         if deltas.is_empty() {
             println!("clean");
             continue;
@@ -283,14 +347,39 @@ pub(crate) fn format_view_summary(path: &camino::Utf8Path, summary: &ViewSyncSum
     )
 }
 
-fn print_dry_run(target: &Target, allow_delete: bool, force: bool) {
+fn print_dry_run(
+    target: &Target,
+    allow_delete: bool,
+    force: bool,
+    bundle: Option<&crate::bundle::BundlePlan>,
+) {
     println!("# view sync global");
     println!("from: {}", target.canonical_path);
     println!("allow_delete: {allow_delete}");
     println!("force: {force}");
+    if let Some(bundle) = bundle {
+        println!("bundle_root: {}", bundle.bundle_root);
+        println!("bundle_mode: generated bundles; exposed entrypoints only");
+    }
     for view in &target.views {
         println!("to: {}\t{}", view.label, view.path);
     }
+}
+
+fn prepare_bundle(ctx: &Context, target: &Target) -> Result<Option<crate::bundle::BundlePlan>> {
+    let plan = ctx.bundle_plan(target)?;
+    let Some(plan) = plan else { return Ok(None) };
+    if target.link_strategy != LinkStrategy::Symlink {
+        anyhow::bail!(
+            "Skillnet manifest bundles require symlink views; target `{}` is configured for {:?}",
+            target.name,
+            target.link_strategy
+        );
+    }
+    if !ctx.dry_run {
+        plan.materialize()?;
+    }
+    Ok(Some(plan))
 }
 
 fn drift_marker(kind: DriftKind) -> char {

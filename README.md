@@ -100,7 +100,8 @@ programs.skillnet.skillsRoot = "/data/nvme0/can/canix/projects/repos/owned/codeb
 
 When configured, the module writes `skills_root` into `skillnet.toml`, exports
 `AI_SKILLS_REPO` for compatibility. `skillsRoot` points at the skills checkout
-and VCS working tree; `dataDir` remains skillnet's runtime database location.
+and VCS working tree; `dataDir` is the runtime data location for bundles and
+local calibration state.
 
 Postgres is the default calibration backend and requires a connection URL.
 SQLite is also supported by selecting it explicitly:
@@ -135,7 +136,7 @@ skillnet hook install
 Options:
 
 - `programs.skillnet.dataDir` defaults to `${config.xdg.dataHome}/skillnet`.
-  This is skillnet's runtime database location.
+  This is skillnet's runtime data location, including generated bundles.
 - `programs.skillnet.skillsRoot` sets `skills_root` in generated
   `skillnet.toml`, exports `AI_SKILLS_REPO` for compatibility, and is the
   canonical mirror destination/VCS working tree; atlas uses
@@ -150,6 +151,8 @@ Options:
 - `programs.skillnet.database.url` is written into generated `skillnet.toml`
   when `settings` is declared, or exported as `SKILLNET_DATABASE_URL` for
   user-managed config.
+- `programs.skillnet.dataDir` is written as `data_dir`, so generated bundles
+  use the same runtime location for SQLite and Postgres setups.
 - `programs.skillnet.database.urlFile` reads a Postgres URL from a file at
   shell initialization time.
 - `programs.skillnet.settings` and `programs.skillnet.catalogSettings` render
@@ -181,6 +184,43 @@ The `path` key is optional. Without it, `skillnet` uses
 `$skillnet_DATA_DIR/multi-phase-plan/calibration.sqlite`,
 `$SKILLNET_DATA_DIR/multi-phase-plan/calibration.sqlite`, or
 `$XDG_DATA_HOME/skillnet/multi-phase-plan/calibration.sqlite`.
+
+## Pkl skill manifests and bundles
+
+An optional `Skillnet.pkl` at the root of a canonical skill store enables
+manifest-driven composition. It is evaluated by the Rust `pklr` integration
+with local imports confined to that store; environment, network, temporary
+directory, and glob access are disabled.
+
+The manifest declares `schemaVersion = 1` and a `skills` mapping. Skills not
+listed in the mapping remain entrypoints. Listed skills may use `role =
+"entrypoint"` or `role = "reference"` and may name other skills in
+`dependencies`. `defaultDependencies` applies to canonical skills that do not
+need a special dependency list:
+
+```pkl
+class Skill {
+  role: String = "entrypoint"
+  dependencies: Listing<String> = new {}
+  source: String? = null
+}
+
+schemaVersion = 1
+defaultDependencies = List("graphify-policy")
+skills: Mapping<String, Skill> = new {
+  ["fix-loop"] = new { dependencies = List("fix-loop-ref") }
+  ["fix-loop-ref"] = new {
+    role = "reference"
+    source = "fix-loop/references/repair-contract.md"
+  }
+}
+```
+
+For a manifest-enabled scope, `skillnet` materialises generated bundles under
+`<dataDir>/bundles/<scope>`. Views expose only entrypoints; dependencies are
+available inside each generated bundle at `.skillnet/deps/<skill>`. Bundle
+scopes require symlink views. Stores without `Skillnet.pkl` retain the legacy
+direct canonical-to-view behaviour.
 
 Select Postgres with an environment variable:
 
