@@ -149,6 +149,95 @@ impl BundlePlan {
             .map(|skill| skill.dependencies.as_slice())
     }
 
+    /// Return the canonical source file for a generated skill entrypoint.
+    pub fn entrypoint_source(&self, skill: &str) -> Option<Utf8PathBuf> {
+        self.skills.get(skill).map(|skill| {
+            if skill.source_is_file {
+                skill.source.clone()
+            } else {
+                skill.source.join("SKILL.md")
+            }
+        })
+    }
+
+    /// Check the generated bundle shape consumed by agent skill loaders.
+    ///
+    /// Entry-point files must be regular files. In particular, Codex ignores
+    /// a symlinked `SKILL.md`, even when the symlink resolves to valid content.
+    /// Dependency links remain symlinks and are checked separately below.
+    pub fn materialization_issues(&self) -> Result<Vec<String>> {
+        let mut issues = Vec::new();
+        if !self.bundle_root.is_dir() {
+            issues.push(format!(
+                "generated bundle root {} is missing; run `skillnet view sync`",
+                self.bundle_root
+            ));
+            return Ok(issues);
+        }
+
+        for skill in self.skill_names() {
+            let path = self.bundle_root.join(skill);
+            let path_metadata = match fs::symlink_metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    issues.push(format!(
+                        "generated bundle for `{skill}` is missing at {path}: {error}"
+                    ));
+                    continue;
+                }
+            };
+            if !path_metadata.file_type().is_dir() {
+                issues.push(format!(
+                    "generated bundle for `{skill}` is not a directory at {path}"
+                ));
+                continue;
+            }
+
+            let entrypoint = path.join("SKILL.md");
+            let entrypoint_metadata = match fs::symlink_metadata(&entrypoint) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    issues.push(format!(
+                        "generated entrypoint for `{skill}` is missing at {entrypoint}: {error}"
+                    ));
+                    continue;
+                }
+            };
+            if !entrypoint_metadata.file_type().is_file() {
+                issues.push(format!(
+                    "generated entrypoint for `{skill}` must be a regular file, not a symlink, at {entrypoint}"
+                ));
+                continue;
+            }
+
+            let source = self
+                .entrypoint_source(skill)
+                .expect("skill_names must come from the bundle plan");
+            match (fs::read(&entrypoint), fs::read(&source)) {
+                (Ok(generated), Ok(canonical)) if generated == canonical => {}
+                (Ok(_), Ok(_)) => issues.push(format!(
+                    "generated entrypoint for `{skill}` is stale at {entrypoint}; run `skillnet view sync`"
+                )),
+                (Err(error), _) => issues.push(format!(
+                    "generated entrypoint for `{skill}` could not be read at {entrypoint}: {error}"
+                )),
+                (_, Err(error)) => issues.push(format!(
+                    "canonical entrypoint for `{skill}` could not be read at {source}: {error}"
+                )),
+            }
+
+            for dependency in self.dependencies(skill).unwrap_or(&[]) {
+                let link = path.join(".skillnet/deps").join(dependency);
+                if !link.is_symlink() {
+                    issues.push(format!(
+                        "generated dependency `{skill}` -> `{dependency}` is missing at {link}"
+                    ));
+                }
+            }
+        }
+        Ok(issues)
+    }
+
     pub fn materialize(&self) -> Result<()> {
         fs::create_dir_all(&self.bundle_root)
             .with_context(|| format!("failed to create bundle root {}", self.bundle_root))?;
@@ -162,8 +251,8 @@ impl BundlePlan {
             fs::create_dir_all(&staging)
                 .with_context(|| format!("failed to create bundle staging directory {staging}"))?;
             if skill.source_is_file {
-                unix_fs::symlink(&skill.source, staging.join("SKILL.md"))
-                    .with_context(|| format!("failed to link source file {}", skill.source))?;
+                fs::copy(&skill.source, staging.join("SKILL.md"))
+                    .with_context(|| format!("failed to copy source file {}", skill.source))?;
             } else {
                 link_tree_children(&skill.source, &staging)?;
             }
@@ -221,8 +310,13 @@ fn link_tree_children(source: &Utf8Path, staging: &Utf8Path) -> Result<()> {
         let name = child
             .file_name()
             .context("canonical skill child has no final component")?;
-        unix_fs::symlink(&child, staging.join(name))
-            .with_context(|| format!("failed to link bundle child {child}"))?;
+        if name == "SKILL.md" {
+            fs::copy(&child, staging.join(name))
+                .with_context(|| format!("failed to copy bundle entrypoint {child}"))?;
+        } else {
+            unix_fs::symlink(&child, staging.join(name))
+                .with_context(|| format!("failed to link bundle child {child}"))?;
+        }
     }
     Ok(())
 }
@@ -378,7 +472,13 @@ skills: Mapping<String, Skill> = new {
         assert!(!plan.expected_links().contains_key("fix-loop-ref"));
         plan.materialize().unwrap();
 
-        assert!(plan.bundle_root.join("fix-loop/SKILL.md").is_symlink());
+        let entrypoint = plan.bundle_root.join("fix-loop/SKILL.md");
+        assert!(entrypoint.is_file());
+        assert!(!fs::symlink_metadata(&entrypoint)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(fs::read_to_string(entrypoint).unwrap(), "entrypoint");
         assert!(plan
             .bundle_root
             .join("fix-loop/.skillnet/deps/fix-loop-ref")
@@ -447,10 +547,12 @@ skills: Mapping<String, Skill> = new {
 
         let plan = plan(&root, "global", &data).unwrap().unwrap();
         plan.materialize().unwrap();
-        assert_eq!(
-            fs::read_link(plan.bundle_root.join("fix-loop-ref/SKILL.md")).unwrap(),
-            root.join("fix-loop/references/repair-contract.md")
-                .as_std_path()
-        );
+        let entrypoint = plan.bundle_root.join("fix-loop-ref/SKILL.md");
+        assert!(entrypoint.is_file());
+        assert!(!fs::symlink_metadata(&entrypoint)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(fs::read_to_string(entrypoint).unwrap(), "reference");
     }
 }

@@ -250,6 +250,11 @@ fn describe_dry_run_action(
 pub fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
     let target = ctx.config.global_target(&ctx.mirror_root)?;
     let bundle = ctx.bundle_plan(&target)?;
+    let bundle_issues = bundle
+        .as_ref()
+        .map(crate::bundle::BundlePlan::materialization_issues)
+        .transpose()?
+        .unwrap_or_default();
     let mut rows = Vec::new();
     for view in &target.views {
         let drift = match &bundle {
@@ -274,6 +279,7 @@ pub fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
         rows.push(ViewStatusRow {
             label: view.label.clone(),
             path: view.path.to_string(),
+            bundle_issues: bundle_issues.clone(),
             would_promote: promotion_status.would_promote,
             needs_tie_break: promotion_status.needs_tie_break,
             drift,
@@ -283,7 +289,16 @@ pub fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
     match format {
         StatusFormat::Text => {
             for row in &rows {
-                if row.drift.is_empty() {
+                if !row.bundle_issues.is_empty() {
+                    println!(
+                        "{}  bundle drift ({} issues)",
+                        row.label,
+                        row.bundle_issues.len()
+                    );
+                    for issue in &row.bundle_issues {
+                        println!("{}", issue);
+                    }
+                } else if row.drift.is_empty() {
                     println!("{}  clean", row.label);
                 } else {
                     println!("{}  drift ({} entries)", row.label, row.drift.len());
@@ -394,6 +409,7 @@ fn drift_marker(kind: DriftKind) -> char {
 struct ViewStatusRow {
     label: String,
     path: String,
+    bundle_issues: Vec<String>,
     would_promote: usize,
     needs_tie_break: usize,
     drift: Vec<DriftEntry>,

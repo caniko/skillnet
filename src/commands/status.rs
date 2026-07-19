@@ -32,15 +32,24 @@ pub fn run(ctx: &Context, scopes: &[Scope], format: StatusFormat) -> Result<()> 
     println!();
     println!("views:");
     for row in &rows {
-        let state = if row.drift_entries == 0 {
+        let state = if row.drift_entries == 0 && row.bundle_issues.is_empty() {
             "clean".to_string()
-        } else {
+        } else if row.bundle_issues.is_empty() {
             format!("drift ({} entries)", row.drift_entries)
+        } else {
+            format!(
+                "drift ({} view entries, {} bundle issues)",
+                row.drift_entries,
+                row.bundle_issues.len()
+            )
         };
         println!(
             "{}  {}  canonical {}  skills {}",
             row.scope, state, row.canonical_path, row.skill_count
         );
+        for issue in &row.bundle_issues {
+            println!("  {issue}");
+        }
     }
 
     println!();
@@ -64,6 +73,16 @@ fn status_row(ctx: &Context, target: Target) -> Result<StatusRow> {
     let skill_count = crate::mirror::mirror_skill_dirs(&target.canonical_path)
         .map(|skills| skills.len())
         .unwrap_or(0);
+    let bundle_issues = if target.scope == TargetScope::Global {
+        let bundle = ctx.bundle_plan(&target)?;
+        bundle
+            .as_ref()
+            .map(crate::bundle::BundlePlan::materialization_issues)
+            .transpose()?
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let drift = match target.scope {
         TargetScope::Global => {
             let bundle = ctx.bundle_plan(&target)?;
@@ -105,6 +124,7 @@ fn status_row(ctx: &Context, target: Target) -> Result<StatusRow> {
         canonical_path: target.canonical_path.to_string(),
         skill_count,
         drift_entries: drift.len(),
+        bundle_issues,
         would_promote: promotion_status.would_promote,
         needs_tie_break: promotion_status.needs_tie_break,
         drift,
@@ -199,6 +219,7 @@ struct StatusRow {
     canonical_path: String,
     skill_count: usize,
     drift_entries: usize,
+    bundle_issues: Vec<String>,
     would_promote: usize,
     needs_tie_break: usize,
     drift: Vec<DriftEntry>,

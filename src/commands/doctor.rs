@@ -115,41 +115,8 @@ fn check_bundle_materialization(
     bundle: &crate::bundle::BundlePlan,
     issues: &mut Vec<Issue>,
 ) -> Result<()> {
-    if !bundle.bundle_root.is_dir() {
-        issue(
-            issues,
-            target,
-            Severity::Error,
-            format!(
-                "generated bundle root {} is missing; run `skillnet view sync`",
-                bundle.bundle_root
-            ),
-        );
-        return Ok(());
-    }
-    for skill in bundle.skill_names() {
-        let path = bundle.bundle_root.join(skill);
-        if !path.is_dir() || !path.join("SKILL.md").is_file() {
-            issue(
-                issues,
-                target,
-                Severity::Error,
-                format!("generated bundle for `{skill}` is missing at {path}"),
-            );
-        }
-        for dependency in bundle.dependencies(skill).unwrap_or(&[]) {
-            let link = path.join(".skillnet/deps").join(dependency);
-            if !link.is_symlink() {
-                issue(
-                    issues,
-                    target,
-                    Severity::Error,
-                    format!(
-                        "generated dependency `{skill}` -> `{dependency}` is missing at {link}"
-                    ),
-                );
-            }
-        }
+    for message in bundle.materialization_issues()? {
+        issue(issues, target, Severity::Error, message);
     }
     Ok(())
 }
