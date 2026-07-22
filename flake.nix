@@ -155,6 +155,15 @@
 
       formatter = treefmtEval.config.build.wrapper;
 
+      hmModules = {
+        default = hmModule;
+        skillnet = hmModule;
+      };
+
+      lib = {
+        externalManifestSupport = true;
+      };
+
       checks = {
         default = package;
         formatting = fmtCheck;

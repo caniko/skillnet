@@ -28,6 +28,9 @@ pub struct Config {
     pub projects: Vec<ProjectConfig>,
     #[serde(default)]
     pub subscriptions: BTreeMap<String, SubscriptionConfig>,
+    /// Immutable, flake-provided Skillnet manifests merged into generated views.
+    #[serde(default, rename = "external_manifests", alias = "externalManifests")]
+    pub external_manifests: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]

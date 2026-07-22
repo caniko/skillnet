@@ -96,7 +96,18 @@ fn check_global(ctx: &Context, target: &Target, issues: &mut Vec<Issue>) -> Resu
 
     let canonical_real = canonicalize_utf8(&target.canonical_path)?;
     let canonical_skills = canonical_skill_names(&target.canonical_path)?;
-    let bundle = crate::bundle::plan(&target.canonical_path, &target.name, &ctx.data_dir)?;
+    let external = ctx
+        .config
+        .external_manifests
+        .iter()
+        .map(|path| crate::config::expand_path(path))
+        .collect::<Result<Vec<_>>>()?;
+    let bundle = crate::bundle::plan(
+        &target.canonical_path,
+        &target.name,
+        &ctx.data_dir,
+        &external,
+    )?;
     if let Some(bundle) = &bundle {
         check_bundle_materialization(target, bundle, issues)?;
     }
