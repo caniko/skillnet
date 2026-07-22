@@ -128,13 +128,17 @@ pub fn plan(
                         source: source_path,
                         source_is_file,
                         role: spec.role.clone(),
-                        dependencies: manifest
-                            .document
-                            .default_dependencies
-                            .iter()
-                            .cloned()
-                            .chain(spec.dependencies.iter().cloned())
-                            .collect(),
+                        dependencies: if *external {
+                            manifest
+                                .document
+                                .default_dependencies
+                                .iter()
+                                .cloned()
+                                .chain(spec.dependencies.iter().cloned())
+                                .collect()
+                        } else {
+                            spec.dependencies.clone()
+                        },
                     },
                 );
             }
@@ -588,6 +592,42 @@ skills: Mapping<String, Skill> = new {
             .file_type()
             .is_symlink());
         assert_eq!(fs::read_to_string(entrypoint).unwrap(), "reference");
+    }
+
+    #[test]
+    fn canonical_source_entries_do_not_inherit_default_dependencies() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().join("skills")).unwrap();
+        let data = Utf8PathBuf::from_path_buf(tmp.path().join("data")).unwrap();
+        fs::create_dir_all(root.join("entry")).unwrap();
+        fs::write(root.join("entry/SKILL.md"), "entrypoint").unwrap();
+        fs::write(root.join("entry/reference.md"), "reference").unwrap();
+        fs::write(
+            root.join(manifest::MANIFEST_FILE),
+            r#"
+class Skill {
+  role: String = "entrypoint"
+  dependencies: Listing<String> = new {}
+  source: String? = null
+}
+schemaVersion = 1
+defaultDependencies = List("hidden-ref")
+skills: Mapping<String, Skill> = new {
+  ["hidden-ref"] = new {
+    role = "reference"
+    source = "entry/reference.md"
+  }
+}
+"#,
+        )
+        .unwrap();
+
+        let plan = plan(&root, "global", &data, &[]).unwrap().unwrap();
+        assert!(plan.dependencies("hidden-ref").unwrap().is_empty());
+        assert_eq!(
+            plan.dependencies("entry").unwrap(),
+            &["hidden-ref".to_string()]
+        );
     }
 
     #[test]

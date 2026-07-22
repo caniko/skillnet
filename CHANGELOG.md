@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Canonical source-backed manifest entries no longer inherit global default
+  dependencies, preventing reference-only skills from depending on themselves.
 - `skillnet view sync` now adopts view-only skill directories into the canonical
   store and back-syncs them as symlinks instead of deleting them. Previously
   `view sync --allow-delete` removed authored directories that had no canonical
