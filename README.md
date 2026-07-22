@@ -198,6 +198,11 @@ listed in the mapping remain entrypoints. Listed skills may use `role =
 `dependencies`. `defaultDependencies` applies to canonical skills that do not
 need a special dependency list:
 
+Canonical manifest entries backed by `source` use their explicit
+`dependencies`; external manifests retain their own `defaultDependencies` for
+source-backed entries. This keeps reference-only source entries from
+accidentally depending on themselves through a global default.
+
 ```pkl
 class Skill {
   role: String = "entrypoint"
