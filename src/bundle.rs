@@ -35,34 +35,54 @@ pub fn plan(
     canonical: &Utf8Path,
     scope_name: &str,
     data_dir: &Utf8Path,
+    external_manifests: &[Utf8PathBuf],
 ) -> Result<Option<BundlePlan>> {
-    let Some(manifest) = manifest::load(canonical)? else {
+    let canonical_manifest = manifest::load(canonical)?;
+    let mut manifests = Vec::new();
+    if let Some(manifest) = canonical_manifest {
+        manifests.push((manifest, false));
+    }
+    for path in external_manifests {
+        let manifest = manifest::load_path(path)?
+            .with_context(|| format!("external Skillnet manifest does not exist: {path}"))?;
+        manifests.push((manifest, true));
+    }
+    if manifests.is_empty() {
         return Ok(None);
-    };
-    if !canonical.is_dir() {
+    }
+    if !canonical.is_dir() && manifests.iter().any(|(_, external)| !*external) {
         bail!("manifest canonical root does not exist or is not a directory: {canonical}");
     }
     validate_scope_name(scope_name)?;
 
-    let sources: BTreeMap<String, Utf8PathBuf> = mirror_skill_dirs(canonical)?
-        .into_iter()
-        .map(|path| {
-            let name = path
-                .file_name()
-                .context("canonical skill directory has no final component")?
-                .to_string();
-            Ok((name, path))
-        })
-        .collect::<Result<_>>()?;
-    validate_dependencies("manifest defaults", &manifest.document.default_dependencies)?;
+    let sources: BTreeMap<String, Utf8PathBuf> = if canonical.is_dir() {
+        mirror_skill_dirs(canonical)?
+            .into_iter()
+            .map(|path| {
+                let name = path
+                    .file_name()
+                    .context("canonical skill directory has no final component")?
+                    .to_string();
+                Ok((name, path))
+            })
+            .collect::<Result<_>>()?
+    } else {
+        BTreeMap::new()
+    };
 
     let mut skills = BTreeMap::new();
+    let canonical_manifest = manifests
+        .iter()
+        .find(|(_, external)| !*external)
+        .map(|(manifest, _)| manifest);
     for (name, source) in &sources {
-        let spec = manifest.document.skills.get(name);
+        let spec = canonical_manifest.and_then(|manifest| manifest.document.skills.get(name));
         let role = spec
             .map(|spec| spec.role.clone())
             .unwrap_or_else(|| "entrypoint".to_string());
-        let mut dependencies = manifest.document.default_dependencies.clone();
+        let mut dependencies = canonical_manifest
+            .map(|manifest| manifest.document.default_dependencies.clone())
+            .unwrap_or_default();
         if let Some(spec) = spec {
             dependencies.extend(spec.dependencies.iter().cloned());
         }
@@ -79,38 +99,52 @@ pub fn plan(
             },
         );
     }
-    for (name, spec) in &manifest.document.skills {
-        validate_skill_name(name, "manifest skill")?;
-        if !sources.contains_key(name) {
-            let Some(source) = &spec.source else {
-                bail!(
-                    "Skillnet manifest lists `{name}`, but no canonical skill directory exists and no source was provided"
+    for (manifest, external) in &manifests {
+        validate_dependencies("manifest defaults", &manifest.document.default_dependencies)?;
+        let manifest_root = manifest
+            .path
+            .parent()
+            .context("Skillnet manifest has no parent")?;
+        for (name, spec) in &manifest.document.skills {
+            validate_skill_name(name, "manifest skill")?;
+            if skills.contains_key(name) {
+                if *external {
+                    bail!("Skillnet manifest skill `{name}` is duplicated across manifests");
+                }
+            } else {
+                let Some(source) = &spec.source else {
+                    bail!(
+                        "Skillnet manifest lists `{name}`, but no canonical skill directory exists and no source was provided"
+                    );
+                };
+                let source_path = confined_source_path(manifest_root, source)?;
+                let source_is_file = source_path.is_file();
+                if !source_is_file && !source_path.is_dir() {
+                    bail!("Skillnet source for `{name}` is not a file or directory: {source_path}");
+                }
+                skills.insert(
+                    name.clone(),
+                    SkillBundle {
+                        source: source_path,
+                        source_is_file,
+                        role: spec.role.clone(),
+                        dependencies: manifest
+                            .document
+                            .default_dependencies
+                            .iter()
+                            .cloned()
+                            .chain(spec.dependencies.iter().cloned())
+                            .collect(),
+                    },
                 );
-            };
-            let source_path = confined_source_path(canonical, source)?;
-            if !source_path.is_file() {
-                bail!("Skillnet source for `{name}` is not a file: {source_path}");
             }
-            skills.insert(
-                name.clone(),
-                SkillBundle {
-                    source: source_path,
-                    source_is_file: true,
-                    role: spec.role.clone(),
-                    dependencies: spec.dependencies.clone(),
-                },
-            );
-        } else if let Some(source) = &spec.source {
-            let source_path = confined_source_path(canonical, source)?;
-            if !source_path.is_dir() {
-                bail!("Skillnet source for `{name}` is not a directory: {source_path}");
-            }
+            validate_role(name, &spec.role)?;
+            validate_dependencies(name, &spec.dependencies)?;
         }
-        validate_role(name, &spec.role)?;
-        validate_dependencies(name, &spec.dependencies)?;
     }
-    for (name, spec) in &manifest.document.skills {
-        for dependency in &spec.dependencies {
+    for (name, skill) in &skills {
+        validate_dependencies(name, &skill.dependencies)?;
+        for dependency in &skill.dependencies {
             if !skills.contains_key(dependency) {
                 bail!("Skillnet skill `{name}` depends on missing skill `{dependency}`");
             }
@@ -467,7 +501,7 @@ skills: Mapping<String, Skill> = new {
         )
         .unwrap();
 
-        let plan = plan(&root, "global", &data).unwrap().unwrap();
+        let plan = plan(&root, "global", &data, &[]).unwrap().unwrap();
         assert!(plan.expected_links().contains_key("fix-loop"));
         assert!(!plan.expected_links().contains_key("fix-loop-ref"));
         plan.materialize().unwrap();
@@ -505,7 +539,7 @@ skills: Mapping<String, Skill> = new {
         )
         .unwrap();
 
-        let error = plan(&root, "global", &data).unwrap_err().to_string();
+        let error = plan(&root, "global", &data, &[]).unwrap_err().to_string();
         assert!(
             error.contains("depends on missing skill `missing`"),
             "{error}"
@@ -545,7 +579,7 @@ skills: Mapping<String, Skill> = new {
         )
         .unwrap();
 
-        let plan = plan(&root, "global", &data).unwrap().unwrap();
+        let plan = plan(&root, "global", &data, &[]).unwrap().unwrap();
         plan.materialize().unwrap();
         let entrypoint = plan.bundle_root.join("fix-loop-ref/SKILL.md");
         assert!(entrypoint.is_file());
@@ -554,5 +588,45 @@ skills: Mapping<String, Skill> = new {
             .file_type()
             .is_symlink());
         assert_eq!(fs::read_to_string(entrypoint).unwrap(), "reference");
+    }
+
+    #[test]
+    fn external_manifest_materializes_store_directory_without_touching_canonical() {
+        let tmp = tempdir().unwrap();
+        let canonical = Utf8PathBuf::from_path_buf(tmp.path().join("canonical")).unwrap();
+        let bundle = Utf8PathBuf::from_path_buf(tmp.path().join("bundle")).unwrap();
+        let store = Utf8PathBuf::from_path_buf(tmp.path().join("store")).unwrap();
+        fs::create_dir_all(store.join("skills/openpencil-design")).unwrap();
+        fs::write(
+            store.join(manifest::MANIFEST_FILE),
+            r#"
+class Skill { role: String = "entrypoint"; source: String? = null }
+schemaVersion = 1
+skills: Mapping<String, Skill> = new {
+  ["openpencil-design"] = new { source = "skills/openpencil-design" }
+}
+"#,
+        )
+        .unwrap();
+        fs::write(
+            store.join("skills/openpencil-design/SKILL.md"),
+            "from immutable store",
+        )
+        .unwrap();
+
+        let plan = plan(
+            &canonical,
+            "global",
+            &bundle,
+            &[store.join(manifest::MANIFEST_FILE)],
+        )
+        .unwrap()
+        .unwrap();
+        plan.materialize().unwrap();
+        assert_eq!(
+            fs::read_to_string(plan.bundle_root.join("openpencil-design/SKILL.md")).unwrap(),
+            "from immutable store"
+        );
+        assert!(!canonical.exists());
     }
 }

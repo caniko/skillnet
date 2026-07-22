@@ -86,6 +86,17 @@ impl Context {
     }
 
     pub(crate) fn bundle_plan(&self, target: &Target) -> Result<Option<crate::bundle::BundlePlan>> {
-        crate::bundle::plan(&target.canonical_path, &target.name, &self.data_dir)
+        let external = self
+            .config
+            .external_manifests
+            .iter()
+            .map(|path| crate::config::expand_path(path))
+            .collect::<Result<Vec<_>>>()?;
+        crate::bundle::plan(
+            &target.canonical_path,
+            &target.name,
+            &self.data_dir,
+            &external,
+        )
     }
 }

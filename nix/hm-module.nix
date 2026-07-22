@@ -20,7 +20,9 @@
       url = cfg.database.url;
     };
   generatedSettings =
-    (cfg.settings or {})
+    ((cfg.settings or {}) // lib.optionalAttrs (cfg.settings == null) {
+      global = { views = []; };
+    })
     // {
       data_dir = cfg.dataDir;
       database = generatedDatabaseSettings;
@@ -30,6 +32,9 @@
     }
     // lib.optionalAttrs (cfg.skillsRoot != null) {
       skills_root = cfg.skillsRoot;
+    }
+    // lib.optionalAttrs (cfg.externalManifests != []) {
+      external_manifests = cfg.externalManifests;
     }
     // lib.optionalAttrs (cfg.subscriptions != {}) {
       subscriptions =
@@ -157,6 +162,18 @@ in {
       '';
     };
 
+    externalManifests = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = ''
+        Immutable Pkl Skillnet manifests supplied by downstream flakes.
+        Their roots are evaluated as capability boundaries and their skills
+        are materialised into generated bundles without modifying the
+        canonical mirror.
+      '';
+      example = ["${config.xdg.dataHome}/openpencil/Skillnet.pkl"];
+    };
+
     catalogSettings = lib.mkOption {
       type = lib.types.nullOr tomlFormat.type;
       default = null;
@@ -266,7 +283,7 @@ in {
       home.packages = [cfg.package];
     }
 
-    (lib.mkIf (cfg.settings != null || cfg.subscriptions != {}) {
+    (lib.mkIf (cfg.settings != null || cfg.subscriptions != {} || cfg.externalManifests != []) {
       xdg.enable = lib.mkDefault true;
       xdg.configFile."skillnet/skillnet.toml".source =
         tomlFormat.generate "skillnet.toml" generatedSettings;
@@ -324,6 +341,12 @@ in {
 
     (lib.mkIf (cfg.skillsRoot != null) {
       home.sessionVariables.AI_SKILLS_REPO = cfg.skillsRoot;
+    })
+
+    (lib.mkIf (cfg.externalManifests != []) {
+      home.activation.skillnetExternalBundles = lib.hm.dag.entryAfter ["writeBoundary"] ''
+        ${cfg.package}/bin/skillnet --allow-dirty-destination sync --scope global --no-promote --allow-delete
+      '';
     })
   ]);
 }

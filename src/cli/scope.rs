@@ -202,6 +202,7 @@ mod tests {
             mirror_root: None,
             database: DatabaseConfig::default(),
             subscriptions: Default::default(),
+            external_manifests: Default::default(),
             link_strategy: None,
             projects: project_names
                 .iter()

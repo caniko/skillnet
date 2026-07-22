@@ -46,7 +46,13 @@ pub struct Manifest {
 }
 
 pub fn load(canonical: &Utf8Path) -> Result<Option<Manifest>> {
-    let path = canonical.join(MANIFEST_FILE);
+    load_path(&canonical.join(MANIFEST_FILE))
+}
+
+/// Load a manifest from an explicit immutable bundle path. Evaluation is
+/// confined to the directory containing that manifest, so Pkl imports cannot
+/// reach the user's writable canonical mirror or the network.
+pub fn load_path(path: &Utf8Path) -> Result<Option<Manifest>> {
     if !path.exists() {
         return Ok(None);
     }
@@ -57,7 +63,7 @@ pub fn load(canonical: &Utf8Path) -> Result<Option<Manifest>> {
         .context("Skillnet manifest has no parent")?
         .as_std_path()
         .canonicalize()
-        .with_context(|| format!("failed to canonicalize manifest root {}", canonical))?;
+        .with_context(|| format!("failed to canonicalize manifest root {}", path))?;
     let manifest_path = path.as_std_path();
     let mut evaluator = pklr::Evaluator::with_capabilities(LocalCapabilities::new(root.clone()));
     evaluator.set_base_path(&root);
@@ -76,7 +82,10 @@ pub fn load(canonical: &Utf8Path) -> Result<Option<Manifest>> {
             document.schema_version
         );
     }
-    Ok(Some(Manifest { document, path }))
+    Ok(Some(Manifest {
+        document,
+        path: path.to_path_buf(),
+    }))
 }
 
 fn default_role() -> String {
