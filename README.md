@@ -1,7 +1,9 @@
 # skillnet
 
 <!-- simit:badges:start -->
+
 [![CI](https://img.shields.io/badge/CI-managed-2088ff)](.forgejo/workflows/ci.yaml) [![Nix](https://img.shields.io/badge/Nix-managed-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs) [![crates.io](https://img.shields.io/badge/crates.io-ready-f46623)](https://crates.io/crates/skillnet)
+
 <!-- simit:badges:end -->
 
 `skillnet` is a CLI for managing canonical AI skill stores, materialising derived agent views, and recording calibration data for `multi-phase-plan`.
@@ -51,6 +53,11 @@ Reports include every current catalog skill, including zero-use skills. A zero
 count is only evidence of non-use when the corresponding harness coverage has
 been healthy for the entire requested window. Events store metadata only;
 source-event IDs make adapter retries idempotent.
+
+Harness integrations such as Infernix own adapter and plugin installation.
+Skillnet remains the generic owner of canonical skills, materialised views,
+catalogs, and normalized usage events; it does not own external plugin
+payloads or harness-specific installation policy.
 
 ### Nix Home Manager
 
@@ -135,6 +142,8 @@ skillnet hook install
 
 Options:
 
+- `user` selects the principal used for schema-version-2 manifest access
+  filtering. It is optional for legacy unrestricted manifests.
 - `programs.skillnet.dataDir` defaults to `${config.xdg.dataHome}/skillnet`.
   This is skillnet's runtime data location, including generated bundles.
 - `programs.skillnet.skillsRoot` sets `skills_root` in generated
@@ -192,7 +201,7 @@ manifest-driven composition. It is evaluated by the Rust `pklr` integration
 with local imports confined to that store; environment, network, temporary
 directory, and glob access are disabled.
 
-The manifest declares `schemaVersion = 1` and a `skills` mapping. Skills not
+The manifest declares `schemaVersion = 1` or `schemaVersion = 2` and a `skills` mapping. Skills not
 listed in the mapping remain entrypoints. Listed skills may use `role =
 "entrypoint"` or `role = "reference"` and may name other skills in
 `dependencies`. `defaultDependencies` applies to canonical skills that do not
@@ -226,6 +235,28 @@ For a manifest-enabled scope, `skillnet` materialises generated bundles under
 available inside each generated bundle at `.skillnet/deps/<skill>`. Bundle
 scopes require symlink views. Stores without `Skillnet.pkl` retain the legacy
 direct canonical-to-view behaviour.
+
+Schema version 2 adds optional per-user materialisation. `defaultUsers` applies
+to skills whose `users` field is omitted; an omitted default keeps the manifest
+unrestricted for backwards compatibility. An explicit empty list denies every
+user. When a manifest declares access, the generated `skillnet.toml` must set
+`user`; the Home Manager module writes the current `home.username` there.
+Every dependency of a materialised skill must be granted to that user as well.
+
+```pkl
+class Skill {
+  role: String = "entrypoint"
+  dependencies: Listing<String> = new {}
+  users: Listing<String>? = null
+}
+
+schemaVersion = 2
+defaultUsers = List("can", "dejana")
+skills: Mapping<String, Skill> = new {
+  ["shared"] = new {}
+  ["admin-only"] = new { users = List("can") }
+}
+```
 
 Select Postgres with an environment variable:
 

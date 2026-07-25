@@ -180,6 +180,7 @@ in
     grep -F 'mirror_root = "'${skillsRoot}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'skills_root = "'${skillsRoot}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'data_dir = "'${dataDir}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'user = "skillnet-test"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'backend = "sqlite"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'label = "claude"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'label = "agents"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null

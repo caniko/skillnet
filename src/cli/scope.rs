@@ -197,6 +197,7 @@ mod tests {
                 canonical_path: None,
                 views: Vec::new(),
             },
+            user: None,
             data_dir: None,
             skills_root: None,
             mirror_root: None,

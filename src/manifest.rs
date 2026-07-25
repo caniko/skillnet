@@ -24,6 +24,8 @@ pub struct ManifestDocument {
     pub schema_version: u64,
     #[serde(rename = "defaultDependencies", default)]
     pub default_dependencies: Vec<String>,
+    #[serde(rename = "defaultUsers", default)]
+    pub default_users: Option<Vec<String>>,
     #[serde(default)]
     pub skills: BTreeMap<String, SkillSpec>,
 }
@@ -37,6 +39,8 @@ pub struct SkillSpec {
     pub dependencies: Vec<String>,
     #[serde(default)]
     pub source: Option<String>,
+    #[serde(default)]
+    pub users: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -56,7 +60,7 @@ pub fn load_path(path: &Utf8Path) -> Result<Option<Manifest>> {
     if !path.exists() {
         return Ok(None);
     }
-    let source = fs::read_to_string(&path)
+    let source = fs::read_to_string(path)
         .with_context(|| format!("failed to read Skillnet manifest {path}"))?;
     let root = path
         .parent()
@@ -76,16 +80,48 @@ pub fn load_path(path: &Utf8Path) -> Result<Option<Manifest>> {
         .map_err(|error| anyhow::anyhow!("failed to evaluate {path}: {error}"))?;
     let document: ManifestDocument = serde_json::from_value(value.to_json())
         .with_context(|| format!("invalid evaluated Skillnet manifest {path}"))?;
-    if document.schema_version != 1 {
+    if !matches!(document.schema_version, 1 | 2) {
         bail!(
-            "unsupported Skillnet manifest schemaVersion {} in {path}; expected 1",
+            "unsupported Skillnet manifest schemaVersion {} in {path}; expected 1 or 2",
             document.schema_version
         );
+    }
+    if document.schema_version == 1
+        && (document.default_users.is_some()
+            || document.skills.values().any(|skill| skill.users.is_some()))
+    {
+        bail!(
+            "Skillnet manifest {path} uses user access fields but declares schemaVersion 1; use schemaVersion 2"
+        );
+    }
+    validate_user_list(document.default_users.as_deref(), "defaultUsers", path)?;
+    for (name, skill) in &document.skills {
+        validate_user_list(
+            skill.users.as_deref(),
+            &format!("skill `{name}` users"),
+            path,
+        )?;
     }
     Ok(Some(Manifest {
         document,
         path: path.to_path_buf(),
     }))
+}
+
+fn validate_user_list(users: Option<&[String]>, field: &str, path: &Utf8Path) -> Result<()> {
+    let Some(users) = users else {
+        return Ok(());
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    for user in users {
+        if user.trim().is_empty() {
+            bail!("Skillnet manifest {path} has an empty username in {field}");
+        }
+        if !seen.insert(user) {
+            bail!("Skillnet manifest {path} lists duplicate username `{user}` in {field}");
+        }
+    }
+    Ok(())
 }
 
 fn default_role() -> String {
@@ -211,12 +247,72 @@ skills: Mapping<String, Skill> = new {
 
         let manifest = load(&root).unwrap().unwrap();
         assert_eq!(manifest.document.schema_version, 1);
+        assert_eq!(manifest.document.default_users, None);
         assert!(manifest.document.default_dependencies.is_empty());
         assert_eq!(
             manifest.document.skills["fix-loop"].dependencies,
             vec!["fix-loop-ref"]
         );
         assert_eq!(manifest.document.skills["fix-loop-ref"].role, "reference");
+    }
+
+    #[test]
+    fn evaluates_schema_v2_user_access() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
+        fs::write(
+            root.join(MANIFEST_FILE),
+            r#"
+class Skill {
+  role: String = "entrypoint"
+  dependencies: Listing<String> = new {}
+  users: Listing<String>? = null
+}
+
+schemaVersion = 2
+defaultUsers = List("can", "dejana")
+skills: Mapping<String, Skill> = new {
+  ["shared"] = new {}
+  ["admin"] = new { users = List("can") }
+  ["hidden"] = new { users = List() }
+}
+"#,
+        )
+        .unwrap();
+
+        let manifest = load(&root).unwrap().unwrap();
+        assert_eq!(manifest.document.schema_version, 2);
+        assert_eq!(
+            manifest.document.default_users,
+            Some(vec!["can".to_string(), "dejana".to_string()])
+        );
+        assert_eq!(
+            manifest.document.skills["admin"].users,
+            Some(vec!["can".to_string()])
+        );
+        assert_eq!(manifest.document.skills["hidden"].users, Some(Vec::new()));
+    }
+
+    #[test]
+    fn rejects_access_fields_in_schema_v1() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
+        fs::write(
+            root.join(MANIFEST_FILE),
+            r#"
+class Skill {
+  users: Listing<String>? = null
+}
+schemaVersion = 1
+skills: Mapping<String, Skill> = new {
+  ["admin"] = new { users = List("can") }
+}
+"#,
+        )
+        .unwrap();
+
+        let error = load(&root).unwrap_err().to_string();
+        assert!(error.contains("schemaVersion 2"), "{error}");
     }
 
     #[test]

@@ -102,11 +102,12 @@ fn check_global(ctx: &Context, target: &Target, issues: &mut Vec<Issue>) -> Resu
         .iter()
         .map(|path| crate::config::expand_path(path))
         .collect::<Result<Vec<_>>>()?;
-    let bundle = crate::bundle::plan(
+    let bundle = crate::bundle::plan_for_user(
         &target.canonical_path,
         &target.name,
         &ctx.data_dir,
         &external,
+        ctx.config.user.as_deref(),
     )?;
     if let Some(bundle) = &bundle {
         check_bundle_materialization(target, bundle, issues)?;

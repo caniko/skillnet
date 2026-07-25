@@ -15,6 +15,11 @@ pub const DEFAULT_PROJECT_WORKING_COPY_REL: &str = ".agents/skills";
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub global: GlobalConfig,
+    /// Optional principal used to filter manifest-declared skill access.
+    /// Configurations without this field retain unrestricted legacy behavior
+    /// unless a manifest requires an access selector.
+    #[serde(default)]
+    pub user: Option<String>,
     /// Runtime data directory for generated bundles and local state.
     #[serde(default)]
     pub data_dir: Option<String>,
@@ -244,7 +249,16 @@ impl Config {
         let text = fs::read_to_string(path)
             .with_context(|| format!("failed to read config file {path}"))?;
         reject_legacy_schema(&text, path)?;
-        toml::from_str(&text).with_context(|| format!("failed to parse config file {path}"))
+        let config: Self =
+            toml::from_str(&text).with_context(|| format!("failed to parse config file {path}"))?;
+        if config
+            .user
+            .as_deref()
+            .is_some_and(|user| user.trim().is_empty())
+        {
+            anyhow::bail!("configured Skillnet user in {path} must not be empty");
+        }
+        Ok(config)
     }
 
     pub fn load_database_or_default(path: &Utf8Path) -> Result<DatabaseConfig> {
@@ -671,6 +685,33 @@ views = []
         )
         .unwrap();
         assert_eq!(config.data_dir.as_deref(), Some("/var/lib/skillnet"));
+    }
+
+    #[test]
+    fn accepts_a_configured_user() {
+        let config: Config = toml::from_str(
+            r#"
+user = "dejana"
+
+[global]
+views = []
+"#,
+        )
+        .unwrap();
+        assert_eq!(config.user.as_deref(), Some("dejana"));
+    }
+
+    #[test]
+    fn load_rejects_an_empty_configured_user() {
+        let error = load_config_from_text(
+            r#"
+user = "  "
+
+[global]
+views = []
+"#,
+        );
+        assert!(error.to_string().contains("configured Skillnet user"));
     }
 
     #[test]
