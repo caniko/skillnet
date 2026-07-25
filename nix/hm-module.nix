@@ -25,6 +25,7 @@
     })
     // {
       data_dir = cfg.dataDir;
+      user = config.home.username;
       database = generatedDatabaseSettings;
     }
     // lib.optionalAttrs (cfg.mirrorRoot != null) {

@@ -29,13 +29,25 @@ struct SkillBundle {
     source_is_file: bool,
     role: String,
     dependencies: Vec<String>,
+    users: Option<Vec<String>>,
 }
 
+#[cfg(test)]
 pub fn plan(
     canonical: &Utf8Path,
     scope_name: &str,
     data_dir: &Utf8Path,
     external_manifests: &[Utf8PathBuf],
+) -> Result<Option<BundlePlan>> {
+    plan_for_user(canonical, scope_name, data_dir, external_manifests, None)
+}
+
+pub fn plan_for_user(
+    canonical: &Utf8Path,
+    scope_name: &str,
+    data_dir: &Utf8Path,
+    external_manifests: &[Utf8PathBuf],
+    user: Option<&str>,
 ) -> Result<Option<BundlePlan>> {
     let canonical_manifest = manifest::load(canonical)?;
     let mut manifests = Vec::new();
@@ -80,12 +92,19 @@ pub fn plan(
         let role = spec
             .map(|spec| spec.role.clone())
             .unwrap_or_else(|| "entrypoint".to_string());
-        let mut dependencies = canonical_manifest
-            .map(|manifest| manifest.document.default_dependencies.clone())
-            .unwrap_or_default();
+        let mut dependencies = if role == "reference" {
+            Vec::new()
+        } else {
+            canonical_manifest
+                .map(|manifest| manifest.document.default_dependencies.clone())
+                .unwrap_or_default()
+        };
         if let Some(spec) = spec {
             dependencies.extend(spec.dependencies.iter().cloned());
         }
+        let users = spec.and_then(|spec| spec.users.clone()).or_else(|| {
+            canonical_manifest.and_then(|manifest| manifest.document.default_users.clone())
+        });
         validate_skill_name(name, "skill")?;
         validate_role(name, &role)?;
         validate_dependencies(name, &dependencies)?;
@@ -96,6 +115,7 @@ pub fn plan(
                 source_is_file: false,
                 role,
                 dependencies,
+                users,
             },
         );
     }
@@ -128,6 +148,10 @@ pub fn plan(
                         source: source_path,
                         source_is_file,
                         role: spec.role.clone(),
+                        users: spec
+                            .users
+                            .clone()
+                            .or_else(|| manifest.document.default_users.clone()),
                         dependencies: if *external {
                             manifest
                                 .document
@@ -158,6 +182,45 @@ pub fn plan(
         }
     }
     detect_cycles(&skills)?;
+
+    let has_user_policy = manifests.iter().any(|(manifest, _)| {
+        manifest.document.default_users.is_some()
+            || manifest
+                .document
+                .skills
+                .values()
+                .any(|skill| skill.users.is_some())
+    });
+    if has_user_policy && user.is_none() {
+        bail!(
+            "Skillnet manifests declare user access, but no Skillnet user is configured; set `user` in skillnet.toml"
+        );
+    }
+    if let Some(user) = user {
+        let denied: BTreeSet<String> = skills
+            .iter()
+            .filter(|(_, skill)| {
+                !skill
+                    .users
+                    .as_ref()
+                    .is_none_or(|users| users.iter().any(|candidate| candidate == user))
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+        for (name, skill) in &skills {
+            if denied.contains(name) {
+                continue;
+            }
+            for dependency in &skill.dependencies {
+                if denied.contains(dependency) {
+                    bail!(
+                        "Skillnet skill `{name}` is available to user `{user}` but its dependency `{dependency}` is not"
+                    );
+                }
+            }
+        }
+        skills.retain(|name, _| !denied.contains(name));
+    }
 
     let bundle_root = data_dir.join("bundles").join(scope_name);
     let expected = skills
@@ -628,6 +691,112 @@ skills: Mapping<String, Skill> = new {
             plan.dependencies("entry").unwrap(),
             &["hidden-ref".to_string()]
         );
+    }
+
+    #[test]
+    fn canonical_reference_directories_do_not_inherit_default_dependencies() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().join("skills")).unwrap();
+        let data = Utf8PathBuf::from_path_buf(tmp.path().join("data")).unwrap();
+        fs::create_dir_all(root.join("entry")).unwrap();
+        fs::create_dir_all(root.join("hidden-ref")).unwrap();
+        fs::write(root.join("entry/SKILL.md"), "entrypoint").unwrap();
+        fs::write(root.join("hidden-ref/SKILL.md"), "reference").unwrap();
+        fs::write(
+            root.join(manifest::MANIFEST_FILE),
+            r#"
+class Skill {
+  role: String = "entrypoint"
+  dependencies: Listing<String> = new {}
+  source: String? = null
+}
+schemaVersion = 1
+defaultDependencies = List("hidden-ref")
+skills: Mapping<String, Skill> = new {
+  ["hidden-ref"] = new { role = "reference" }
+}
+"#,
+        )
+        .unwrap();
+
+        let plan = plan(&root, "global", &data, &[]).unwrap().unwrap();
+        assert!(plan.dependencies("hidden-ref").unwrap().is_empty());
+        assert_eq!(
+            plan.dependencies("entry").unwrap(),
+            &["hidden-ref".to_string()]
+        );
+    }
+
+    #[test]
+    fn filters_entrypoints_by_user_and_keeps_legacy_unrestricted_plans() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().join("skills")).unwrap();
+        let data = Utf8PathBuf::from_path_buf(tmp.path().join("data")).unwrap();
+        for name in ["shared", "admin"] {
+            fs::create_dir_all(root.join(name)).unwrap();
+            fs::write(root.join(name).join("SKILL.md"), name).unwrap();
+        }
+        fs::write(
+            root.join(manifest::MANIFEST_FILE),
+            r#"
+class Skill {
+  users: Listing<String>? = null
+}
+schemaVersion = 2
+defaultUsers = List("can", "dejana")
+skills: Mapping<String, Skill> = new {
+  ["admin"] = new { users = List("can") }
+}
+"#,
+        )
+        .unwrap();
+
+        let error = plan(&root, "global", &data, &[]).unwrap_err().to_string();
+        assert!(error.contains("no Skillnet user is configured"), "{error}");
+
+        let dejana = plan_for_user(&root, "dejana", &data, &[], Some("dejana"))
+            .unwrap()
+            .unwrap();
+        assert!(dejana.expected_links().contains_key("shared"));
+        assert!(!dejana.expected_links().contains_key("admin"));
+
+        let can = plan_for_user(&root, "can", &data, &[], Some("can"))
+            .unwrap()
+            .unwrap();
+        assert!(can.expected_links().contains_key("shared"));
+        assert!(can.expected_links().contains_key("admin"));
+    }
+
+    #[test]
+    fn rejects_a_granted_skill_with_a_denied_dependency() {
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().join("skills")).unwrap();
+        let data = Utf8PathBuf::from_path_buf(tmp.path().join("data")).unwrap();
+        for name in ["entry", "restricted"] {
+            fs::create_dir_all(root.join(name)).unwrap();
+            fs::write(root.join(name).join("SKILL.md"), name).unwrap();
+        }
+        fs::write(
+            root.join(manifest::MANIFEST_FILE),
+            r#"
+class Skill {
+  dependencies: Listing<String> = new {}
+  users: Listing<String>? = null
+}
+schemaVersion = 2
+defaultUsers = List("dejana")
+skills: Mapping<String, Skill> = new {
+  ["entry"] = new { dependencies = List("restricted") }
+  ["restricted"] = new { users = List("can") }
+}
+"#,
+        )
+        .unwrap();
+
+        let error = plan_for_user(&root, "global", &data, &[], Some("dejana"))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("dependency `restricted` is not"), "{error}");
     }
 
     #[test]

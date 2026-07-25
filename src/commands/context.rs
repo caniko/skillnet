@@ -92,11 +92,12 @@ impl Context {
             .iter()
             .map(|path| crate::config::expand_path(path))
             .collect::<Result<Vec<_>>>()?;
-        crate::bundle::plan(
+        crate::bundle::plan_for_user(
             &target.canonical_path,
             &target.name,
             &self.data_dir,
             &external,
+            self.config.user.as_deref(),
         )
     }
 }
