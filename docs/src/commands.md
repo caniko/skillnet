@@ -31,6 +31,7 @@ skillnet view status --all
 skillnet project status --all
 skillnet skill show global/rust-project-flake
 skillnet project list
+skillnet project list --format json
 skillnet catalog lint
 skillnet calibration heuristics list
 skillnet calibration walkthrough --dry-run
@@ -38,6 +39,14 @@ skillnet hook status
 ```
 
 ## View And Project Commands
+
+`skillnet project list` reports the resolved project set, including projects
+discovered from the declarative `project_discovery` policy. Use
+`--format json` for automation; rows include `name`, `path`, `source`, and
+`relative_path`. Discovery scans direct children of the configured project-tree
+classes only when they are Git checkouts with a real `.skills` directory.
+Protected roots and compatibility aliases remain explicit configuration, and
+`project add`/`project remove` never mutate discovered entries.
 
 `skillnet export` is for repositories that intentionally VCS their own
 globally useful skills under `skills/`. From the repository root, run:
