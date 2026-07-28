@@ -339,6 +339,13 @@ cargo test-pg
 
 - `global/` stores the canonical global skills by default.
 - Project canonical stores live in each project repository at `<project>/.skills`.
+- A checkout is eligible for declarative project discovery when it is a Git
+  repository under an enabled primary project-tree class and contains a real
+  `.skills` directory. Worktrees and protected roots are not discovered.
+- Home Manager supplies the project-tree JSON and discovery policy in
+  `project_discovery`; do not maintain the list with `skillnet project add`.
+- Protected projects and compatibility scope names can still be declared as
+  explicit `[[projects]]` entries.
 - Project-local working copies live at each project's `canonical_rel`,
   defaulting to `.agents/skills`, and are materialised from canonical.
 - Global and project views such as `.claude/skills` are generated symlink
@@ -382,6 +389,10 @@ Many scope-aware commands accept `--scope <name>`. The selector
 `--scope projects` expands to every configured project, and `--scope all`
 selects global plus every project. `skillnet sync --all` is an alias for
 `skillnet sync --scope all`.
+
+`skillnet project list` shows the resolved explicit and discovered projects.
+Use `skillnet project list --format json` for automation; discovered rows
+include their workspace-relative path and source.
 
 Use `skillnet export` from a repo root to copy repo-stored global skills from
 `skills/` into the configured global canonical store and sync global views.

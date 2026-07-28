@@ -3369,3 +3369,113 @@ fn doctor_does_not_warn_when_only_one_agent_source() {
         .success()
         .stdout(predicate::str::is_empty());
 }
+
+#[test]
+fn project_list_json_includes_discovered_checkouts() {
+    let fixture = Fixture::new();
+    let projects = fixture.path("projects");
+    for class in ["owned", "forks", "personal", "worktrees", "archives"] {
+        fs::create_dir_all(projects.join(class)).unwrap();
+    }
+    let owned = projects.join("owned/demo");
+    fs::create_dir_all(&owned).unwrap();
+    init_git_repo(&owned);
+    fs::create_dir_all(owned.join(".skills")).unwrap();
+    let fork = projects.join("forks/other");
+    fs::create_dir_all(&fork).unwrap();
+    init_git_repo(&fork);
+    fs::create_dir_all(fork.join(".skills")).unwrap();
+    let markerless = projects.join("owned/markerless");
+    fs::create_dir_all(&markerless).unwrap();
+    init_git_repo(&markerless);
+    fs::create_dir_all(projects.join("owned/not-git/.skills")).unwrap();
+    for excluded in [
+        projects.join("personal/protected"),
+        projects.join("worktrees/generated"),
+        projects.join("archives/old"),
+    ] {
+        fs::create_dir_all(&excluded).unwrap();
+        init_git_repo(&excluded);
+        fs::create_dir_all(excluded.join(".skills")).unwrap();
+    }
+    let tree = fixture.path("project-tree.json");
+    fs::write(
+        &tree,
+        serde_json::json!({
+            "schemaVersion": 1,
+            "root": projects,
+            "layout": {
+                "primary": {"owned": "owned", "forks": "forks", "upstream": "upstream"}
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let config = fixture.write_config(format!(
+        r#"
+[global]
+views = []
+
+[project_discovery]
+project_tree = "{}"
+classes = ["owned", "forks"]
+marker = ".skills"
+"#,
+        tree.display()
+    ));
+
+    let output = fixture
+        .command(&config)
+        .args(["project", "list", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 2);
+    assert_eq!(rows[0]["name"], "demo");
+    assert_eq!(rows[0]["source"], "discovered");
+    assert_eq!(rows[0]["relative_path"], "owned/demo");
+    assert_eq!(rows[1]["name"], "other");
+    assert_eq!(rows[1]["source"], "discovered");
+    assert_eq!(rows[1]["relative_path"], "forks/other");
+
+    let remove = fixture
+        .command(&config)
+        .args(["project", "remove", "demo"])
+        .output()
+        .unwrap();
+    assert!(!remove.status.success());
+    assert!(String::from_utf8_lossy(&remove.stderr).contains("is discovered"));
+    assert!(!fs::read_to_string(config).unwrap().contains("[[projects]]"));
+
+    let explicit_override = fixture.write_config(format!(
+        r#"
+[global]
+views = []
+
+[project_discovery]
+project_tree = "{}"
+classes = ["owned", "forks"]
+marker = ".skills"
+
+[[projects]]
+name = "demo"
+path = "{}"
+"#,
+        tree.display(),
+        owned.display()
+    ));
+    let override_output = fixture
+        .command(&explicit_override)
+        .args(["project", "list", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(override_output.status.success());
+    let override_rows: serde_json::Value = serde_json::from_slice(&override_output.stdout).unwrap();
+    assert_eq!(override_rows[0]["name"], "demo");
+    assert_eq!(override_rows[0]["source"], "explicit");
+}

@@ -11,6 +11,8 @@
   declarativeSource = "${homeDirectory}/.claude/skills";
   declarativeAgentsView = "${homeDirectory}/.agents/skills";
   declarativeProject = "${homeDirectory}/Projects/myproject";
+  projectTreeRoot = "${homeDirectory}/projects";
+  projectTreeConfig = "${homeDirectory}/.config/canix/project-tree.json";
   declarativeSubscriptionTarget = "${homeDirectory}/.agents/skills";
   urlFile = "/run/secrets/pg-url";
 
@@ -69,6 +71,11 @@
           path = declarativeProject;
         }
       ];
+      project_discovery = {
+        project_tree = projectTreeConfig;
+        classes = ["owned" "forks"];
+        marker = ".skills";
+      };
     };
     mirrorRoot = skillsRoot;
     catalogSettings = {
@@ -107,6 +114,9 @@ in
     mkdir -p ${declarativeSource}
     mkdir -p ${declarativeAgentsView}
     mkdir -p ${declarativeProject}/.skills
+    mkdir -p ${projectTreeRoot}/owned ${projectTreeRoot}/forks
+    mkdir -p ${homeDirectory}/.config/canix
+    printf '%s\n' '{"schemaVersion":1,"root":"'${projectTreeRoot}'","layout":{"primary":{"owned":"owned","forks":"forks"}}}' > ${projectTreeConfig}
 
     export HOME=${homeDirectory}
     export USER=skillnet-test
@@ -186,6 +196,9 @@ in
     grep -F 'label = "agents"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'name = "myproject"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'path = "'${declarativeProject}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'project_tree = "'${projectTreeConfig}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'classes = ["owned", "forks"]' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'marker = ".skills"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F "[subscriptions.ai-skills]" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'url = "ssh://git@codeberg.org/caniko/ai-skills.git"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'target = "'${declarativeSubscriptionTarget}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null

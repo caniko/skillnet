@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, env, fs, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env, fs,
+    path::PathBuf,
+};
 
 use anyhow::{anyhow, bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -7,6 +11,7 @@ use serde::Deserialize;
 use crate::calibration::Db;
 use crate::link::{resolve_link_strategy, LinkStrategy};
 use crate::model::{Target, TargetScope, ViewTarget};
+use crate::project_discovery::{discover, DiscoveredProject, ProjectDiscoveryConfig};
 
 pub const PROJECT_CANONICAL_REL: &str = ".skills";
 pub const DEFAULT_PROJECT_WORKING_COPY_REL: &str = ".agents/skills";
@@ -31,6 +36,11 @@ pub struct Config {
     pub link_strategy: Option<LinkStrategy>,
     #[serde(default)]
     pub projects: Vec<ProjectConfig>,
+    /// Discover additional project roots from the standardized canix tree.
+    #[serde(default)]
+    pub project_discovery: Option<ProjectDiscoveryConfig>,
+    #[serde(skip)]
+    pub(crate) discovered_project_paths: BTreeSet<String>,
     #[serde(default)]
     pub subscriptions: BTreeMap<String, SubscriptionConfig>,
     /// Immutable, flake-provided Skillnet manifests merged into generated views.
@@ -170,6 +180,60 @@ fn default_subscription_source() -> String {
     "global_skills".into()
 }
 
+fn merge_projects(
+    explicit: Vec<ProjectConfig>,
+    discovered: Vec<DiscoveredProject>,
+) -> Result<Vec<ProjectConfig>> {
+    let mut projects = Vec::with_capacity(explicit.len() + discovered.len());
+    let mut names = BTreeMap::<String, String>::new();
+    let mut paths = BTreeMap::<String, String>::new();
+
+    for project in explicit {
+        let path = expand_path(&project.path)
+            .with_context(|| format!("resolve project path for `{}`", project.name))?;
+        let path = path.to_string();
+        if let Some(previous) = names.insert(project.name.clone(), path.clone()) {
+            bail!(
+                "project name `{}` is configured more than once (`{previous}` and `{path}`)",
+                project.name
+            );
+        }
+        if let Some(previous) = paths.insert(path.clone(), project.name.clone()) {
+            bail!(
+                "project path `{path}` is configured for both `{previous}` and `{}`",
+                project.name
+            );
+        }
+        projects.push(project);
+    }
+
+    for discovered in discovered {
+        let path = discovered.path.to_string();
+        if paths.contains_key(&path) {
+            continue;
+        }
+        if names.contains_key(&discovered.name) {
+            bail!(
+                "discovered project name `{}` conflicts with an explicit project; use a different explicit name or remove the duplicate checkout",
+                discovered.name
+            );
+        }
+        names.insert(discovered.name.clone(), path.clone());
+        paths.insert(path, discovered.name.clone());
+        projects.push(ProjectConfig {
+            name: discovered.name,
+            path: discovered.path.to_string(),
+            origin: None,
+            link_strategy: None,
+            canonical_rel: default_canonical_rel(),
+            views: default_project_views(),
+        });
+    }
+
+    projects.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(projects)
+}
+
 pub fn default_data_dir() -> PathBuf {
     for var in ["skillnet_DATA_DIR", "SKILLNET_DATA_DIR"] {
         if let Some(dir) = env::var_os(var) {
@@ -249,8 +313,20 @@ impl Config {
         let text = fs::read_to_string(path)
             .with_context(|| format!("failed to read config file {path}"))?;
         reject_legacy_schema(&text, path)?;
-        let config: Self =
+        let mut config: Self =
             toml::from_str(&text).with_context(|| format!("failed to parse config file {path}"))?;
+        let explicit_paths = config
+            .projects
+            .iter()
+            .map(|project| expand_path(&project.path).map(|path| path.to_string()))
+            .collect::<Result<BTreeSet<_>>>()?;
+        let discovered = config.discovered_projects()?;
+        config.discovered_project_paths = discovered
+            .iter()
+            .filter(|project| !explicit_paths.contains(project.path.as_str()))
+            .map(|project| project.path.to_string())
+            .collect();
+        config.projects = merge_projects(config.projects, discovered)?;
         if config
             .user
             .as_deref()
@@ -259,6 +335,18 @@ impl Config {
             anyhow::bail!("configured Skillnet user in {path} must not be empty");
         }
         Ok(config)
+    }
+
+    pub fn discovered_projects(&self) -> Result<Vec<DiscoveredProject>> {
+        self.project_discovery
+            .as_ref()
+            .map(discover)
+            .transpose()
+            .map(Option::unwrap_or_default)
+    }
+
+    pub fn is_discovered_path(&self, path: &Utf8Path) -> bool {
+        self.discovered_project_paths.contains(path.as_str())
     }
 
     pub fn load_database_or_default(path: &Utf8Path) -> Result<DatabaseConfig> {
@@ -969,6 +1057,129 @@ views = []
         .unwrap();
         let err = Config::load(&path).unwrap_err();
         assert!(err.to_string().contains("failed to parse config file"));
+    }
+
+    #[test]
+    fn load_merges_discovered_projects_with_explicit_aliases() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        for class in ["owned", "forks"] {
+            fs::create_dir_all(root.join(class)).unwrap();
+        }
+        for project in [root.join("owned/demo"), root.join("forks/other")] {
+            fs::create_dir_all(project.join(".git")).unwrap();
+            fs::create_dir_all(project.join(".skills")).unwrap();
+        }
+        let tree_path = root.join("project-tree.json");
+        fs::write(
+            &tree_path,
+            serde_json::json!({
+                "schemaVersion": 1,
+                "root": root,
+                "layout": {
+                    "primary": {"owned": "owned", "forks": "forks", "upstream": "upstream"}
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let config_path = root.join("skillnet.toml");
+        fs::write(
+            &config_path,
+            format!(
+                r#"
+[global]
+views = []
+
+[project_discovery]
+project_tree = "{}"
+classes = ["owned", "forks"]
+marker = ".skills"
+
+[[projects]]
+name = "legacy_demo"
+path = "{}"
+"#,
+                tree_path.display(),
+                root.join("owned/demo").display()
+            ),
+        )
+        .unwrap();
+
+        let config = Config::load(&Utf8PathBuf::from_path_buf(config_path).unwrap()).unwrap();
+        assert_eq!(
+            config
+                .projects
+                .iter()
+                .map(|project| project.name.as_str())
+                .collect::<Vec<_>>(),
+            ["legacy_demo", "other"]
+        );
+    }
+
+    #[test]
+    fn merge_projects_rejects_conflicting_explicit_names_and_discovered_names() {
+        let explicit = |name: &str, path: &str| ProjectConfig {
+            name: name.into(),
+            path: path.into(),
+            origin: None,
+            link_strategy: None,
+            canonical_rel: default_canonical_rel(),
+            views: default_project_views(),
+        };
+
+        let error = merge_projects(
+            vec![explicit("demo", "/tmp/one"), explicit("demo", "/tmp/two")],
+            Vec::new(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("configured more than once"));
+
+        let error = merge_projects(
+            vec![explicit("demo", "/tmp/explicit")],
+            vec![DiscoveredProject {
+                name: "demo".into(),
+                path: Utf8PathBuf::from("/tmp/discovered"),
+                relative_path: Utf8PathBuf::from("owned/demo"),
+            }],
+        )
+        .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("conflicts with an explicit project"));
+    }
+
+    #[test]
+    fn load_fails_clearly_for_missing_or_malformed_discovery_config() {
+        let temp = tempdir().unwrap();
+        let config_path = Utf8PathBuf::from_path_buf(temp.path().join("skillnet.toml")).unwrap();
+        let tree_path = temp.path().join("project-tree.json");
+        fs::write(
+            &config_path,
+            "\n[global]\nviews = []\n\n[project_discovery]\nclasses = [\"owned\"]\n",
+        )
+        .unwrap();
+        let error = Config::load(&config_path).unwrap_err();
+        assert!(error.to_string().contains("failed to parse config file"));
+
+        let config = format!(
+            r#"
+[global]
+views = []
+
+[project_discovery]
+project_tree = "{}"
+"#,
+            tree_path.display()
+        );
+        fs::write(&config_path, config).unwrap();
+
+        let error = Config::load(&config_path).unwrap_err();
+        assert!(error.to_string().contains("read project tree config"));
+
+        fs::write(&tree_path, "not json").unwrap();
+        let error = Config::load(&config_path).unwrap_err();
+        assert!(error.to_string().contains("parse project tree config"));
     }
 
     #[test]

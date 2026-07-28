@@ -672,7 +672,11 @@ pub(super) enum ScopeCommand {
 #[command(disable_help_subcommand = true)]
 pub(super) enum ProjectCommand {
     /// List configured projects and their root paths.
-    List,
+    List {
+        /// Output format.
+        #[arg(long, default_value = "text")]
+        format: StatusFormat,
+    },
     /// Add a configured project root.
     Add {
         /// Project name used as the mirror scope.

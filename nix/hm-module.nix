@@ -116,7 +116,10 @@ in {
         CLI with a migration error. Project entries may omit canonical_rel;
         skillnet defaults it to ".agents/skills". Link strategy is set here as
         top-level link_strategy or per-project link_strategy; there is no
-        separate Nix option because settings is a TOML pass-through.
+        separate Nix option because settings is a TOML pass-through. The
+        optional [project_discovery] table reads the canix project-tree JSON
+        and discovers Git checkouts containing the configured marker (usually
+        ".skills").
 
         Leave null, and leave configFile null, to use a user-managed config
         file.
