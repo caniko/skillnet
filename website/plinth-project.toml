@@ -1,6 +1,6 @@
 [site]
 title = "skillnet"
-description = "<!-- simit:badges:start -->"
+description = "A CLI for managing canonical AI skill stores, materialising derived agent views, and recording calibration data for multi-phase-plan."
 base_url = "/"
 footer_note = "Generated from repository metadata by the plinth-project FOSS sweep."
 
@@ -19,13 +19,13 @@ href = "ssh://git@codeberg.org/caniko/skillnet.git"
 [[pages]]
 slug = "index"
 title = "skillnet"
-description = "<!-- simit:badges:start -->"
+description = "A CLI for managing canonical AI skill stores, materialising derived agent views, and recording calibration data for multi-phase-plan."
 
 [[pages.sections]]
 type = "hero"
 title = "skillnet"
-tagline = "<!-- simit:badges:start -->"
-subtitle = "<!-- simit:badges:start -->"
+tagline = "Canonical AI skill stores and derived agent views"
+subtitle = "Manage skill mirrors, materialise agent views, and record harness calibration data."
 
 [[pages.sections.ctas]]
 label = "View source"
