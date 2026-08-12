@@ -16,4 +16,4 @@ publish_crates = true
 [ci.pages]
 repo = "caniko/skillnet"
 canonical_domain = "skillnet.tartanoglu.com"
-source_branch = "main"
+source_branch = "trunk"
