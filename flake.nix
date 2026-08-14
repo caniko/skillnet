@@ -140,6 +140,25 @@
         inherit home-manager package pkgs;
         module = hmModule;
       };
+      mkBundle = import ./nix/bundle.nix {
+        inherit package pkgs;
+      };
+      bundleCheck = pkgs.runCommand "skillnet-bundle-check" {
+        bundle = mkBundle {
+          canonical = builtins.path {
+            path = ./nix/test-bundle-source;
+            name = "skillnet-test-bundle-source";
+          };
+          user = "can";
+        };
+      } ''
+        test -L "$bundle/view/demo"
+        test ! -e "$bundle/view/shared"
+        test -f "$bundle/bundles/global/demo/SKILL.md"
+        test ! -L "$bundle/bundles/global/demo/SKILL.md"
+        test -L "$bundle/bundles/global/demo/.skillnet/deps/shared"
+        touch "$out"
+      '';
     in {
       packages = {
         default = package;
@@ -162,6 +181,7 @@
 
       lib = {
         externalManifestSupport = true;
+        inherit mkBundle;
       };
 
       checks = {
@@ -176,6 +196,7 @@
         audit = auditCheck;
         deny = denyCheck;
         hm-module = hmModuleTest;
+        bundle = bundleCheck;
       };
 
       devShells = {

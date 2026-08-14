@@ -199,6 +199,7 @@ mod tests {
             },
             user: None,
             data_dir: None,
+            bundles_root: None,
             skills_root: None,
             mirror_root: None,
             database: DatabaseConfig::default(),

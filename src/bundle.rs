@@ -49,6 +49,21 @@ pub fn plan_for_user(
     external_manifests: &[Utf8PathBuf],
     user: Option<&str>,
 ) -> Result<Option<BundlePlan>> {
+    validate_scope_name(scope_name)?;
+    plan_for_user_at(
+        canonical,
+        data_dir.join("bundles").join(scope_name),
+        external_manifests,
+        user,
+    )
+}
+
+pub fn plan_for_user_at(
+    canonical: &Utf8Path,
+    bundle_root: Utf8PathBuf,
+    external_manifests: &[Utf8PathBuf],
+    user: Option<&str>,
+) -> Result<Option<BundlePlan>> {
     let canonical_manifest = manifest::load(canonical)?;
     let mut manifests = Vec::new();
     if let Some(manifest) = canonical_manifest {
@@ -65,8 +80,6 @@ pub fn plan_for_user(
     if !canonical.is_dir() && manifests.iter().any(|(_, external)| !*external) {
         bail!("manifest canonical root does not exist or is not a directory: {canonical}");
     }
-    validate_scope_name(scope_name)?;
-
     let sources: BTreeMap<String, Utf8PathBuf> = if canonical.is_dir() {
         mirror_skill_dirs(canonical)?
             .into_iter()
@@ -222,7 +235,6 @@ pub fn plan_for_user(
         skills.retain(|name, _| !denied.contains(name));
     }
 
-    let bundle_root = data_dir.join("bundles").join(scope_name);
     let expected = skills
         .iter()
         .filter(|(_, skill)| skill.role == "entrypoint")

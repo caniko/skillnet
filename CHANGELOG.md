@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `lib.<system>.mkBundle` builds user-filtered immutable skill bundles for
+  Nix/Home Manager consumers.
+- `programs.skillnet.bundlesRoot` lets runtime status and doctor inspect a
+  prebuilt bundle without mutating it during activation.
 - Normalized `skillnet usage record` and `skillnet usage report` commands for
   privacy-preserving, idempotent harness telemetry, including SQLite and
   PostgreSQL migration support.
@@ -38,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   commands during activation. Activation-time sync options and declarative hook
   installation options were removed; run `skillnet sync` and
   `skillnet hook install` explicitly.
+- External manifests only trigger activation-time materialisation when
+  `bundlesRoot` is unset; immutable bundle consumers are generation-owned.
 
 ### Fixed
 

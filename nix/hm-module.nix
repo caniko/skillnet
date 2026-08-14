@@ -20,13 +20,17 @@
       url = cfg.database.url;
     };
   generatedSettings =
-    ((cfg.settings or {}) // lib.optionalAttrs (cfg.settings == null) {
-      global = { views = []; };
-    })
+    ((cfg.settings or {})
+      // lib.optionalAttrs (cfg.settings == null) {
+        global = {views = [];};
+      })
     // {
       data_dir = cfg.dataDir;
       user = config.home.username;
       database = generatedDatabaseSettings;
+    }
+    // lib.optionalAttrs (cfg.bundlesRoot != null) {
+      bundles_root = cfg.bundlesRoot;
     }
     // lib.optionalAttrs (cfg.mirrorRoot != null) {
       mirror_root = cfg.mirrorRoot;
@@ -75,6 +79,12 @@ in {
       type = lib.types.str;
       default = "${config.xdg.dataHome}/skillnet";
       description = "Root data directory for skillnet; generated bundles and local calibration data live below it.";
+    };
+
+    bundlesRoot = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Optional immutable root containing generated per-scope bundles.";
     };
 
     mirrorRoot = lib.mkOption {
@@ -248,6 +258,10 @@ in {
     {
       assertions = [
         {
+          assertion = cfg.bundlesRoot == null || lib.hasPrefix "/" cfg.bundlesRoot;
+          message = "programs.skillnet.bundlesRoot must be an absolute path.";
+        }
+        {
           assertion = cfg.database.backend != "postgres" || cfg.database.url != null || cfg.database.urlFile != null;
           message = "programs.skillnet.database needs `url` or `urlFile` when backend = \"postgres\".";
         }
@@ -344,8 +358,8 @@ in {
       home.sessionVariables.AI_SKILLS_REPO = cfg.skillsRoot;
     })
 
-    (lib.mkIf (cfg.externalManifests != []) {
-      home.activation.skillnetExternalBundles = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    (lib.mkIf (cfg.bundlesRoot == null && cfg.externalManifests != []) {
+      home.activation.skillnetExternalBundles = lib.hm.dag.entryAfter ["linkGeneration"] ''
         ${cfg.package}/bin/skillnet --allow-dirty-destination sync --scope global --no-promote --allow-delete
       '';
     })

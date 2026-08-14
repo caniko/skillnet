@@ -88,6 +88,15 @@
       urlFile = urlFile;
     };
   };
+  immutableConfig = mkHmConfig {
+    bundlesRoot = "/nix/store/skillnet-bundle/bundles";
+    externalManifests = ["/nix/store/skillnet-manifest/Skillnet.pkl"];
+    database.backend = "sqlite";
+    settings.global = {
+      canonical_path = "/nix/store/ai-skills/global_skills";
+      views = [];
+    };
+  };
 in
   pkgs.runCommand "skillnet-hm-module-test"
   {
@@ -120,6 +129,8 @@ in
     ! grep -F 'skillnet hook install' ${sqliteConfig.activationPackage}/activate >/dev/null
     ! grep -F 'mirror not found at' ${sqliteConfig.activationPackage}/activate >/dev/null
     ! grep -F 'skipping for now.' ${sqliteConfig.activationPackage}/activate >/dev/null
+    ! grep -F '${package}/bin/skillnet' ${immutableConfig.activationPackage}/activate >/dev/null
+    grep -R -F 'bundles_root = "/nix/store/skillnet-bundle/bundles"' ${immutableConfig.activationPackage}/home-files >/dev/null
     mkdir -p ${dataDir}
     test -d ${dataDir}
 

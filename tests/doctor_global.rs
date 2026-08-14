@@ -103,3 +103,41 @@ views = [
         .stderr(predicate::str::contains("broken symlink"))
         .stderr(predicate::str::contains("not managed by skillnet"));
 }
+
+#[test]
+fn doctor_reads_a_configured_immutable_bundle() {
+    let fixture = Fixture::new();
+    let canonical = fixture.path("global");
+    let bundle = fixture.path("immutable/bundles/global/alpha");
+    let view = fixture.path("view");
+    write_skill(&canonical, "alpha");
+    fs::write(
+        canonical.join("Skillnet.pkl"),
+        "class Skill { role: String = \"entrypoint\"; dependencies: Listing<String> = new {}; source: String? = null; users: Listing<String>? = null }\nschemaVersion = 2\nskills: Mapping<String, Skill> = new { [\"alpha\"] = new {} }\n",
+    )
+    .unwrap();
+    fs::create_dir_all(&bundle).unwrap();
+    fs::copy(canonical.join("alpha/SKILL.md"), bundle.join("SKILL.md")).unwrap();
+    fs::create_dir_all(&view).unwrap();
+    unix_fs::symlink(&bundle, view.join("alpha")).unwrap();
+
+    let config = fixture.write_config(format!(
+        r#"
+bundles_root = "{}"
+
+[global]
+canonical_path = "{}"
+views = [{{ label = "immutable", path = "{}", scope = "global" }}]
+"#,
+        fixture.path("immutable/bundles").display(),
+        canonical.display(),
+        view.display(),
+    ));
+
+    fixture
+        .command(&config)
+        .arg("doctor")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("doctor: no issues"));
+}

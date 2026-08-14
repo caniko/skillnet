@@ -23,6 +23,8 @@ pub struct Config {
     /// Runtime data directory for generated bundles and local state.
     #[serde(default)]
     pub data_dir: Option<String>,
+    #[serde(default)]
+    pub bundles_root: Option<String>,
     pub skills_root: Option<String>,
     pub mirror_root: Option<String>,
     #[serde(default)]
@@ -685,6 +687,23 @@ views = []
         )
         .unwrap();
         assert_eq!(config.data_dir.as_deref(), Some("/var/lib/skillnet"));
+    }
+
+    #[test]
+    fn accepts_an_immutable_bundles_root() {
+        let config: Config = toml::from_str(
+            r#"
+bundles_root = "/nix/store/skillnet-bundle/bundles"
+
+[global]
+views = []
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.bundles_root.as_deref(),
+            Some("/nix/store/skillnet-bundle/bundles")
+        );
     }
 
     #[test]

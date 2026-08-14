@@ -34,7 +34,6 @@ impl Context {
                     |path| anyhow::anyhow!("skillnet data directory is not UTF-8: {path:?}"),
                 )?,
             };
-
         Ok(Self {
             config_path: config_path.to_path_buf(),
             catalog_config_path: catalog_config_path.to_path_buf(),
@@ -92,12 +91,20 @@ impl Context {
             .iter()
             .map(|path| crate::config::expand_path(path))
             .collect::<Result<Vec<_>>>()?;
-        crate::bundle::plan_for_user(
-            &target.canonical_path,
-            &target.name,
-            &self.data_dir,
-            &external,
-            self.config.user.as_deref(),
-        )
+        match self.config.bundles_root.as_deref() {
+            Some(root) => crate::bundle::plan_for_user_at(
+                &target.canonical_path,
+                crate::config::expand_path(root)?.join(&target.name),
+                &external,
+                self.config.user.as_deref(),
+            ),
+            None => crate::bundle::plan_for_user(
+                &target.canonical_path,
+                &target.name,
+                &self.data_dir,
+                &external,
+                self.config.user.as_deref(),
+            ),
+        }
     }
 }
