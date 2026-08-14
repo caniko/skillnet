@@ -1,0 +1,13 @@
+class Skill {
+  role: String = "entrypoint"
+  dependencies: Listing<String> = new {}
+  source: String? = null
+  users: Listing<String>? = null
+}
+
+schemaVersion = 2
+defaultUsers = List("can")
+skills: Mapping<String, Skill> = new {
+  ["demo"] = new { dependencies = List("shared") }
+  ["shared"] = new { role = "reference" }
+}
