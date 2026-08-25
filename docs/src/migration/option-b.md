@@ -59,7 +59,7 @@ project repositories.
 On a new host:
 
 ```sh
-git clone git@codeberg.org:caniko/ai-skills.git /path/to/ai-skills
+git clone git@github.com:caniko/ai-skills.git /path/to/ai-skills
 skillnet project clone --all --dry-run
 skillnet project clone --all
 home-manager switch

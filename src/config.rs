@@ -214,7 +214,7 @@ fn reject_legacy_schema(text: &str, path: &Utf8Path) -> Result<()> {
     bail!(
         "skillnet.toml uses the pre-Option-B schema (field `{primary}` found).\n\
 These fields were removed in skillnet 0.5.0. See the migration guide for the new `views` / `canonical_rel` schema:\n\
-  https://codeberg.org/caniko/skillnet/blob/main/docs/src/migration/option-b.md\n\
+  https://github.com/caniko/skillnet/blob/main/docs/src/migration/option-b.md\n\
 Fields encountered: {}\n\
 File: {path}",
         found.join(", ")

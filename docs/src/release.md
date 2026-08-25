@@ -21,4 +21,4 @@ against `keys/maintainers.gpg`, checks that the version is not already present
 on crates.io, runs the release checks, and then publishes with
 `CRATES_IO_API_TOKEN` or `CARGO_REGISTRY_TOKEN`.
 
-The canonical source repository is `https://codeberg.org/caniko/skillnet`. Generated Forgejo workflows live under `.forgejo/workflows/`.
+The canonical source repository is `https://github.com/caniko/skillnet`. Generated Forgejo workflows live under `.forgejo/workflows/`.
