@@ -172,6 +172,31 @@ Options:
   available in your package set, use
   `inputs.skillnet.packages.${pkgs.system}.skillnet`.
 
+### External Git providers
+
+Provider subscriptions fetch a repository and compose every immediate
+`SKILL.md` directory below `source` into the generated global views. They do
+not copy into or modify the canonical skill store:
+
+```nix
+programs.skillnet = {
+  subscriptions.external = {
+    url = "https://github.com/example/agent-skills.git";
+    ref = "main";
+    source = "skills";
+    provider = true;
+  };
+  subscriptionSyncInterval = "1h";
+};
+```
+
+With an interval configured, Home Manager starts a user service at login and a
+timer thereafter. Updates are validated against the complete bundle before
+publication; a conflicting or invalid update restores the last working
+checkout and views. Without an interval, run
+`skillnet subscription sync --all` explicitly. Copy subscriptions retain their
+existing behavior and require `target` instead of `provider = true`.
+
 ## Storage backends
 
 Postgres is the default calibration backend:

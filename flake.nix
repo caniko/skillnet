@@ -45,8 +45,7 @@
     ...
   }: let
     hmModule = import ./nix/hm-module.nix;
-  in
-    flake-utils.lib.eachSystem ["x86_64-linux"] (system: let
+    systemOutputs = flake-utils.lib.eachSystem ["x86_64-linux"] (system: let
       pkgs = import nixpkgs {
         inherit system;
         overlays = [(import rust-overlay)];
@@ -150,6 +149,10 @@
         skillnetVersion = package.version;
       };
       bundleCheck =
+        assert self.lib.${system}.externalManifestSupport;
+        assert self.lib.${system}.externalProviderSupport;
+        assert self.lib.${system}.hostSelectionSupport;
+        assert builtins.isFunction self.lib.${system}.mkBundle;
         pkgs.runCommand "skillnet-bundle-check" {
           bundle = mkBundle {
             canonical = builtins.path {
@@ -190,6 +193,7 @@
 
       lib = {
         externalManifestSupport = true;
+        externalProviderSupport = true;
         hostSelectionSupport = true;
         inherit mkBundle;
       };
@@ -289,11 +293,16 @@
           extraShellHook = pre-commit-check.shellHook;
         };
       };
-    })
-    // {
+    });
+  in
+    systemOutputs // {
       hmModules = {
         default = hmModule;
         skillnet = hmModule;
+      };
+      lib = systemOutputs.lib // {
+        externalManifestSupport = true;
+        externalProviderSupport = true;
       };
     };
 }

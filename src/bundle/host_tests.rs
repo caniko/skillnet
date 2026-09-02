@@ -36,7 +36,7 @@ skills: Mapping<String, Skill> = new {
 #[test]
 fn host_bundle_intersects_user_and_host_and_removes_stale_dependencies() {
     let (_tmp, root, data) = fixture();
-    let atlas = plan_for_access(&root, "global", &data, &[], Some("can"), Some("atlas"))
+    let atlas = plan_for_access(&root, "global", &data, &[], &[], Some("can"), Some("atlas"))
         .unwrap()
         .unwrap();
     atlas.materialize().unwrap();
@@ -45,7 +45,7 @@ fn host_bundle_intersects_user_and_host_and_removes_stale_dependencies() {
         .join("atlas-only/.skillnet/deps/generic")
         .is_symlink());
     for (user, host) in [("can", "nomad"), ("dejana", "atlas")] {
-        let other = plan_for_access(&root, "global", &data, &[], Some(user), Some(host))
+        let other = plan_for_access(&root, "global", &data, &[], &[], Some(user), Some(host))
             .unwrap()
             .unwrap();
         other.materialize().unwrap();
@@ -57,7 +57,7 @@ fn host_bundle_intersects_user_and_host_and_removes_stale_dependencies() {
 #[test]
 fn host_bundle_requires_explicit_host_before_materialization() {
     let (_tmp, root, data) = fixture();
-    let error = plan_for_access(&root, "global", &data, &[], Some("can"), None).unwrap_err();
+    let error = plan_for_access(&root, "global", &data, &[], &[], Some("can"), None).unwrap_err();
     assert!(error.to_string().contains("no Skillnet host"));
     assert!(!data.exists());
 }
@@ -75,7 +75,7 @@ fn host_bundle_rejects_a_denied_dependency() {
         .replace("dependencies = List(\"generic\")", "dependencies = List()");
     fs::write(file, source).unwrap();
     let error =
-        plan_for_access(&root, "global", &data, &[], Some("can"), Some("nomad")).unwrap_err();
+        plan_for_access(&root, "global", &data, &[], &[], Some("can"), Some("nomad")).unwrap_err();
     assert!(error.to_string().contains("dependency `atlas-only`"));
 }
 
@@ -88,11 +88,11 @@ fn host_bundle_inherits_defaults_and_empty_lists_deny_all() {
         "defaultUsers = List(\"can\", \"dejana\")\ndefaultHosts = List(\"atlas\")",
     );
     fs::write(&file, &source).unwrap();
-    let nomad = plan_for_access(&root, "global", &data, &[], Some("can"), Some("nomad"))
+    let nomad = plan_for_access(&root, "global", &data, &[], &[], Some("can"), Some("nomad"))
         .unwrap()
         .unwrap();
     assert!(nomad.expected_links().is_empty());
-    let atlas = plan_for_access(&root, "global", &data, &[], Some("can"), Some("atlas"))
+    let atlas = plan_for_access(&root, "global", &data, &[], &[], Some("can"), Some("atlas"))
         .unwrap()
         .unwrap();
     assert_eq!(atlas.expected_links().len(), 2);
@@ -102,7 +102,7 @@ fn host_bundle_inherits_defaults_and_empty_lists_deny_all() {
         source.replace("hosts = List(\"atlas\")", "hosts = List()"),
     )
     .unwrap();
-    let atlas = plan_for_access(&root, "global", &data, &[], Some("can"), Some("atlas"))
+    let atlas = plan_for_access(&root, "global", &data, &[], &[], Some("can"), Some("atlas"))
         .unwrap()
         .unwrap();
     assert_eq!(atlas.skill_names().collect::<Vec<_>>(), ["generic"]);
@@ -111,7 +111,7 @@ fn host_bundle_inherits_defaults_and_empty_lists_deny_all() {
         "schemaVersion = 3\ndefaultHosts = List()\nskills = new Mapping {}",
     )
     .unwrap();
-    let denied = plan_for_access(&root, "global", &data, &[], None, Some("atlas"))
+    let denied = plan_for_access(&root, "global", &data, &[], &[], None, Some("atlas"))
         .unwrap()
         .unwrap();
     assert!(denied.expected_links().is_empty());
@@ -155,6 +155,7 @@ skills: Mapping<String, Skill> = new {
             "global",
             &data,
             std::slice::from_ref(&file),
+            &[],
             Some("can"),
             Some(host),
         )
@@ -177,7 +178,7 @@ skills: Mapping<String, Skill> = new {
             );
         }
     }
-    assert!(plan_for_access(&root, "global", &data, &[file], Some("can"), None).is_err());
+    assert!(plan_for_access(&root, "global", &data, &[file], &[], Some("can"), None).is_err());
 }
 
 #[test]
@@ -189,7 +190,7 @@ fn host_bundle_preserves_schema_one_and_two_without_a_host_selector() {
             format!("schemaVersion = {version}\nskills = new Mapping {{}}"),
         )
         .unwrap();
-        let plan = plan_for_access(&root, "global", &data, &[], None, None)
+        let plan = plan_for_access(&root, "global", &data, &[], &[], None, None)
             .unwrap()
             .unwrap();
         assert_eq!(plan.expected_links().len(), 2);
@@ -221,7 +222,7 @@ fn host_bundle_rejects_host_fields_in_legacy_schemas_and_invalid_host_lists() {
         assert!(manifest::load(&root).is_err(), "{hosts}");
     }
     fs::write(&file, "schemaVersion = 3").unwrap();
-    assert!(plan_for_access(&root, "global", &data, &[], None, Some("bad host")).is_err());
+    assert!(plan_for_access(&root, "global", &data, &[], &[], None, Some("bad host")).is_err());
     for host in ["", "bad host", "atlas/nomad"] {
         let config = root.parent().unwrap().join("skillnet.toml");
         fs::write(&config, format!("host = {host:?}")).unwrap();

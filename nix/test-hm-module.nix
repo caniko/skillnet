@@ -48,6 +48,7 @@
     };
   };
   declarativeConfig = mkHmConfig {
+    host = "destination-with-providers";
     database.backend = "sqlite";
     settings = {
       database.backend = "sqlite";
@@ -88,6 +89,13 @@
       target = declarativeSubscriptionTarget;
       deletePolicy = "keep";
     };
+    subscriptions.external = {
+      url = "https://github.com/example/skills.git";
+      ref = "main";
+      source = "skills";
+      provider = true;
+    };
+    subscriptionSyncInterval = "1h";
   };
   urlFileConfig = mkHmConfig {
     database = {
@@ -216,6 +224,7 @@ in
     grep -F 'skills_root = "'${skillsRoot}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'data_dir = "'${dataDir}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'user = "skillnet-test"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'host = "destination-with-providers"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'backend = "sqlite"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'label = "claude"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'label = "agents"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
@@ -228,6 +237,14 @@ in
     grep -F 'url = "ssh://git@github.com/caniko/ai-skills.git"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'target = "'${declarativeSubscriptionTarget}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'delete_policy = "keep"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F "[subscriptions.external]" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'url = "https://github.com/example/skills.git"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'source = "skills"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'provider = true' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+    grep -R -F 'skillnet --allow-dirty-destination subscription sync external' ${declarativeConfig.activationPackage}/home-files >/dev/null
+    grep -R -F 'PATH=${pkgs.git}/bin' ${declarativeConfig.activationPackage}/home-files >/dev/null
+    grep -R -F 'OnBootSec=5m' ${declarativeConfig.activationPackage}/home-files >/dev/null
+    grep -R -F 'OnUnitActiveSec=1h' ${declarativeConfig.activationPackage}/home-files >/dev/null
     ! grep -F "sync_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     ! grep -F "stale_codex_skill_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
 
