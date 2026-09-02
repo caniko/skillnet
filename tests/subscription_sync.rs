@@ -55,6 +55,24 @@ fn replace_source_alpha_with_beta(path: &Path) {
     git(path, ["commit", "-m", "replace alpha with beta"]);
 }
 
+fn init_provider_repo(path: &Path) {
+    fs::create_dir_all(path.join("skills/alpha")).unwrap();
+    fs::write(path.join("skills/alpha/SKILL.md"), "alpha v1").unwrap();
+    git(path, ["init", "-b", "main"]);
+    git(path, ["config", "user.email", "skillnet@example.invalid"]);
+    git(path, ["config", "user.name", "Skillnet Test"]);
+    git(path, ["add", "."]);
+    git(path, ["commit", "-m", "initial"]);
+}
+
+fn replace_provider_alpha_with_beta(path: &Path) {
+    fs::remove_dir_all(path.join("skills/alpha")).unwrap();
+    fs::create_dir_all(path.join("skills/beta")).unwrap();
+    fs::write(path.join("skills/beta/SKILL.md"), "beta provider").unwrap();
+    git(path, ["add", "-A"]);
+    git(path, ["commit", "-m", "replace alpha with beta"]);
+}
+
 fn git<const N: usize>(cwd: &Path, args: [&str; N]) {
     let status = StdCommand::new("git")
         .current_dir(cwd)
@@ -78,6 +96,25 @@ delete_policy = "{delete_policy}"
 "#,
         source.display(),
         target.display(),
+    )
+}
+
+fn provider_config(fixture: &Fixture, source: &Path) -> String {
+    format!(
+        r#"
+[global]
+canonical_path = "{}"
+views = [{{ label = "test", path = "{}", scope = "global" }}]
+
+[subscriptions.external]
+url = "{}"
+ref = "main"
+source = "skills"
+provider = true
+"#,
+        fixture.path("mirror/global").display(),
+        fixture.path("view").display(),
+        source.display(),
     )
 }
 
@@ -173,5 +210,186 @@ delete_policy = "keep"
         .args(["subscription", "sync", "--all"])
         .assert()
         .failure()
-        .stderr(predicates::str::contains("inside canonical scope"));
+        .stderr(predicates::str::contains("overlaps canonical scope"));
+}
+
+#[test]
+fn provider_subscription_updates_generated_views_and_prunes_removed_skills() {
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    init_provider_repo(&source);
+    fs::create_dir_all(fixture.path("mirror/global")).unwrap();
+    let config = fixture.write_config(provider_config(&fixture, &source));
+
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .success();
+    assert!(fixture.path("view/alpha").is_symlink());
+    assert_eq!(
+        fs::read_to_string(fixture.path("view/alpha/SKILL.md")).unwrap(),
+        "alpha v1"
+    );
+    assert!(!fixture.path("view/alpha/SKILL.md").is_symlink());
+    fixture.command(&config).arg("doctor").assert().success();
+
+    fs::create_dir_all(fixture.path("view/manual")).unwrap();
+    fs::write(fixture.path("view/manual/SKILL.md"), "manual").unwrap();
+    assert_eq!(
+        fs::read_to_string(fixture.path("view/manual/SKILL.md")).unwrap(),
+        "manual"
+    );
+
+    replace_provider_alpha_with_beta(&source);
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .success();
+
+    assert!(!fixture.path("view/alpha").exists());
+    assert!(fixture.path("view/beta").is_symlink());
+    assert_eq!(
+        fs::read_to_string(fixture.path("view/beta/SKILL.md")).unwrap(),
+        "beta provider"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.path("view/manual/SKILL.md")).unwrap(),
+        "manual"
+    );
+}
+
+#[test]
+fn provider_subscription_restores_last_good_checkout_after_collision() {
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    init_provider_repo(&source);
+    fs::create_dir_all(fixture.path("mirror/global/beta")).unwrap();
+    fs::write(
+        fixture.path("mirror/global/beta/SKILL.md"),
+        "beta canonical",
+    )
+    .unwrap();
+    let config = fixture.write_config(provider_config(&fixture, &source));
+
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .success();
+    replace_provider_alpha_with_beta(&source);
+
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "restored last-known-good checkout",
+        ));
+
+    assert_eq!(
+        fs::read_to_string(fixture.path("view/alpha/SKILL.md")).unwrap(),
+        "alpha v1"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.path("view/beta/SKILL.md")).unwrap(),
+        "beta canonical"
+    );
+    assert!(fixture
+        .path("data/subscriptions/external/repo/skills/alpha/SKILL.md")
+        .is_file());
+}
+
+#[test]
+fn provider_subscription_rejects_source_escape_before_clone() {
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    init_provider_repo(&source);
+    let config = fixture.write_config(
+        provider_config(&fixture, &source).replace("source = \"skills\"", "source = \"../skills\""),
+    );
+
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "source must stay within its checkout",
+        ));
+    assert!(!fixture.path("data/subscriptions/external").exists());
+}
+
+#[test]
+fn subscription_rejects_path_component_name_before_clone() {
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    init_provider_repo(&source);
+    let config = fixture.write_config(provider_config(&fixture, &source).replace(
+        "[subscriptions.external]",
+        "[subscriptions.\"../external\"]",
+    ));
+
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "subscription name must be one path component",
+        ));
+    assert!(!fixture.path("data/subscriptions/external").exists());
+}
+
+#[test]
+fn provider_subscription_rejects_symlinks_outside_source_root() {
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    init_provider_repo(&source);
+    fs::write(fixture.path("outside.txt"), "private").unwrap();
+    std::os::unix::fs::symlink(
+        fixture.path("outside.txt"),
+        source.join("skills/alpha/outside.txt"),
+    )
+    .unwrap();
+    git(&source, ["add", "."]);
+    git(&source, ["commit", "-m", "add escaping symlink"]);
+    let config = fixture.write_config(provider_config(&fixture, &source));
+
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "provider symlink escapes its source root",
+        ));
+    assert!(!fixture.path("data/subscriptions/external").exists());
+}
+
+#[test]
+fn provider_subscription_rejects_reserved_hidden_skill_names() {
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    init_provider_repo(&source);
+    fs::rename(
+        source.join("skills/alpha"),
+        source.join("skills/.skillnet-tmp"),
+    )
+    .unwrap();
+    git(&source, ["add", "-A"]);
+    git(&source, ["commit", "-m", "use reserved skill name"]);
+    let config = fixture.write_config(provider_config(&fixture, &source));
+
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "invalid provider skill name `.skillnet-tmp`",
+        ));
+    assert!(!fixture.path("data/subscriptions/external").exists());
 }

@@ -146,9 +146,13 @@ pub struct SubscriptionConfig {
     pub url: String,
     #[serde(default = "default_subscription_ref", rename = "ref")]
     pub ref_name: String,
-    pub target: String,
+    #[serde(default)]
+    pub target: Option<String>,
     #[serde(default = "default_subscription_source")]
     pub source: String,
+    /// Compose this subscription directly into global generated bundles.
+    #[serde(default)]
+    pub provider: bool,
     #[serde(default, alias = "deletePolicy")]
     pub delete_policy: SubscriptionDeletePolicy,
 }

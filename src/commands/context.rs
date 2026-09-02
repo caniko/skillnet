@@ -4,7 +4,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use crate::{
     cli::Scope,
     config::{Config, ProjectConfig},
-    model::Target,
+    model::{Target, TargetScope},
 };
 
 pub struct Context {
@@ -92,11 +92,28 @@ impl Context {
             .iter()
             .map(|path| crate::config::expand_path(path))
             .collect::<Result<Vec<_>>>()?;
-        crate::bundle::plan_for_user(
+        let providers = if target.scope == TargetScope::Global {
+            self.config
+                .subscriptions
+                .iter()
+                .filter(|(_, subscription)| subscription.provider)
+                .map(|(name, subscription)| {
+                    super::subscription::validate_provider_storage(self, name)?;
+                    super::subscription::provider_source_path(&self.data_dir, name, subscription)
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .flatten()
+                .collect()
+        } else {
+            Vec::new()
+        };
+        crate::bundle::plan_for_user_with_providers(
             &target.canonical_path,
             &target.name,
             &self.data_dir,
             &external,
+            &providers,
             self.config.user.as_deref(),
         )
     }

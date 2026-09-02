@@ -13,6 +13,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use walkdir::WalkDir;
 
 use crate::{manifest, mirror::mirror_skill_dirs};
 
@@ -39,14 +40,40 @@ pub fn plan(
     data_dir: &Utf8Path,
     external_manifests: &[Utf8PathBuf],
 ) -> Result<Option<BundlePlan>> {
-    plan_for_user(canonical, scope_name, data_dir, external_manifests, None)
+    plan_for_user_with_providers(
+        canonical,
+        scope_name,
+        data_dir,
+        external_manifests,
+        &[],
+        None,
+    )
 }
 
-pub fn plan_for_user(
+#[cfg(test)]
+fn plan_for_user(
     canonical: &Utf8Path,
     scope_name: &str,
     data_dir: &Utf8Path,
     external_manifests: &[Utf8PathBuf],
+    user: Option<&str>,
+) -> Result<Option<BundlePlan>> {
+    plan_for_user_with_providers(
+        canonical,
+        scope_name,
+        data_dir,
+        external_manifests,
+        &[],
+        user,
+    )
+}
+
+pub fn plan_for_user_with_providers(
+    canonical: &Utf8Path,
+    scope_name: &str,
+    data_dir: &Utf8Path,
+    external_manifests: &[Utf8PathBuf],
+    provider_roots: &[Utf8PathBuf],
     user: Option<&str>,
 ) -> Result<Option<BundlePlan>> {
     let canonical_manifest = manifest::load(canonical)?;
@@ -59,7 +86,7 @@ pub fn plan_for_user(
             .with_context(|| format!("external Skillnet manifest does not exist: {path}"))?;
         manifests.push((manifest, true));
     }
-    if manifests.is_empty() {
+    if manifests.is_empty() && provider_roots.is_empty() {
         return Ok(None);
     }
     if !canonical.is_dir() && manifests.iter().any(|(_, external)| !*external) {
@@ -170,6 +197,32 @@ pub fn plan_for_user(
             validate_dependencies(name, &spec.dependencies)?;
         }
     }
+    for root in provider_roots {
+        if !root.is_dir() {
+            bail!("Skillnet provider root does not exist or is not a directory: {root}");
+        }
+        validate_provider_tree(root)?;
+        for source in mirror_skill_dirs(root)? {
+            let name = source
+                .file_name()
+                .context("provider skill directory has no final component")?
+                .to_string();
+            validate_skill_name(&name, "provider skill")?;
+            if skills.contains_key(&name) {
+                bail!("Skillnet provider skill `{name}` is duplicated across skill sources");
+            }
+            skills.insert(
+                name,
+                SkillBundle {
+                    source,
+                    source_is_file: false,
+                    role: "entrypoint".to_string(),
+                    dependencies: Vec::new(),
+                    users: None,
+                },
+            );
+        }
+    }
     for (name, skill) in &skills {
         validate_dependencies(name, &skill.dependencies)?;
         for dependency in &skill.dependencies {
@@ -233,6 +286,27 @@ pub fn plan_for_user(
         skills,
         expected,
     }))
+}
+
+fn validate_provider_tree(root: &Utf8Path) -> Result<()> {
+    let canonical_root = root
+        .canonicalize_utf8()
+        .with_context(|| format!("failed to canonicalize provider root {root}"))?;
+    for entry in WalkDir::new(root).follow_links(false) {
+        let entry = entry.with_context(|| format!("failed to inspect provider root {root}"))?;
+        if !entry.file_type().is_symlink() {
+            continue;
+        }
+        let path = Utf8PathBuf::from_path_buf(entry.path().to_path_buf())
+            .map_err(|path| anyhow::anyhow!("non-UTF-8 provider path: {}", path.display()))?;
+        let target = path
+            .canonicalize_utf8()
+            .with_context(|| format!("failed to resolve provider symlink {path}"))?;
+        if target != canonical_root && !target.starts_with(&canonical_root) {
+            bail!("Skillnet provider symlink escapes its source root: {path} -> {target}");
+        }
+    }
+    Ok(())
 }
 
 impl BundlePlan {
@@ -481,7 +555,7 @@ fn validate_scope_name(name: &str) -> Result<()> {
 }
 
 fn validate_skill_name(name: &str, kind: &str) -> Result<()> {
-    if name.is_empty() || name == "." || name == ".." || name.contains('/') || name.contains('\\') {
+    if name.is_empty() || name.starts_with('.') || name.contains('/') || name.contains('\\') {
         bail!("invalid {kind} name `{name}`; names must be single path components");
     }
     Ok(())

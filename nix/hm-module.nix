@@ -5,6 +5,8 @@
   ...
 }: let
   cfg = config.programs.skillnet;
+  providerNames = builtins.attrNames (lib.filterAttrs (_: subscription: subscription.provider) cfg.subscriptions);
+  providerArgs = lib.concatMapStringsSep " " lib.escapeShellArg providerNames;
   tomlFormat = pkgs.formats.toml {};
   generatedConfigFile = "${config.xdg.configHome}/skillnet/skillnet.toml";
   generatedCatalogConfigFile = "${config.xdg.configHome}/skillnet/skillnet.catalog.toml";
@@ -20,9 +22,10 @@
       url = cfg.database.url;
     };
   generatedSettings =
-    ((cfg.settings or {}) // lib.optionalAttrs (cfg.settings == null) {
-      global = { views = []; };
-    })
+    ((cfg.settings or {})
+      // lib.optionalAttrs (cfg.settings == null) {
+        global = {views = [];};
+      })
     // {
       data_dir = cfg.dataDir;
       user = config.home.username;
@@ -40,11 +43,15 @@
     // lib.optionalAttrs (cfg.subscriptions != {}) {
       subscriptions =
         lib.mapAttrs
-        (_: subscription: {
-          inherit (subscription) url target source;
-          ref = subscription.ref;
-          delete_policy = subscription.deletePolicy;
-        })
+        (_: subscription:
+          {
+            inherit (subscription) url source provider;
+            ref = subscription.ref;
+            delete_policy = subscription.deletePolicy;
+          }
+          // lib.optionalAttrs (subscription.target != null) {
+            target = subscription.target;
+          })
         cfg.subscriptions;
     };
 in {
@@ -56,9 +63,8 @@ in {
           Enable skillnet, the AI skill mirror and calibration CLI.
 
           The Home Manager module installs skillnet, renders optional
-          configuration, and exports session variables. It does not run
-          skillnet commands during activation; materialisation, hook
-          installation, and calibration migrations are explicit CLI workflows.
+          configuration, and exports session variables. Subscription updates
+          remain explicit unless subscriptionSyncInterval is configured.
         '';
       };
 
@@ -141,14 +147,21 @@ in {
           };
 
           target = lib.mkOption {
-            type = lib.types.str;
-            description = "Local skill directory that receives this subscription's skills.";
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Local skill directory that receives a copy subscription's skills.";
           };
 
           source = lib.mkOption {
             type = lib.types.str;
             default = "global_skills";
             description = "Path inside the subscribed repository containing skill directories.";
+          };
+
+          provider = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Compose this subscription directly into global generated skill views.";
           };
 
           deletePolicy = lib.mkOption {
@@ -161,9 +174,16 @@ in {
       default = {};
       description = ''
         Declarative skill repository subscriptions rendered into
-        skillnet.toml. Home Manager only writes config; run
-        `skillnet subscription sync --all` explicitly to materialise them.
+        skillnet.toml. Copy subscriptions require target; provider subscriptions
+        omit target and are composed into generated global bundles.
       '';
+    };
+
+    subscriptionSyncInterval = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "1h";
+      description = "Optional systemd interval for refreshing all subscriptions; the service also runs at login.";
     };
 
     externalManifests = lib.mkOption {
@@ -282,6 +302,16 @@ in {
           assertion = cfg.skillsRoot == null || cfg.mirrorRoot == null || cfg.skillsRoot == cfg.mirrorRoot;
           message = "programs.skillnet.skillsRoot and programs.skillnet.mirrorRoot must match; separate mirror and repository roots are not supported yet.";
         }
+        {
+          assertion =
+            lib.all
+            (subscription:
+              if subscription.provider
+              then subscription.target == null
+              else subscription.target != null)
+            (lib.attrValues cfg.subscriptions);
+          message = "programs.skillnet provider subscriptions must omit target; copy subscriptions must set target.";
+        }
       ];
 
       home.packages = [cfg.package];
@@ -351,6 +381,32 @@ in {
       home.activation.skillnetExternalBundles = lib.hm.dag.entryAfter ["writeBoundary"] ''
         ${cfg.package}/bin/skillnet --allow-dirty-destination sync --scope global --no-promote --allow-delete
       '';
+    })
+
+    (lib.mkIf (cfg.subscriptionSyncInterval != null && providerNames != []) {
+      systemd.user.services.skillnet-subscription-sync = {
+        Unit = {
+          Description = "Refresh Skillnet subscriptions";
+          After = ["network-online.target"];
+        };
+        Service = {
+          Type = "oneshot";
+          Environment = "PATH=${lib.makeBinPath [pkgs.git]}";
+          ExecStart = "${cfg.package}/bin/skillnet --allow-dirty-destination subscription sync ${providerArgs}";
+        };
+        Install.WantedBy = ["default.target"];
+      };
+
+      systemd.user.timers.skillnet-subscription-sync = {
+        Unit.Description = "Refresh Skillnet subscriptions periodically";
+        Timer = {
+          OnBootSec = "5m";
+          OnUnitActiveSec = cfg.subscriptionSyncInterval;
+          Persistent = true;
+          Unit = "skillnet-subscription-sync.service";
+        };
+        Install.WantedBy = ["timers.target"];
+      };
     })
   ]);
 }

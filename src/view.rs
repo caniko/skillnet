@@ -239,6 +239,9 @@ pub fn materialize_view_with_expected(
 
     if options.allow_delete {
         for stale in stale_view_entries(&view.path, expected.keys())? {
+            if options.link_strategy == LinkStrategy::Symlink && !stale.is_symlink() {
+                continue;
+            }
             remove_view_entry(&stale)
                 .with_context(|| format!("failed to remove stale view entry {stale}"))?;
             summary.removed += 1;

@@ -50,7 +50,10 @@
         overlays = [(import rust-overlay)];
       };
 
-      toolchain = rs-harbor.lib.mkToolchain {inherit pkgs; toolchainProfile = "nightly";};
+      toolchain = rs-harbor.lib.mkToolchain {
+        inherit pkgs;
+        toolchainProfile = "nightly";
+      };
       cross = rs-harbor.lib.mkCross {inherit pkgs system;};
       inherit (toolchain) craneLib rustToolchain;
 
@@ -160,10 +163,6 @@
         skillnet = hmModule;
       };
 
-      lib = {
-        externalManifestSupport = true;
-      };
-
       checks = {
         default = package;
         formatting = fmtCheck;
@@ -216,6 +215,14 @@
       hmModules = {
         default = hmModule;
         skillnet = hmModule;
+      };
+      lib = {
+        externalManifestSupport = true;
+        externalProviderSupport = true;
+        x86_64-linux = {
+          externalManifestSupport = true;
+          externalProviderSupport = true;
+        };
       };
     };
 }
