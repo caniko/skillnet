@@ -2,11 +2,12 @@
   description = "skillnet AI skill mirror manager";
 
   inputs = {
-    rs-harbor.url = "git+https://github.com/caniko/rs-harbor.git?ref=trunk&rev=05cc4f162b55fa904b687db1821e2463fa813e50";
+    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=05cc4f162b55fa904b687db1821e2463fa813e50";
+    rs-harbor.follows = "harbor-rs";
 
-    nixpkgs.follows = "rs-harbor/nixpkgs";
-    rust-overlay.follows = "rs-harbor/rust-overlay";
-    crane.follows = "rs-harbor/crane";
+    nixpkgs.follows = "harbor-rs/nixpkgs";
+    rust-overlay.follows = "harbor-rs/rust-overlay";
+    crane.follows = "harbor-rs/crane";
     flake-utils.url = "github:numtide/flake-utils";
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
@@ -34,7 +35,7 @@
     advisory-db,
     home-manager,
     nixpkgs,
-    rs-harbor,
+    harbor-rs,
     plinth,
     flake-utils,
     rust-overlay,
@@ -50,8 +51,8 @@
         overlays = [(import rust-overlay)];
       };
 
-      toolchain = rs-harbor.lib.mkToolchain {inherit pkgs;};
-      cross = rs-harbor.lib.mkCross {inherit pkgs system;};
+      toolchain = harbor-rs.lib.mkToolchain {inherit pkgs;};
+      cross = harbor-rs.lib.mkCross {inherit pkgs system;};
       inherit (toolchain) craneLib rustToolchain;
 
       src = pkgs.lib.cleanSourceWith {
@@ -218,7 +219,7 @@
           shellHook = pre-commit-check.shellHook;
         };
 
-        docs = rs-harbor.lib.mkDocsShell {
+        docs = harbor-rs.lib.mkDocsShell {
           inherit pkgs cross;
           inherit (toolchain) craneLib;
           packages = with pkgs;
