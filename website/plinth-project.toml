@@ -10,11 +10,11 @@ href = "#overview"
 
 [[nav]]
 label = "Source"
-href = "ssh://git@codeberg.org/caniko/skillnet.git"
+href = "ssh://git@github.com/caniko/skillnet.git"
 
 [[footer_links]]
 label = "Source"
-href = "ssh://git@codeberg.org/caniko/skillnet.git"
+href = "ssh://git@github.com/caniko/skillnet.git"
 
 [[pages]]
 slug = "index"
@@ -29,7 +29,7 @@ subtitle = "<!-- simit:badges:start -->"
 
 [[pages.sections.ctas]]
 label = "View source"
-href = "ssh://git@codeberg.org/caniko/skillnet.git"
+href = "ssh://git@github.com/caniko/skillnet.git"
 primary = true
 
 [[pages.sections]]

@@ -64,7 +64,7 @@ payloads or harness-specific installation policy.
 Add the flake input and import the module:
 
 ```nix
-inputs.skillnet.url = "git+ssh://git@codeberg.org/caniko/skillnet.git";
+inputs.skillnet.url = "git+ssh://git@github.com/caniko/skillnet.git";
 
 # In your Home Manager config:
 imports = [ inputs.skillnet.hmModules.default ];
@@ -102,7 +102,7 @@ If you also want the module to define where the `ai-skills` checkout lives,
 set `skillsRoot`. On atlas, that path is:
 
 ```nix
-programs.skillnet.skillsRoot = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills";
+programs.skillnet.skillsRoot = "/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/ai-skills";
 ```
 
 When configured, the module writes `skills_root` into `skillnet.toml`, exports
@@ -149,7 +149,7 @@ Options:
 - `programs.skillnet.skillsRoot` sets `skills_root` in generated
   `skillnet.toml`, exports `AI_SKILLS_REPO` for compatibility, and is the
   canonical mirror destination/VCS working tree; atlas uses
-  `/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills`.
+  `/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/ai-skills`.
 - `programs.skillnet.mirrorRoot` is the legacy mirror destination option. When
   both `skillsRoot` and `mirrorRoot` are set, they must match.
 - `programs.skillnet.database.backend` selects `sqlite` or `postgres` and
@@ -402,7 +402,7 @@ skillnet completions powershell
 ## Documentation
 
 - Docs: <https://docs.rs/skillnet>
-- Source: <https://codeberg.org/caniko/skillnet>
+- Source: <https://github.com/caniko/skillnet>
 
 ## Release Validation
 

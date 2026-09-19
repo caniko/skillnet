@@ -71,8 +71,8 @@ The current `skillnet.toml` from the ai-skills checkout translates to:
 ```nix
 programs.skillnet = {
   enable = true;
-  skillsRoot = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills";
-  mirrorRoot = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/ai-skills";
+  skillsRoot = "/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/ai-skills";
+  mirrorRoot = "/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/ai-skills";
 
   settings = {
     global = {
@@ -95,7 +95,7 @@ programs.skillnet = {
       }
       {
         name = "ai-yolo-nix";
-        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/yee-haw";
+        path = "/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/yee-haw";
       }
       {
         name = "canix";
@@ -111,7 +111,7 @@ programs.skillnet = {
       }
       {
         name = "fragpipe-mcp";
-        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/fragpipe-mcp";
+        path = "/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/fragpipe-mcp";
       }
       {
         name = "goose";
@@ -119,11 +119,11 @@ programs.skillnet = {
       }
       {
         name = "nix-crossbow";
-        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/nix-crossbow";
+        path = "/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/nix-crossbow";
       }
       {
         name = "plinth";
-        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/plinth";
+        path = "/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/plinth";
       }
       {
         name = "regicide";
@@ -131,11 +131,11 @@ programs.skillnet = {
       }
       {
         name = "rs-modde";
-        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/rs-modde";
+        path = "/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/rs-modde";
       }
       {
         name = "rs_bouldy";
-        path = "/data/nvme0/can/canix/projects/repos/owned/codeberg.org/caniko/rs-bouldy";
+        path = "/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/rs-bouldy";
       }
     ];
   };
