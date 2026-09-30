@@ -31,6 +31,7 @@
   };
 
   outputs = {
+    self,
     advisory-db,
     home-manager,
     nixpkgs,
@@ -143,22 +144,23 @@
       mkBundle = import ./nix/bundle.nix {
         inherit package pkgs;
       };
-      bundleCheck = pkgs.runCommand "skillnet-bundle-check" {
-        bundle = mkBundle {
-          canonical = builtins.path {
-            path = ./nix/test-bundle-source;
-            name = "skillnet-test-bundle-source";
+      bundleCheck =
+        pkgs.runCommand "skillnet-bundle-check" {
+          bundle = mkBundle {
+            canonical = builtins.path {
+              path = ./nix/test-bundle-source;
+              name = "skillnet-test-bundle-source";
+            };
+            user = "can";
           };
-          user = "can";
-        };
-      } ''
-        test -L "$bundle/view/demo"
-        test ! -e "$bundle/view/shared"
-        test -f "$bundle/bundles/global/demo/SKILL.md"
-        test ! -L "$bundle/bundles/global/demo/SKILL.md"
-        test -L "$bundle/bundles/global/demo/.skillnet/deps/shared"
-        touch "$out"
-      '';
+        } ''
+          test -L "$bundle/view/demo"
+          test ! -e "$bundle/view/shared"
+          test -f "$bundle/bundles/global/demo/SKILL.md"
+          test ! -L "$bundle/bundles/global/demo/SKILL.md"
+          test -L "$bundle/bundles/global/demo/.skillnet/deps/shared"
+          touch "$out"
+        '';
     in {
       packages = {
         default = package;
@@ -200,11 +202,10 @@
         # Fail if flake inputs ever point at the retired Codeberg/Codefloe
         # mirrors again (fleet migrated to github.com/caniko/*).
         # sourceUrl package metadata is excluded: informational only, not fetched.
-        host-pinning =
-          let
-            # Split across literals so this file never matches its own pattern.
-            staleHosts = "cod" + "eberg|cod" + "efloe";
-          in
+        host-pinning = let
+          # Split across literals so this file never matches its own pattern.
+          staleHosts = "cod" + "eberg|cod" + "efloe";
+        in
           pkgs.runCommand "skillnet-host-pinning" {} ''
             if ${pkgs.lib.getExe pkgs.ripgrep} -v "sourceUrl" ${./flake.nix} ${./flake.lock} \
               | ${pkgs.lib.getExe pkgs.ripgrep} -q "${staleHosts}"; then
@@ -218,6 +219,13 @@
       };
 
       devShells = {
+        msrv = pkgs.mkShell {
+          inputsFrom = [(self.devShells.${system}.default.overrideAttrs (_: {shellHook = "";}))];
+          packages = [pkgs.rust-bin.stable."1.88.0".minimal];
+          RUSTFLAGS = "";
+          CARGO_ENCODED_RUSTFLAGS = "";
+          RUSTC_WRAPPER = "";
+        };
         default = craneLib.devShell {
           packages = with pkgs;
             [
