@@ -605,8 +605,8 @@ fn assert_relative_symlink_points_to(link: &Path, target: &str) {
     assert_eq!(fs::read_link(link).unwrap(), Path::new(target));
 }
 
-fn tree_digest(root: &Path) -> String {
-    let mut entries = Vec::new();
+fn tree_entries(root: &Path) -> BTreeMap<String, String> {
+    let mut entries = BTreeMap::new();
     for entry in WalkDir::new(root).follow_links(false) {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -631,10 +631,14 @@ fn tree_digest(root: &Path) -> String {
                 hasher.update(&buf[..n]);
             }
         }
-        entries.push(format!("{:x}", hasher.finalize()));
+        entries.insert(rel.into_owned(), format!("{:x}", hasher.finalize()));
     }
-    entries.sort();
+    entries
+}
 
+fn tree_digest(root: &Path) -> String {
+    let mut entries: Vec<_> = tree_entries(root).into_values().collect();
+    entries.sort();
     let mut digest = Sha256::new();
     for entry in entries {
         digest.update(entry.as_bytes());
@@ -856,6 +860,7 @@ fn sync_forwards_allow_delete_and_force() {
 fn sync_dry_run_does_not_mutate() {
     let sync = SyncFixture::new();
     let before = tree_digest(sync.fixture.root());
+    let before_entries = tree_entries(sync.fixture.root());
 
     sync.command()
         .args(["--dry-run", "sync"])
@@ -869,7 +874,19 @@ fn sync_dry_run_does_not_mutate() {
                 .and(predicate::str::contains("force: false")),
         );
 
-    assert_eq!(tree_digest(sync.fixture.root()), before);
+    let after_entries = tree_entries(sync.fixture.root());
+    let changed: Vec<_> = before_entries
+        .keys()
+        .chain(after_entries.keys())
+        .filter(|path| before_entries.get(*path) != after_entries.get(*path))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    assert_eq!(
+        tree_digest(sync.fixture.root()),
+        before,
+        "dry-run changed: {changed:?}"
+    );
     assert!(!sync.global_view.exists());
     assert!(!sync.project_view(&sync.first_project).exists());
     assert!(!sync.aggregator("first").exists());

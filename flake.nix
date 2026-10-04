@@ -240,6 +240,7 @@
               rust-analyzer
               taplo
             ]
+            ++ [harbor-rs.packages.${system}.harbor-ci]
             ++ pre-commit-check.enabledPackages;
           shellHook = pre-commit-check.shellHook;
         };
