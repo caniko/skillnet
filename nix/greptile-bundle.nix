@@ -33,7 +33,7 @@
     } ''
       set -euo pipefail
       mkdir -p "$out"
-      tar --dereference --sort=name --mtime=@1 --owner=0 --group=0 --numeric-owner \
+      tar --dereference --hard-dereference --sort=name --mtime=@1 --owner=0 --group=0 --numeric-owner \
         --format=gnu -cf - -C ${bundle}/view check-pr greploop cli-review \
         | gzip -n > "$out/greptile-consumer-skills.tar.gz"
       cp ${provenance} "$out/provenance.json"
