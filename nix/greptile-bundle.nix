@@ -4,10 +4,10 @@
   mkBundle,
   skillnetVersion,
 }: let
-  revision = "34df2d68a163f2ba400ef070622fb4b8ef81f6f2";
+  revision = "277e4fdd23bfb5f863fa6953cec7d5e51c2fe2d8";
   archive = pkgs.fetchurl {
     url = "https://codeload.github.com/caniko/ai-skills/tar.gz/${revision}";
-    hash = "sha256-pxLLLoSwPlvz8hMll6ey4tjurqIw6kIT7gyAVLOFKnc=";
+    hash = "sha256-NBSAXZPGLq3roJIxZvVVIzsU6dFw1N52/PtKmYOVFSg=";
   };
   source =
     pkgs.runCommand "ai-skills-greptile-${builtins.substring 0 12 revision}" {
@@ -52,8 +52,12 @@ in {
     test -s "$bundle/view/greploop/.skillnet/deps/check-pr/SKILL.md"
     test -s "$bundle/view/cli-review/.skillnet/deps/write-human-style/SKILL.md"
     test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/.skillnet/deps/fix-loop-ref/SKILL.md"
+    test -s "$bundle/view/check-pr/.skillnet/deps/grouped-git-commits/.skillnet/deps/chaosbox-policy/SKILL.md"
+    test -s "$bundle/view/cli-review/.skillnet/deps/write-human-style/.skillnet/deps/solution-placement-policy/SKILL.md"
     # Reference-only packages belong in dependency closures, not entrypoint views.
     test ! -e "$bundle/view/fix-loop-ref"
+    test ! -e "$bundle/view/chaosbox-policy"
+    test ! -e "$bundle/view/solution-placement-policy"
     mkdir -p "$out"
     cp ${portableArchive}/* "$out/"
     # The current hosted workflow retains logs but has no artifact upload step.
