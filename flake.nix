@@ -147,6 +147,7 @@
       };
       greptileSkills = import ./nix/greptile-bundle.nix {
         inherit mkBundle pkgs;
+        skillnetVersion = package.version;
       };
       bundleCheck =
         pkgs.runCommand "skillnet-bundle-check" {
@@ -170,6 +171,7 @@
         default = package;
         skillnet = package;
         greptile-skills = greptileSkills.bundle;
+        greptile-skills-archive = greptileSkills.archive;
         docs = docs;
         website = website;
         site = website;
@@ -248,7 +250,20 @@
             ]
             ++ [harbor-rs.packages.${system}.harbor-ci]
             ++ pre-commit-check.enabledPackages;
-          shellHook = pre-commit-check.shellHook;
+          shellHook =
+            pre-commit-check.shellHook
+            + ''
+              # Keep the qualified portable consumer export retrievable from the
+              # existing hosted logs until the artifact-upload workflow is installed.
+              if [ "''${CI:-}" = true ] && [ "''${GITHUB_REPOSITORY:-}" = caniko/skillnet ] \
+                && [ -d "''${RUNNER_TEMP:-}" ]; then
+                marker="$RUNNER_TEMP/$(basename ${greptileSkills.check}).exported"
+                if [ ! -e "$marker" ]; then
+                  cat ${greptileSkills.check}/consumer-archive.log
+                  touch "$marker"
+                fi
+              fi
+            '';
         };
 
         docs = harbor-rs.lib.mkDocsShell {

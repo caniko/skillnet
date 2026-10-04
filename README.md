@@ -204,6 +204,21 @@ dependencies. `checks.x86_64-linux.greptile-skills` qualifies that real
 composition in the existing hosted flake workflow, including license
 retention and reference-only dependency visibility.
 
+`packages.x86_64-linux.greptile-skills-archive` exports the three composed
+entrypoints as `greptile-consumer-skills.tar.gz`, together with
+`provenance.json` and `SHA256SUMS`. Tar entries are dereferenced and have
+normalized ordering, ownership, and timestamps, so the archive can be used
+after the producing runner and its Nix store disappear. The composition
+check rejects links, special files, and paths outside the three entrypoints.
+
+Until the artifact-upload workflow is available, this repository's hosted
+development shell emits the qualified archive once per runner as
+`SKILLNET_CONSUMER_ARCHIVE_V1` JSON frames. Each frame binds the file's SHA-256,
+byte count, chunk count, and index; consumers must recover every chunk and
+verify those fields and `SHA256SUMS` before extraction. The transport is
+limited to 1 MiB per file. Ordinary development shells do not emit these
+frames.
+
 An optional `Skillnet.pkl` at the root of a canonical skill store enables
 manifest-driven composition. It is evaluated by the Rust `pklr` integration
 with local imports confined to that store; environment, network, temporary
