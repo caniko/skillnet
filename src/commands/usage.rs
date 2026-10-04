@@ -244,6 +244,28 @@ fn max_seen(current: Option<String>, candidate: Option<String>) -> Option<String
 fn open_db(target: DbTarget) -> Result<Db> {
     match target {
         DbTarget::Sqlite(path) => Db::open(&path),
-        DbTarget::Postgres(url) => Db::open_postgres(&url),
+        DbTarget::Postgres(_url) => {
+            #[cfg(feature = "postgres")]
+            {
+                Db::open_postgres(&_url)
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                bail!("Postgres usage database requested, but this skillnet binary was built without the `postgres` feature; rebuild with `--features postgres` or select the sqlite backend")
+            }
+        }
     }
+}
+
+#[test]
+#[cfg(not(feature = "postgres"))]
+fn postgres_usage_without_the_backend_is_explicit_and_redacted() {
+    let error = open_db(DbTarget::Postgres(
+        "postgres://user:private@invalid/db".into(),
+    ))
+    .err()
+    .unwrap();
+    let message = error.to_string();
+    assert!(message.contains("--features postgres"));
+    assert!(!message.contains("private"));
 }

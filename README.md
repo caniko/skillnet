@@ -2,7 +2,7 @@
 
 <!-- simit:badges:start -->
 
-[![CI](https://img.shields.io/badge/CI-managed-2088ff)](.forgejo/workflows/ci.yaml) [![Nix](https://img.shields.io/badge/Nix-managed-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs) [![crates.io](https://img.shields.io/badge/crates.io-ready-f46623)](https://crates.io/crates/skillnet)
+[![CI](https://img.shields.io/badge/CI-managed-2088ff)](.github/workflows/ci.yaml) [![Nix](https://img.shields.io/badge/Nix-drift-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs) [![crates.io](https://img.shields.io/badge/crates.io-ready-f46623)](https://crates.io/crates/skillnet)
 
 <!-- simit:badges:end -->
 
@@ -195,6 +195,14 @@ The `path` key is optional. Without it, `skillnet` uses
 `$XDG_DATA_HOME/skillnet/multi-phase-plan/calibration.sqlite`.
 
 ## Pkl skill manifests and bundles
+
+`packages.x86_64-linux.greptile-skills` composes the official `check-pr`,
+`greploop`, and `cli-review` imports from the immutable `caniko/ai-skills`
+revision recorded in `nix/greptile-bundle.nix`. Its `view/` directory contains
+consumer entrypoints with repository contracts and transitive Skillnet
+dependencies. `checks.x86_64-linux.greptile-skills` qualifies that real
+composition in the existing hosted flake workflow, including license
+retention and reference-only dependency visibility.
 
 An optional `Skillnet.pkl` at the root of a canonical skill store enables
 manifest-driven composition. It is evaluated by the Rust `pklr` integration

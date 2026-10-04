@@ -25,12 +25,14 @@
       flake = false;
     };
     plinth = {
-      url = "git+https://github.com/caniko/plinth.git";
+      # Includes Harbor's private build-scoped cache fallback for hosted docs.
+      url = "git+https://github.com/caniko/plinth.git?ref=trunk&rev=ed2424518f888bfb06b3cf4f11101bffe1b740e4";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
   outputs = {
+    self,
     advisory-db,
     home-manager,
     nixpkgs,
@@ -143,26 +145,31 @@
       mkBundle = import ./nix/bundle.nix {
         inherit package pkgs;
       };
-      bundleCheck = pkgs.runCommand "skillnet-bundle-check" {
-        bundle = mkBundle {
-          canonical = builtins.path {
-            path = ./nix/test-bundle-source;
-            name = "skillnet-test-bundle-source";
+      greptileSkills = import ./nix/greptile-bundle.nix {
+        inherit mkBundle pkgs;
+      };
+      bundleCheck =
+        pkgs.runCommand "skillnet-bundle-check" {
+          bundle = mkBundle {
+            canonical = builtins.path {
+              path = ./nix/test-bundle-source;
+              name = "skillnet-test-bundle-source";
+            };
+            user = "can";
           };
-          user = "can";
-        };
-      } ''
-        test -L "$bundle/view/demo"
-        test ! -e "$bundle/view/shared"
-        test -f "$bundle/bundles/global/demo/SKILL.md"
-        test ! -L "$bundle/bundles/global/demo/SKILL.md"
-        test -L "$bundle/bundles/global/demo/.skillnet/deps/shared"
-        touch "$out"
-      '';
+        } ''
+          test -L "$bundle/view/demo"
+          test ! -e "$bundle/view/shared"
+          test -f "$bundle/bundles/global/demo/SKILL.md"
+          test ! -L "$bundle/bundles/global/demo/SKILL.md"
+          test -L "$bundle/bundles/global/demo/.skillnet/deps/shared"
+          touch "$out"
+        '';
     in {
       packages = {
         default = package;
         skillnet = package;
+        greptile-skills = greptileSkills.bundle;
         docs = docs;
         website = website;
         site = website;
@@ -197,14 +204,14 @@
         deny = denyCheck;
         hm-module = hmModuleTest;
         bundle = bundleCheck;
+        greptile-skills = greptileSkills.check;
         # Fail if flake inputs ever point at the retired Codeberg/Codefloe
         # mirrors again (fleet migrated to github.com/caniko/*).
         # sourceUrl package metadata is excluded: informational only, not fetched.
-        host-pinning =
-          let
-            # Split across literals so this file never matches its own pattern.
-            staleHosts = "cod" + "eberg|cod" + "efloe";
-          in
+        host-pinning = let
+          # Split across literals so this file never matches its own pattern.
+          staleHosts = "cod" + "eberg|cod" + "efloe";
+        in
           pkgs.runCommand "skillnet-host-pinning" {} ''
             if ${pkgs.lib.getExe pkgs.ripgrep} -v "sourceUrl" ${./flake.nix} ${./flake.lock} \
               | ${pkgs.lib.getExe pkgs.ripgrep} -q "${staleHosts}"; then
@@ -218,6 +225,13 @@
       };
 
       devShells = {
+        msrv = pkgs.mkShell {
+          inputsFrom = [(self.devShells.${system}.default.overrideAttrs (_: {shellHook = "";}))];
+          packages = [pkgs.rust-bin.stable."1.88.0".minimal];
+          RUSTFLAGS = "";
+          CARGO_ENCODED_RUSTFLAGS = "";
+          RUSTC_WRAPPER = "";
+        };
         default = craneLib.devShell {
           packages = with pkgs;
             [
@@ -232,6 +246,7 @@
               rust-analyzer
               taplo
             ]
+            ++ [harbor-rs.packages.${system}.harbor-ci]
             ++ pre-commit-check.enabledPackages;
           shellHook = pre-commit-check.shellHook;
         };
