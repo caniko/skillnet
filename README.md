@@ -196,6 +196,14 @@ The `path` key is optional. Without it, `skillnet` uses
 
 ## Pkl skill manifests and bundles
 
+`packages.x86_64-linux.greptile-skills` composes the official `check-pr`,
+`greploop`, and `cli-review` imports from the immutable `caniko/ai-skills`
+revision recorded in `nix/greptile-bundle.nix`. Its `view/` directory contains
+consumer entrypoints with repository contracts and transitive Skillnet
+dependencies. `checks.x86_64-linux.greptile-skills` qualifies that real
+composition in the existing hosted flake workflow, including license
+retention and reference-only dependency visibility.
+
 An optional `Skillnet.pkl` at the root of a canonical skill store enables
 manifest-driven composition. It is evaluated by the Rust `pklr` integration
 with local imports confined to that store; environment, network, temporary

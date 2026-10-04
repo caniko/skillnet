@@ -144,6 +144,9 @@
       mkBundle = import ./nix/bundle.nix {
         inherit package pkgs;
       };
+      greptileSkills = import ./nix/greptile-bundle.nix {
+        inherit mkBundle pkgs;
+      };
       bundleCheck =
         pkgs.runCommand "skillnet-bundle-check" {
           bundle = mkBundle {
@@ -165,6 +168,7 @@
       packages = {
         default = package;
         skillnet = package;
+        greptile-skills = greptileSkills.bundle;
         docs = docs;
         website = website;
         site = website;
@@ -199,6 +203,7 @@
         deny = denyCheck;
         hm-module = hmModuleTest;
         bundle = bundleCheck;
+        greptile-skills = greptileSkills.check;
         # Fail if flake inputs ever point at the retired Codeberg/Codefloe
         # mirrors again (fleet migrated to github.com/caniko/*).
         # sourceUrl package metadata is excluded: informational only, not fetched.
