@@ -299,6 +299,16 @@ fn init_git_repo(path: &Path) {
         .current_dir(path)
         .output()
         .unwrap();
+    // Fixture commits must finish all Git writes before a filesystem snapshot.
+    // New Git versions can otherwise detach maintenance after the commit exits.
+    for (key, value) in [("maintenance.auto", "false"), ("gc.auto", "0")] {
+        let output = StdCommand::new("git")
+            .args(["config", "--local", key, value])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "fixture Git configuration failed");
+    }
 }
 
 fn commit_all(path: &Path, message: &str) {
@@ -610,7 +620,8 @@ fn tree_entries(root: &Path) -> BTreeMap<String, String> {
     for entry in WalkDir::new(root).follow_links(false) {
         let entry = entry.unwrap();
         let path = entry.path();
-        let metadata = fs::symlink_metadata(path).unwrap();
+        let metadata = fs::symlink_metadata(path)
+            .unwrap_or_else(|error| panic!("snapshot metadata {}: {error}", path.display()));
         let rel = path.strip_prefix(root).unwrap().to_string_lossy();
         let mut hasher = Sha256::new();
         hasher.update(rel.as_bytes());
