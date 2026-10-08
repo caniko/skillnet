@@ -4,10 +4,10 @@
   mkBundle,
   skillnetVersion,
 }: let
-  revision = "a4f0dc1549b517fc986ec4d06a033687a22aa12c";
+  revision = "a92f229851c554e747b02b8b0a972553e3e130bf";
   archive = pkgs.fetchurl {
     url = "https://codeload.github.com/caniko/ai-skills/tar.gz/${revision}";
-    hash = "sha256-I1BJqmxN4IvtBTjUL0RUP+B4eCmOr+jXjL5RDMYm7I0=";
+    hash = "sha256-VXZZooq/eOjyE7E2iu33Z2Xmmc745CGWjT3FVwWoYas=";
   };
   source =
     pkgs.runCommand "ai-skills-greptile-${builtins.substring 0 12 revision}" {
@@ -34,6 +34,8 @@
     repository = "caniko/ai-skills";
     head = revision;
     inherit skillnetVersion;
+    trust = "qualification-only";
+    consumable = false;
     skills = ["check-pr" "greploop" "cli-review"];
   });
   portableArchive =
@@ -96,7 +98,18 @@ in {
               test -f "$adapter/.skillnet/deps/canix-cli/SKILL.md"
               test -f "$adapter/.skillnet/deps/canix-structure-reference/SKILL.md"
               test -f "$adapter/.skillnet/deps/canix-cli/.skillnet/deps/canix-structure-reference/SKILL.md"
-              test -f "$adapter/.skillnet/deps/canix-cli/references/../.skillnet/deps/canix-structure-reference/SKILL.md"
+              # references is a source-store symlink; interpret the documented
+              # dependency path from its assembled package root, never via ../.
+              ${pkgs.python3}/bin/python - "$adapter/.skillnet/deps/canix-cli" <<'PY'
+              from pathlib import Path
+              import re
+              import sys
+              root = Path(sys.argv[1])
+              reference = (root / "references/secrets-and-registry.md").read_text()
+              dependency = re.search(r"from `([^`]+)`", reference).group(1)
+              assert (root / dependency).is_file(), dependency
+              assert "**canix-cli package root**" in reference
+              PY
             ''
             else ''
               test ! -e ${bundle}/view/atlas-nomad-orchestration
