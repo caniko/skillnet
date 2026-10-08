@@ -208,7 +208,8 @@
         bundle = bundleCheck;
         greptile-skills = greptileSkills.check;
         # A CI-only runtime hook must not make the composition a dev-shell input.
-        dev-shell-composition-isolation = assert !(builtins.hasAttr greptileSkills.check.drvPath
+        # Attribute-name lookup only: preserve the shell's real dependency context.
+        dev-shell-composition-isolation = assert !(builtins.hasAttr (builtins.unsafeDiscardStringContext greptileSkills.check.drvPath)
           (builtins.getContext self.devShells.${system}.default.shellHook));
           pkgs.runCommand "skillnet-dev-shell-composition-isolation" {} ''touch "$out"'';
         # Fail if flake inputs ever point at the retired Codeberg/Codefloe
