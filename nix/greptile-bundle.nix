@@ -4,10 +4,10 @@
   mkBundle,
   skillnetVersion,
 }: let
-  revision = "8630f739ca6b074e877108e635b686efa8e5d17d";
+  revision = "a4f0dc1549b517fc986ec4d06a033687a22aa12c";
   archive = pkgs.fetchurl {
     url = "https://codeload.github.com/caniko/ai-skills/tar.gz/${revision}";
-    hash = "sha256-BrYVhma13VJJi0G1oHN3jNiTZRy8wqvP5PNcNKf2ywY=";
+    hash = "sha256-I1BJqmxN4IvtBTjUL0RUP+B4eCmOr+jXjL5RDMYm7I0=";
   };
   source =
     pkgs.runCommand "ai-skills-greptile-${builtins.substring 0 12 revision}" {
@@ -20,6 +20,15 @@
     canonical = "${source}/global_skills";
     user = "can";
   };
+  hostBundles = pkgs.lib.concatMap (host:
+    map (user: {
+      inherit host user;
+      bundle = mkBundle {
+        canonical = "${source}/global_skills";
+        externalManifests = ["${source}/host_skills/Skillnet.pkl"];
+        inherit host user;
+      };
+    }) ["can" "dejana"]) ["atlas" "nomad"];
   provenance = pkgs.writeText "greptile-consumer-provenance.json" (builtins.toJSON {
     schemaVersion = 1;
     repository = "caniko/ai-skills";
@@ -69,6 +78,33 @@ in {
       test ! -e "$bundle/view/chaosbox-policy"
       test ! -e "$bundle/view/solution-placement-policy"
       test ! -e "$bundle/view/repo-pages"
+      ${pkgs.lib.concatMapStringsSep "\n" ({
+          host,
+          user,
+          bundle,
+        }: ''
+          echo "host-bundle ${host}/${user}: ${bundle}"
+          test -f ${bundle}/view/multi-host-agent-orchestration/SKILL.md
+          diff -u ${source}/global_skills/multi-host-agent-orchestration/SKILL.md ${bundle}/view/multi-host-agent-orchestration/SKILL.md
+          ${
+            if host == "atlas"
+            then ''
+              adapter=${bundle}/view/atlas-nomad-orchestration
+              test -f "$adapter/SKILL.md"
+              diff -u ${source}/host_skills/atlas-nomad-orchestration/SKILL.md "$adapter/SKILL.md"
+              test -f "$adapter/.skillnet/deps/multi-host-agent-orchestration/SKILL.md"
+              test -f "$adapter/.skillnet/deps/canix-cli/SKILL.md"
+              test -f "$adapter/.skillnet/deps/canix-structure-reference/SKILL.md"
+              test -f "$adapter/.skillnet/deps/canix-cli/.skillnet/deps/canix-structure-reference/SKILL.md"
+              test -f "$adapter/.skillnet/deps/canix-cli/references/../.skillnet/deps/canix-structure-reference/SKILL.md"
+            ''
+            else ''
+              test ! -e ${bundle}/view/atlas-nomad-orchestration
+              test ! -L ${bundle}/view/atlas-nomad-orchestration
+            ''
+          }
+        '')
+        hostBundles}
       mkdir -p "$out"
       cp ${portableArchive}/* "$out/"
       # The current hosted workflow retains logs but has no artifact upload step.
