@@ -198,6 +198,7 @@ mod tests {
                 views: Vec::new(),
             },
             user: None,
+            host: None,
             data_dir: None,
             bundles_root: None,
             skills_root: None,

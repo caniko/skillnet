@@ -20,6 +20,9 @@ pub struct Config {
     /// unless a manifest requires an access selector.
     #[serde(default)]
     pub user: Option<String>,
+    /// Explicit deployment host, independent of the machine building a bundle.
+    #[serde(default)]
+    pub host: Option<String>,
     /// Runtime data directory for generated bundles and local state.
     #[serde(default)]
     pub data_dir: Option<String>,
@@ -259,6 +262,10 @@ impl Config {
             .is_some_and(|user| user.trim().is_empty())
         {
             anyhow::bail!("configured Skillnet user in {path} must not be empty");
+        }
+        if let Some(host) = config.host.as_deref() {
+            crate::manifest::validate_host(host)
+                .with_context(|| format!("invalid configured Skillnet host in {path}"))?;
         }
         Ok(config)
     }

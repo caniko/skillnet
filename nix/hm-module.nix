@@ -29,6 +29,7 @@
       user = config.home.username;
       database = generatedDatabaseSettings;
     }
+    // lib.optionalAttrs (cfg.host != null) {inherit (cfg) host;}
     // lib.optionalAttrs (cfg.bundlesRoot != null) {
       bundles_root = cfg.bundlesRoot;
     }
@@ -53,6 +54,11 @@
     };
 in {
   options.programs.skillnet = {
+    host = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Explicit destination host for manifest host selection, including cross-built bundles.";
+    };
     enable =
       lib.mkEnableOption "skillnet, the AI skill mirror and calibration CLI"
       // {

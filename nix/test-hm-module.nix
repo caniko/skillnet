@@ -89,6 +89,7 @@
     };
   };
   immutableConfig = mkHmConfig {
+    host = "destination-not-builder";
     bundlesRoot = "/nix/store/skillnet-bundle/bundles";
     externalManifests = ["/nix/store/skillnet-manifest/Skillnet.pkl"];
     database.backend = "sqlite";
@@ -131,6 +132,8 @@ in
     ! grep -F 'skipping for now.' ${sqliteConfig.activationPackage}/activate >/dev/null
     ! grep -F '${package}/bin/skillnet' ${immutableConfig.activationPackage}/activate >/dev/null
     grep -R -F 'bundles_root = "/nix/store/skillnet-bundle/bundles"' ${immutableConfig.activationPackage}/home-files >/dev/null
+    grep -R -F 'host = "destination-not-builder"' ${immutableConfig.activationPackage}/home-files >/dev/null
+    ! grep -R -F 'host = ' ${sqliteConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml >/dev/null
     mkdir -p ${dataDir}
     test -d ${dataDir}
 

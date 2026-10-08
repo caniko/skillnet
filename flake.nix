@@ -190,6 +190,7 @@
 
       lib = {
         externalManifestSupport = true;
+        hostSelectionSupport = true;
         inherit mkBundle;
       };
 

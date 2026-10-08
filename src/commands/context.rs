@@ -92,18 +92,20 @@ impl Context {
             .map(|path| crate::config::expand_path(path))
             .collect::<Result<Vec<_>>>()?;
         match self.config.bundles_root.as_deref() {
-            Some(root) => crate::bundle::plan_for_user_at(
+            Some(root) => crate::bundle::plan_for_access_at(
                 &target.canonical_path,
                 crate::config::expand_path(root)?.join(&target.name),
                 &external,
                 self.config.user.as_deref(),
+                self.config.host.as_deref(),
             ),
-            None => crate::bundle::plan_for_user(
+            None => crate::bundle::plan_for_access(
                 &target.canonical_path,
                 &target.name,
                 &self.data_dir,
                 &external,
                 self.config.user.as_deref(),
+                self.config.host.as_deref(),
             ),
         }
     }

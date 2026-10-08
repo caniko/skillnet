@@ -281,6 +281,14 @@ skills: Mapping<String, Skill> = new {
 }
 ```
 
+Schema version 3 adds `defaultHosts` and per-skill `hosts` using the same
+inheritance rules as users. Omitted lists are unrestricted; empty lists deny
+all hosts. Set `host = "atlas"` in `skillnet.toml`, or
+`programs.skillnet.host = "atlas"` in Home Manager. User and host grants must
+both match, including every dependency. A host policy without an explicit host
+fails before materialisation. The destination host is configuration, never the
+hostname of the builder. Versions 1 and 2 remain supported.
+
 Select Postgres with an environment variable:
 
 ```sh
