@@ -4,10 +4,10 @@
   mkBundle,
   skillnetVersion,
 }: let
-  revision = "764725ee6b335c78803a23d487f0760be2286967";
+  revision = "be6aa390bcb44c0704a6844c6b32bff296de2dfb";
   archive = pkgs.fetchurl {
     url = "https://codeload.github.com/caniko/ai-skills/tar.gz/${revision}";
-    hash = "sha256-aWHGaHec+fePqIdg/41CYckjqE8wX4frpWAJICjDba4=";
+    hash = "sha256-IZXXR5hC2s2QIeJ+zqgK+TX2dnHNFuSEE159jCMrRnQ=";
   };
   source =
     pkgs.runCommand "ai-skills-greptile-${builtins.substring 0 12 revision}" {
@@ -43,6 +43,7 @@ in {
   inherit bundle;
   archive = portableArchive;
   check = pkgs.runCommand "skillnet-greptile-composition" {inherit bundle;} ''
+    ${pkgs.python3}/bin/python ${source}/ci/test_review_contracts.py
     for skill in check-pr greploop cli-review; do
       test -s "$bundle/view/$skill/SKILL.md"
       test -s "$bundle/view/$skill/LICENSE"
@@ -56,10 +57,13 @@ in {
     test -s "$bundle/view/check-pr/.skillnet/deps/chaosbox-policy/SKILL.md"
     test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/.skillnet/deps/solution-placement-policy/SKILL.md"
     test -s "$bundle/view/cli-review/.skillnet/deps/write-human-style/.skillnet/deps/solution-placement-policy/SKILL.md"
+    test -s "$bundle/view/gitlab-pages/.skillnet/deps/repo-pages/SKILL.md"
+    test -s "$bundle/view/forgejo-pages/.skillnet/deps/repo-pages/SKILL.md"
     # Reference-only packages belong in dependency closures, not entrypoint views.
     test ! -e "$bundle/view/fix-loop-ref"
     test ! -e "$bundle/view/chaosbox-policy"
     test ! -e "$bundle/view/solution-placement-policy"
+    test ! -e "$bundle/view/repo-pages"
     mkdir -p "$out"
     cp ${portableArchive}/* "$out/"
     # The current hosted workflow retains logs but has no artifact upload step.
