@@ -207,6 +207,10 @@
         hm-module = hmModuleTest;
         bundle = bundleCheck;
         greptile-skills = greptileSkills.check;
+        # A CI-only runtime hook must not make the composition a dev-shell input.
+        dev-shell-composition-isolation = assert !(builtins.hasAttr greptileSkills.check.drvPath
+          (builtins.getContext self.devShells.${system}.default.shellHook));
+          pkgs.runCommand "skillnet-dev-shell-composition-isolation" {} ''touch "$out"'';
         # Fail if flake inputs ever point at the retired Codeberg/Codefloe
         # mirrors again (fleet migrated to github.com/caniko/*).
         # sourceUrl package metadata is excluded: informational only, not fetched.
@@ -257,9 +261,12 @@
               # existing hosted logs until the artifact-upload workflow is installed.
               if [ "''${CI:-}" = true ] && [ "''${GITHUB_REPOSITORY:-}" = caniko/skillnet ] \
                 && [ -d "''${RUNNER_TEMP:-}" ]; then
-                marker="$RUNNER_TEMP/$(basename ${greptileSkills.check}).exported"
+                # Resolve only inside hosted CI, not via a derivation interpolation
+                # that Nix would realize before the runtime condition is evaluated.
+                consumer=$(nix build --no-link --print-out-paths .#checks.${system}.greptile-skills) || exit 1
+                marker="$RUNNER_TEMP/$(basename "$consumer").exported"
                 if [ ! -e "$marker" ]; then
-                  cat ${greptileSkills.check}/consumer-archive.log
+                  cat "$consumer/consumer-archive.log"
                   touch "$marker"
                 fi
               fi
