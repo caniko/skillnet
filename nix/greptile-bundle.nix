@@ -4,10 +4,10 @@
   mkBundle,
   skillnetVersion,
 }: let
-  revision = "be6aa390bcb44c0704a6844c6b32bff296de2dfb";
+  revision = "972392aba6e4906bc8b7c019805bf79568dd70a3";
   archive = pkgs.fetchurl {
     url = "https://codeload.github.com/caniko/ai-skills/tar.gz/${revision}";
-    hash = "sha256-IZXXR5hC2s2QIeJ+zqgK+TX2dnHNFuSEE159jCMrRnQ=";
+    hash = "sha256-bvt42V3mYtUKf+g1kvleCGAMj8Pj1d/JT2LKsi9eyWA=";
   };
   source =
     pkgs.runCommand "ai-skills-greptile-${builtins.substring 0 12 revision}" {
@@ -42,7 +42,10 @@
 in {
   inherit bundle;
   archive = portableArchive;
-  check = pkgs.runCommand "skillnet-greptile-composition" {inherit bundle;} ''
+  check = pkgs.runCommand "skillnet-greptile-composition" {
+    inherit bundle;
+    nativeBuildInputs = [pkgs.bash pkgs.jq];
+  } ''
     ${pkgs.python3}/bin/python ${source}/ci/test_review_contracts.py
     for skill in check-pr greploop cli-review; do
       test -s "$bundle/view/$skill/SKILL.md"

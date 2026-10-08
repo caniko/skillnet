@@ -434,9 +434,9 @@ The release-prep flow validates the repository with:
 ```sh
 simit init flake --check --diff
 simit release trust check
-simit init ci --platform forgejo --check --diff
+simit init ci --platform github --check --diff
 nix flake check --keep-going --print-build-logs
-cargo fmt --all -- --check
+treefmt --ci
 cargo clippy --all-targets --all-features -- --deny warnings
 cargo test --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
