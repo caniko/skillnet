@@ -4,10 +4,10 @@
   mkBundle,
   skillnetVersion,
 }: let
-  revision = "0a2cc93d14604333e0906ead471f2cd3008bbf29";
+  revision = "682211cf5b701a48cea49a9ca415a836a2ad84ea";
   archive = pkgs.fetchurl {
     url = "https://codeload.github.com/caniko/ai-skills/tar.gz/${revision}";
-    hash = "sha256-YiI4wdB9fCdRLXMOR5IbI1NXomWQrV+EiOK79g+1giw=";
+    hash = "sha256-7NQhvAlHEeHr46mhgh7zQZ7LmQRForIKOzT1VvFFDT8=";
   };
   source =
     pkgs.runCommand "ai-skills-greptile-${builtins.substring 0 12 revision}" {
