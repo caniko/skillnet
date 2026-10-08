@@ -4,10 +4,10 @@
   mkBundle,
   skillnetVersion,
 }: let
-  revision = "972392aba6e4906bc8b7c019805bf79568dd70a3";
+  revision = "8aa70c009ee25eaf46c56dc296157777f2667e7e";
   archive = pkgs.fetchurl {
     url = "https://codeload.github.com/caniko/ai-skills/tar.gz/${revision}";
-    hash = "sha256-bvt42V3mYtUKf+g1kvleCGAMj8Pj1d/JT2LKsi9eyWA=";
+    hash = "sha256-ROJ/s+7W9LSP6JBC38CV6+EOVwHK+6kZdX7fRtiOOko=";
   };
   source =
     pkgs.runCommand "ai-skills-greptile-${builtins.substring 0 12 revision}" {
@@ -42,62 +42,63 @@
 in {
   inherit bundle;
   archive = portableArchive;
-  check = pkgs.runCommand "skillnet-greptile-composition" {
-    inherit bundle;
-    nativeBuildInputs = [pkgs.bash pkgs.jq];
-  } ''
-    ${pkgs.python3}/bin/python ${source}/ci/test_review_contracts.py
-    for skill in check-pr greploop cli-review; do
-      test -s "$bundle/view/$skill/SKILL.md"
-      test -s "$bundle/view/$skill/LICENSE"
-      test -s "$bundle/view/$skill/references/repository-contract.md"
-    done
-    test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/SKILL.md"
-    test -s "$bundle/view/greploop/.skillnet/deps/check-pr/SKILL.md"
-    test -s "$bundle/view/cli-review/.skillnet/deps/write-human-style/SKILL.md"
-    test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/.skillnet/deps/fix-loop-ref/SKILL.md"
-    test -s "$bundle/view/check-pr/.skillnet/deps/grouped-git-commits/.skillnet/deps/chaosbox-policy/SKILL.md"
-    test -s "$bundle/view/check-pr/.skillnet/deps/chaosbox-policy/SKILL.md"
-    test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/.skillnet/deps/solution-placement-policy/SKILL.md"
-    test -s "$bundle/view/cli-review/.skillnet/deps/write-human-style/.skillnet/deps/solution-placement-policy/SKILL.md"
-    test -s "$bundle/view/gitlab-pages/.skillnet/deps/repo-pages/SKILL.md"
-    test -s "$bundle/view/forgejo-pages/.skillnet/deps/repo-pages/SKILL.md"
-    # Reference-only packages belong in dependency closures, not entrypoint views.
-    test ! -e "$bundle/view/fix-loop-ref"
-    test ! -e "$bundle/view/chaosbox-policy"
-    test ! -e "$bundle/view/solution-placement-policy"
-    test ! -e "$bundle/view/repo-pages"
-    mkdir -p "$out"
-    cp ${portableArchive}/* "$out/"
-    # The current hosted workflow retains logs but has no artifact upload step.
-    # Validate portability before emitting bounded, digest-bound transport frames.
-    ${pkgs.python3}/bin/python - "$out" > "$out/consumer-archive.log" <<'PY'
-    import base64
-    import hashlib
-    import json
-    from pathlib import Path, PurePosixPath
-    import sys
-    import tarfile
+  check =
+    pkgs.runCommand "skillnet-greptile-composition" {
+      inherit bundle;
+      nativeBuildInputs = [pkgs.bash pkgs.jq];
+    } ''
+      ${pkgs.python3}/bin/python ${source}/ci/test_review_contracts.py
+      for skill in check-pr greploop cli-review; do
+        test -s "$bundle/view/$skill/SKILL.md"
+        test -s "$bundle/view/$skill/LICENSE"
+        test -s "$bundle/view/$skill/references/repository-contract.md"
+      done
+      test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/SKILL.md"
+      test -s "$bundle/view/greploop/.skillnet/deps/check-pr/SKILL.md"
+      test -s "$bundle/view/cli-review/.skillnet/deps/write-human-style/SKILL.md"
+      test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/.skillnet/deps/fix-loop-ref/SKILL.md"
+      test -s "$bundle/view/check-pr/.skillnet/deps/grouped-git-commits/.skillnet/deps/chaosbox-policy/SKILL.md"
+      test -s "$bundle/view/check-pr/.skillnet/deps/chaosbox-policy/SKILL.md"
+      test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/.skillnet/deps/solution-placement-policy/SKILL.md"
+      test -s "$bundle/view/cli-review/.skillnet/deps/write-human-style/.skillnet/deps/solution-placement-policy/SKILL.md"
+      test -s "$bundle/view/gitlab-pages/.skillnet/deps/repo-pages/SKILL.md"
+      test -s "$bundle/view/forgejo-pages/.skillnet/deps/repo-pages/SKILL.md"
+      # Reference-only packages belong in dependency closures, not entrypoint views.
+      test ! -e "$bundle/view/fix-loop-ref"
+      test ! -e "$bundle/view/chaosbox-policy"
+      test ! -e "$bundle/view/solution-placement-policy"
+      test ! -e "$bundle/view/repo-pages"
+      mkdir -p "$out"
+      cp ${portableArchive}/* "$out/"
+      # The current hosted workflow retains logs but has no artifact upload step.
+      # Validate portability before emitting bounded, digest-bound transport frames.
+      ${pkgs.python3}/bin/python - "$out" > "$out/consumer-archive.log" <<'PY'
+      import base64
+      import hashlib
+      import json
+      from pathlib import Path, PurePosixPath
+      import sys
+      import tarfile
 
-    root = Path(sys.argv[1])
-    with tarfile.open(root / "greptile-consumer-skills.tar.gz") as archive:
-        for member in archive.getmembers():
-            path = PurePosixPath(member.name)
-            if (path.is_absolute() or ".." in path.parts
-                    or not path.parts or path.parts[0] not in {"check-pr", "greploop", "cli-review"}
-                    or not (member.isfile() or member.isdir())):
-                raise ValueError("Consumer archive contains a nonportable entry")
-    for name in ["greptile-consumer-skills.tar.gz", "provenance.json", "SHA256SUMS"]:
-        raw = (root / name).read_bytes()
-        if not 0 < len(raw) <= 1024 * 1024:
-            raise ValueError("Consumer archive transport exceeds its byte bound")
-        encoded = base64.b64encode(raw).decode("ascii")
-        chunks = [encoded[i:i + 1024] for i in range(0, len(encoded), 1024)]
-        for index, chunk in enumerate(chunks):
-            print("SKILLNET_CONSUMER_ARCHIVE_V1 " + json.dumps({
-                "file": name, "sha256": hashlib.sha256(raw).hexdigest(),
-                "bytes": len(raw), "chunks": len(chunks), "index": index, "data": chunk,
-            }, separators=(",", ":")))
-    PY
-  '';
+      root = Path(sys.argv[1])
+      with tarfile.open(root / "greptile-consumer-skills.tar.gz") as archive:
+          for member in archive.getmembers():
+              path = PurePosixPath(member.name)
+              if (path.is_absolute() or ".." in path.parts
+                      or not path.parts or path.parts[0] not in {"check-pr", "greploop", "cli-review"}
+                      or not (member.isfile() or member.isdir())):
+                  raise ValueError("Consumer archive contains a nonportable entry")
+      for name in ["greptile-consumer-skills.tar.gz", "provenance.json", "SHA256SUMS"]:
+          raw = (root / name).read_bytes()
+          if not 0 < len(raw) <= 1024 * 1024:
+              raise ValueError("Consumer archive transport exceeds its byte bound")
+          encoded = base64.b64encode(raw).decode("ascii")
+          chunks = [encoded[i:i + 1024] for i in range(0, len(encoded), 1024)]
+          for index, chunk in enumerate(chunks):
+              print("SKILLNET_CONSUMER_ARCHIVE_V1 " + json.dumps({
+                  "file": name, "sha256": hashlib.sha256(raw).hexdigest(),
+                  "bytes": len(raw), "chunks": len(chunks), "index": index, "data": chunk,
+              }, separators=(",", ":")))
+      PY
+    '';
 }
