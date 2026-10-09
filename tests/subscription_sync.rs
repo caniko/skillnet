@@ -236,6 +236,7 @@ fn provider_subscription_updates_generated_views_and_prunes_removed_skills() {
 
     fs::create_dir_all(fixture.path("view/manual")).unwrap();
     fs::write(fixture.path("view/manual/SKILL.md"), "manual").unwrap();
+    fs::write(fixture.path("view/manual-file"), "manual file").unwrap();
     assert_eq!(
         fs::read_to_string(fixture.path("view/manual/SKILL.md")).unwrap(),
         "manual"
@@ -249,6 +250,10 @@ fn provider_subscription_updates_generated_views_and_prunes_removed_skills() {
         .success();
 
     assert!(!fixture.path("view/alpha").exists());
+    assert_eq!(
+        fs::read_to_string(fixture.path("view/manual-file")).unwrap(),
+        "manual file"
+    );
     assert!(fixture.path("view/beta").is_symlink());
     assert_eq!(
         fs::read_to_string(fixture.path("view/beta/SKILL.md")).unwrap(),

@@ -143,7 +143,7 @@ fn sync_one(ctx: &Context, name: &str, subscription: &SubscriptionConfig) -> Res
     let published = canonical_utf8(staged_path)?;
     let _ = staged.keep();
     crate::view::atomic_symlink(&published, &current)?;
-    if let Err(error) = super::view::sync(ctx, true, false, None) {
+    if let Err(error) = super::view::sync_provider(ctx) {
         let original = format!("{error:#}");
         let rollback = if let Some(previous) = previous {
             Utf8PathBuf::from_path_buf(previous)
@@ -159,7 +159,7 @@ fn sync_one(ctx: &Context, name: &str, subscription: &SubscriptionConfig) -> Res
                 "provider subscription `{name}` update failed: {original}; rollback also failed: {rollback:#}"
             );
         }
-        if let Err(restore) = super::view::sync(ctx, true, false, None) {
+        if let Err(restore) = super::view::sync_provider(ctx) {
             bail!(
                 "provider subscription `{name}` update failed: {original}; checkout pointer was restored but view restoration failed: {restore:#}"
             );

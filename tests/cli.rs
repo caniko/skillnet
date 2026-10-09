@@ -868,6 +868,21 @@ fn sync_forwards_allow_delete_and_force() {
 }
 
 #[test]
+fn sync_no_promote_allow_delete_prunes_stale_authored_entries() {
+    let sync = SyncFixture::new();
+    sync.command().arg("sync").assert().success();
+    write_skill(&sync.global_view, "stale-directory", "unwanted");
+    fs::write(sync.global_view.join("stale-file"), "unwanted").unwrap();
+    sync.command()
+        .args(["sync", "--no-promote", "--allow-delete"])
+        .assert()
+        .success();
+    assert!(!sync.global_view.join("stale-directory").exists());
+    assert!(!sync.global_view.join("stale-file").exists());
+    assert!(sync.global_view.join("alpha/SKILL.md").is_file());
+}
+
+#[test]
 fn sync_dry_run_does_not_mutate() {
     let sync = SyncFixture::new();
     let before = tree_digest(sync.fixture.root());
