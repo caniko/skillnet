@@ -103,6 +103,17 @@
       urlFile = urlFile;
     };
   };
+  configFileOverride = "${homeDirectory}/custom config.toml";
+  configFileConfig = mkHmConfig {
+    database.backend = "sqlite";
+    configFile = configFileOverride;
+    subscriptions.external = {
+      url = "https://github.com/example/skills.git";
+      provider = true;
+    };
+    subscriptionSyncInterval = "1h";
+  };
+  configFileEnvironment = configFileConfig.config.systemd.user.services.skillnet-subscription-sync.Service.Environment;
   hostOnlyConfig = mkHmConfig {
     host = "host-only-destination";
     database.backend = "sqlite";
@@ -121,6 +132,10 @@
     };
   };
 in
+  assert configFileEnvironment == [
+    "PATH=${pkgs.lib.makeBinPath [pkgs.git]}"
+    "SKILLNET_CONFIG=${configFileOverride}"
+  ];
   pkgs.runCommand "skillnet-hm-module-test"
   {
     nativeBuildInputs = [
@@ -245,6 +260,7 @@ in
     grep -R -F 'PATH=${pkgs.git}/bin' ${declarativeConfig.activationPackage}/home-files >/dev/null
     grep -R -F 'OnBootSec=5m' ${declarativeConfig.activationPackage}/home-files >/dev/null
     grep -R -F 'OnUnitActiveSec=1h' ${declarativeConfig.activationPackage}/home-files >/dev/null
+    grep -R -F 'SKILLNET_CONFIG=${configFileOverride}' ${configFileConfig.activationPackage}/home-files >/dev/null
     ! grep -F "sync_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     ! grep -F "stale_codex_skill_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
 

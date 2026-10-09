@@ -3507,3 +3507,40 @@ path = "{}"
     assert_eq!(override_rows[0]["name"], "demo");
     assert_eq!(override_rows[0]["source"], "explicit");
 }
+
+#[test]
+fn project_remove_reports_custom_discovery_marker_without_mutation() {
+    let fixture = Fixture::new();
+    let root = fixture.path("projects");
+    let project = root.join("owned/demo");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    fs::create_dir_all(project.join(".skillnet-enabled")).unwrap();
+    fs::create_dir_all(project.join(".skills")).unwrap();
+    let tree = fixture.path("project-tree.json");
+    fs::write(
+        &tree,
+        serde_json::json!({
+            "schemaVersion": 1,
+            "root": root,
+            "layout": {"primary": {"owned": "owned"}}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let text = format!(
+        "[global]\nviews = []\n[project_discovery]\nproject_tree = {:?}\nclasses = [\"owned\"]\nmarker = \".skillnet-enabled\"\n",
+        tree.to_str().unwrap()
+    );
+    let config = fixture.write_config(&text);
+    fixture
+        .command(&config)
+        .args(["project", "remove", "demo"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "remove its `.skillnet-enabled` marker",
+        ));
+    assert!(project.join(".skillnet-enabled").is_dir());
+    assert!(project.join(".skills").is_dir());
+    assert_eq!(fs::read_to_string(config).unwrap(), text);
+}

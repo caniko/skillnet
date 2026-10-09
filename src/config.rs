@@ -189,6 +189,16 @@ fn default_subscription_source() -> String {
     "global_skills".into()
 }
 
+pub fn validate_project_name(name: &str) -> Result<()> {
+    if name.is_empty() || name.contains('/') || name.contains('\\') {
+        bail!("project name must be a non-empty scope name, not a path");
+    }
+    if matches!(name, "global" | "all" | "project" | "projects") {
+        bail!("`{name}` is reserved and cannot be used as a project name");
+    }
+    Ok(())
+}
+
 fn merge_projects(
     explicit: Vec<ProjectConfig>,
     discovered: Vec<DiscoveredProject>,
@@ -198,6 +208,7 @@ fn merge_projects(
     let mut paths = BTreeMap::<String, String>::new();
 
     for project in explicit {
+        validate_project_name(&project.name)?;
         let path = expand_path(&project.path)
             .with_context(|| format!("resolve project path for `{}`", project.name))?;
         let path = path.to_string();
@@ -221,9 +232,10 @@ fn merge_projects(
         if paths.contains_key(&path) {
             continue;
         }
+        validate_project_name(&discovered.name)?;
         if names.contains_key(&discovered.name) {
             bail!(
-                "discovered project name `{}` conflicts with an explicit project; use a different explicit name or remove the duplicate checkout",
+                "discovered project name `{}` conflicts with an explicit project or another discovered checkout; add path-specific explicit entries with unique names to disambiguate",
                 discovered.name
             );
         }
@@ -1177,6 +1189,82 @@ path = "{}"
         assert!(error
             .to_string()
             .contains("conflicts with an explicit project"));
+    }
+
+    #[test]
+    fn load_applies_path_aliases_before_discovered_name_validation() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        for relative in ["owned/demo", "forks/demo", "owned/global"] {
+            fs::create_dir_all(root.join(relative).join(".git")).unwrap();
+            fs::create_dir_all(root.join(relative).join(".skills")).unwrap();
+        }
+        let tree = root.join("project-tree.json");
+        fs::write(
+            &tree,
+            serde_json::json!({
+                "schemaVersion": 1,
+                "root": root,
+                "layout": {"primary": {"owned": "owned", "forks": "forks"}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let path = Utf8PathBuf::from_path_buf(root.join("skillnet.toml")).unwrap();
+        let discovery = format!(
+            "[global]\nviews = []\n[project_discovery]\nproject_tree = {:?}\n",
+            tree.to_str().unwrap()
+        );
+        fs::write(&path, &discovery).unwrap();
+        assert!(Config::load(&path)
+            .unwrap_err()
+            .to_string()
+            .contains("another discovered checkout"));
+
+        let aliases = [
+            ("owned-demo", "owned/demo"),
+            ("fork-demo", "forks/demo"),
+            ("global-checkout", "owned/global"),
+        ]
+        .into_iter()
+        .map(|(name, relative)| {
+            format!(
+                "\n[[projects]]\nname = {name:?}\npath = {:?}\n",
+                root.join(relative).to_str().unwrap()
+            )
+        })
+        .collect::<String>();
+        fs::write(&path, format!("{discovery}{aliases}")).unwrap();
+        let config = Config::load(&path).unwrap();
+        assert_eq!(
+            config
+                .projects
+                .iter()
+                .map(|project| project.name.as_str())
+                .collect::<Vec<_>>(),
+            ["fork-demo", "global-checkout", "owned-demo"]
+        );
+        assert_eq!(config.discovered_projects().unwrap().len(), 3);
+        assert!(config.discovered_project_paths.is_empty());
+    }
+
+    #[test]
+    fn merge_projects_rejects_unaddressable_discovered_names() {
+        for name in ["global", "all", "project", "projects", "bad\\name"] {
+            let error = merge_projects(
+                Vec::new(),
+                vec![DiscoveredProject {
+                    name: name.into(),
+                    path: Utf8PathBuf::from(format!("/projects/owned/{name}")),
+                    relative_path: Utf8PathBuf::from(format!("owned/{name}")),
+                }],
+            )
+            .unwrap_err();
+            assert!(
+                error.to_string().contains("project name"),
+                "unexpected error for {name}: {error}"
+            );
+        }
     }
 
     #[test]

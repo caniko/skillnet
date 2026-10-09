@@ -414,7 +414,9 @@ in {
         };
         Service = {
           Type = "oneshot";
-          Environment = "PATH=${lib.makeBinPath [pkgs.git]}";
+          Environment =
+            ["PATH=${lib.makeBinPath [pkgs.git]}"]
+            ++ lib.optional (cfg.configFile != null) "SKILLNET_CONFIG=${cfg.configFile}";
           ExecStart = "${cfg.package}/bin/skillnet --allow-dirty-destination subscription sync ${providerArgs}";
         };
         Install.WantedBy = ["default.target"];

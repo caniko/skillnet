@@ -73,7 +73,6 @@ pub fn discover(config: &ProjectDiscoveryConfig) -> Result<Vec<DiscoveredProject
     let marker = relative_path(&config.marker, "project_discovery.marker")?;
 
     let mut projects = Vec::new();
-    let mut names = BTreeSet::new();
     let mut classes = BTreeSet::new();
     for class in &config.classes {
         if !classes.insert(class) {
@@ -134,11 +133,6 @@ pub fn discover(config: &ProjectDiscoveryConfig) -> Result<Vec<DiscoveredProject
                 .filter(|name| !name.is_empty())
                 .map(str::to_owned)
                 .with_context(|| format!("project path `{path}` has no repository name"))?;
-            if !names.insert(name.clone()) {
-                bail!(
-                    "discovered project name `{name}` is used more than once; add an explicit project entry to disambiguate"
-                );
-            }
             projects.push(DiscoveredProject {
                 name,
                 path,
@@ -234,15 +228,17 @@ mod tests {
     }
 
     #[test]
-    fn rejects_duplicate_leaf_names() {
+    fn retains_duplicate_leaf_candidates_for_explicit_path_overrides() {
         let temp = tempdir().unwrap();
         fs::create_dir_all(temp.path().join("owned")).unwrap();
         fs::create_dir_all(temp.path().join("forks")).unwrap();
         checkout(temp.path(), "owned/demo", true);
         checkout(temp.path(), "forks/demo", true);
 
-        let error = discover(&tree_config(temp.path())).unwrap_err();
-        assert!(error.to_string().contains("discovered project name `demo`"));
+        let projects = discover(&tree_config(temp.path())).unwrap();
+        assert_eq!(projects.len(), 2);
+        assert!(projects.iter().all(|project| project.name == "demo"));
+        assert_ne!(projects[0].path, projects[1].path);
     }
 
     #[test]
