@@ -151,6 +151,7 @@
       bundleCheck = assert self.lib.${system}.externalManifestSupport;
       assert self.lib.${system}.externalProviderSupport;
       assert self.lib.${system}.hostSelectionSupport;
+      assert self.lib.hostSelectionSupport;
       assert builtins.isFunction self.lib.${system}.mkBundle;
         pkgs.runCommand "skillnet-bundle-check" {
           bundle = mkBundle {
@@ -305,6 +306,7 @@
         // {
           externalManifestSupport = true;
           externalProviderSupport = true;
+          hostSelectionSupport = true;
         };
     };
 }
