@@ -341,17 +341,22 @@ marker = ".skills"
         );
         let granted = user == "can" && host == "atlas";
         assert_eq!(fixture.path("view/atlas-only").exists(), granted);
-        assert_eq!(fixture.path("custom-bundles/global/atlas-only").exists(), granted);
+        assert_eq!(
+            fixture.path("custom-bundles/global/atlas-only").exists(),
+            granted
+        );
         if granted {
             assert_eq!(
-                fs::read_to_string(fixture.path(
-                    "custom-bundles/global/atlas-only/.skillnet/deps/alpha/SKILL.md"
-                ))
+                fs::read_to_string(
+                    fixture.path("custom-bundles/global/atlas-only/.skillnet/deps/alpha/SKILL.md")
+                )
                 .unwrap(),
                 "alpha v1"
             );
         }
-        assert!(project.join(".agents/skills/project-skill/SKILL.md").is_file());
+        assert!(project
+            .join(".agents/skills/project-skill/SKILL.md")
+            .is_file());
         assert!(!project.join(".agents/skills/alpha").exists());
         assert!(!fixture.path("data/bundles/global").exists());
     }
