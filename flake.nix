@@ -148,11 +148,10 @@
         inherit mkBundle pkgs;
         skillnetVersion = package.version;
       };
-      bundleCheck =
-        assert self.lib.${system}.externalManifestSupport;
-        assert self.lib.${system}.externalProviderSupport;
-        assert self.lib.${system}.hostSelectionSupport;
-        assert builtins.isFunction self.lib.${system}.mkBundle;
+      bundleCheck = assert self.lib.${system}.externalManifestSupport;
+      assert self.lib.${system}.externalProviderSupport;
+      assert self.lib.${system}.hostSelectionSupport;
+      assert builtins.isFunction self.lib.${system}.mkBundle;
         pkgs.runCommand "skillnet-bundle-check" {
           bundle = mkBundle {
             canonical = builtins.path {
@@ -295,14 +294,17 @@
       };
     });
   in
-    systemOutputs // {
+    systemOutputs
+    // {
       hmModules = {
         default = hmModule;
         skillnet = hmModule;
       };
-      lib = systemOutputs.lib // {
-        externalManifestSupport = true;
-        externalProviderSupport = true;
-      };
+      lib =
+        systemOutputs.lib
+        // {
+          externalManifestSupport = true;
+          externalProviderSupport = true;
+        };
     };
 }

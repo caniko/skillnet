@@ -126,13 +126,17 @@ fn sync_one(ctx: &Context, name: &str, subscription: &SubscriptionConfig) -> Res
         Ok(())
     })();
     validation.with_context(|| {
-        format!("provider subscription `{name}` update was rejected; retained last-known-good checkout")
+        format!(
+            "provider subscription `{name}` update was rejected; retained last-known-good checkout"
+        )
     })?;
     let current = root.join("current");
     let previous = match fs::read_link(&current) {
         Ok(previous) => Some(previous),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => return Err(error).with_context(|| format!("read provider pointer {current}")),
+        Err(error) => {
+            return Err(error).with_context(|| format!("read provider pointer {current}"));
+        }
     };
     // ponytail: retain published revisions so interrupted bundle writes cannot dangle;
     // reclaim them only with a future collector that traces all live resource links.
@@ -143,16 +147,22 @@ fn sync_one(ctx: &Context, name: &str, subscription: &SubscriptionConfig) -> Res
         let original = format!("{error:#}");
         let rollback = if let Some(previous) = previous {
             Utf8PathBuf::from_path_buf(previous)
-                .map_err(|path| anyhow::anyhow!("provider pointer is not UTF-8: {}", path.display()))
+                .map_err(|path| {
+                    anyhow::anyhow!("provider pointer is not UTF-8: {}", path.display())
+                })
                 .and_then(|previous| crate::view::atomic_symlink(&previous, &current))
         } else {
             fs::remove_file(&current).map_err(anyhow::Error::from)
         };
         if let Err(rollback) = rollback {
-            bail!("provider subscription `{name}` update failed: {original}; rollback also failed: {rollback:#}");
+            bail!(
+                "provider subscription `{name}` update failed: {original}; rollback also failed: {rollback:#}"
+            );
         }
         if let Err(restore) = super::view::sync(ctx, true, false, None) {
-            bail!("provider subscription `{name}` update failed: {original}; checkout pointer was restored but view restoration failed: {restore:#}");
+            bail!(
+                "provider subscription `{name}` update failed: {original}; checkout pointer was restored but view restoration failed: {restore:#}"
+            );
         }
         return Err(anyhow::anyhow!(original)).with_context(|| {
             format!("provider subscription `{name}` update was rejected; retained last-known-good checkout")

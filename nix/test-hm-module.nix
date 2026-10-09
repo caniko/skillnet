@@ -141,151 +141,152 @@
     };
   };
 in
-  assert configFileEnvironment == [
+  assert configFileEnvironment
+  == [
     "PATH=${pkgs.lib.makeBinPath [pkgs.git]}"
     "SKILLNET_CONFIG=${configFileOverride}"
   ];
   assert configFileConfig.config.systemd.user.services.skillnet-subscription-sync.Service.ExecStart == "${package}/bin/skillnet --allow-dirty-destination subscription sync -- ${pkgs.lib.escapeShellArg "--all"}";
   assert builtins.any (assertion: !assertion.assertion && assertion.message == "programs.skillnet scheduled provider subscriptions require a writable bundlesRoot outside the Nix store.") immutableProviderConfig.config.assertions;
-  pkgs.runCommand "skillnet-hm-module-test"
-  {
-    nativeBuildInputs = [
-      pkgs.nix
-      package
-    ];
-  }
-  ''
-    set -eu
+    pkgs.runCommand "skillnet-hm-module-test"
+    {
+      nativeBuildInputs = [
+        pkgs.nix
+        package
+      ];
+    }
+    ''
+      set -eu
 
-    rm -rf ${homeDirectory}
-    mkdir -p ${homeDirectory}
-    mkdir -p ${homeDirectory}/.local/state/nix/profiles
-    mkdir -p ${skillsRoot}
-    mkdir -p ${skillsRoot}/global
-    mkdir -p ${declarativeSource}
-    mkdir -p ${declarativeAgentsView}
-    mkdir -p ${declarativeProject}/.skills
-    mkdir -p ${projectTreeRoot}/owned ${projectTreeRoot}/forks
-    mkdir -p ${homeDirectory}/.config/canix
-    printf '%s\n' '{"schemaVersion":1,"root":"'${projectTreeRoot}'","layout":{"primary":{"owned":"owned","forks":"forks"}}}' > ${projectTreeConfig}
+      rm -rf ${homeDirectory}
+      mkdir -p ${homeDirectory}
+      mkdir -p ${homeDirectory}/.local/state/nix/profiles
+      mkdir -p ${skillsRoot}
+      mkdir -p ${skillsRoot}/global
+      mkdir -p ${declarativeSource}
+      mkdir -p ${declarativeAgentsView}
+      mkdir -p ${declarativeProject}/.skills
+      mkdir -p ${projectTreeRoot}/owned ${projectTreeRoot}/forks
+      mkdir -p ${homeDirectory}/.config/canix
+      printf '%s\n' '{"schemaVersion":1,"root":"'${projectTreeRoot}'","layout":{"primary":{"owned":"owned","forks":"forks"}}}' > ${projectTreeConfig}
 
-    export HOME=${homeDirectory}
-    export USER=skillnet-test
-    export PATH="${package}/bin:$PATH"
+      export HOME=${homeDirectory}
+      export USER=skillnet-test
+      export PATH="${package}/bin:$PATH"
 
-    ! grep -F 'Activating %s" "skillnet-' ${sqliteConfig.activationPackage}/activate >/dev/null
-    ! grep -F '${package}/bin/skillnet' ${sqliteConfig.activationPackage}/activate >/dev/null
-    ! grep -F 'skillnet sync' ${sqliteConfig.activationPackage}/activate >/dev/null
-    ! grep -F 'skillnet view sync' ${sqliteConfig.activationPackage}/activate >/dev/null
-    ! grep -F 'skillnet project sync' ${sqliteConfig.activationPackage}/activate >/dev/null
-    ! grep -F 'skillnet hook install' ${sqliteConfig.activationPackage}/activate >/dev/null
-    ! grep -F 'mirror not found at' ${sqliteConfig.activationPackage}/activate >/dev/null
-    ! grep -F 'skipping for now.' ${sqliteConfig.activationPackage}/activate >/dev/null
-    ! grep -F '${package}/bin/skillnet' ${immutableConfig.activationPackage}/activate >/dev/null
-    grep -R -F 'bundles_root = "/nix/store/skillnet-bundle/bundles"' ${immutableConfig.activationPackage}/home-files >/dev/null
-    grep -R -F 'host = "destination-not-builder"' ${immutableConfig.activationPackage}/home-files >/dev/null
-    ! grep -R -F 'host = "wrong-builder"' ${immutableConfig.activationPackage}/home-files >/dev/null
-    test -f ${hostOnlyConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml
-    grep -F 'host = "host-only-destination"' ${hostOnlyConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'backend = "sqlite"' ${hostOnlyConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml >/dev/null
-    ! grep -R -F 'host = ' ${sqliteConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml >/dev/null
-    mkdir -p ${dataDir}
-    test -d ${dataDir}
+      ! grep -F 'Activating %s" "skillnet-' ${sqliteConfig.activationPackage}/activate >/dev/null
+      ! grep -F '${package}/bin/skillnet' ${sqliteConfig.activationPackage}/activate >/dev/null
+      ! grep -F 'skillnet sync' ${sqliteConfig.activationPackage}/activate >/dev/null
+      ! grep -F 'skillnet view sync' ${sqliteConfig.activationPackage}/activate >/dev/null
+      ! grep -F 'skillnet project sync' ${sqliteConfig.activationPackage}/activate >/dev/null
+      ! grep -F 'skillnet hook install' ${sqliteConfig.activationPackage}/activate >/dev/null
+      ! grep -F 'mirror not found at' ${sqliteConfig.activationPackage}/activate >/dev/null
+      ! grep -F 'skipping for now.' ${sqliteConfig.activationPackage}/activate >/dev/null
+      ! grep -F '${package}/bin/skillnet' ${immutableConfig.activationPackage}/activate >/dev/null
+      grep -R -F 'bundles_root = "/nix/store/skillnet-bundle/bundles"' ${immutableConfig.activationPackage}/home-files >/dev/null
+      grep -R -F 'host = "destination-not-builder"' ${immutableConfig.activationPackage}/home-files >/dev/null
+      ! grep -R -F 'host = "wrong-builder"' ${immutableConfig.activationPackage}/home-files >/dev/null
+      test -f ${hostOnlyConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml
+      grep -F 'host = "host-only-destination"' ${hostOnlyConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'backend = "sqlite"' ${hostOnlyConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml >/dev/null
+      ! grep -R -F 'host = ' ${sqliteConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml >/dev/null
+      mkdir -p ${dataDir}
+      test -d ${dataDir}
 
-    test -x ${sqliteConfig.activationPackage}/home-path/bin/skillnet
-    unset __HM_SESS_VARS_SOURCED
-    . ${sqliteConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
-    test "''${skillnet_DATA_DIR:-}" = "${dataDir}"
-    test "''${SKILLNET_DATA_DIR:-}" = "${dataDir}"
-    test "''${AI_SKILLS_REPO:-}" = "${skillsRoot}"
-    test -z "''${SKILLNET_DATABASE_URL:-}"
+      test -x ${sqliteConfig.activationPackage}/home-path/bin/skillnet
+      unset __HM_SESS_VARS_SOURCED
+      . ${sqliteConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
+      test "''${skillnet_DATA_DIR:-}" = "${dataDir}"
+      test "''${SKILLNET_DATA_DIR:-}" = "${dataDir}"
+      test "''${AI_SKILLS_REPO:-}" = "${skillsRoot}"
+      test -z "''${SKILLNET_DATABASE_URL:-}"
 
-    export PATH="${sqliteConfig.activationPackage}/home-path/bin:$PATH"
-    skillnet --help >/dev/null
-    skillnet calibration migrate
-    test -f ${dataDir}/multi-phase-plan/calibration.sqlite
+      export PATH="${sqliteConfig.activationPackage}/home-path/bin:$PATH"
+      skillnet --help >/dev/null
+      skillnet calibration migrate
+      test -f ${dataDir}/multi-phase-plan/calibration.sqlite
 
-    unset skillnet_DATA_DIR
-    unset SKILLNET_DATA_DIR
-    unset AI_SKILLS_REPO
-    unset SKILLNET_DATABASE_URL
+      unset skillnet_DATA_DIR
+      unset SKILLNET_DATA_DIR
+      unset AI_SKILLS_REPO
+      unset SKILLNET_DATABASE_URL
 
-    ! grep -F 'Activating %s" "skillnet-' ${postgresConfig.activationPackage}/activate >/dev/null
-    ! grep -F 'mkdir -p ${dataDir}' ${postgresConfig.activationPackage}/activate >/dev/null
-    ! grep -F 'skipping for now.' ${postgresConfig.activationPackage}/activate >/dev/null
-    test -x ${postgresConfig.activationPackage}/home-path/bin/skillnet
-    unset __HM_SESS_VARS_SOURCED
-    . ${postgresConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
-    test -z "''${skillnet_DATA_DIR:-}"
-    test -z "''${SKILLNET_DATA_DIR:-}"
-    test "''${AI_SKILLS_REPO:-}" = "${skillsRoot}"
-    test "''${SKILLNET_DATABASE_URL:-}" = "${postgresUrl}"
+      ! grep -F 'Activating %s" "skillnet-' ${postgresConfig.activationPackage}/activate >/dev/null
+      ! grep -F 'mkdir -p ${dataDir}' ${postgresConfig.activationPackage}/activate >/dev/null
+      ! grep -F 'skipping for now.' ${postgresConfig.activationPackage}/activate >/dev/null
+      test -x ${postgresConfig.activationPackage}/home-path/bin/skillnet
+      unset __HM_SESS_VARS_SOURCED
+      . ${postgresConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
+      test -z "''${skillnet_DATA_DIR:-}"
+      test -z "''${SKILLNET_DATA_DIR:-}"
+      test "''${AI_SKILLS_REPO:-}" = "${skillsRoot}"
+      test "''${SKILLNET_DATABASE_URL:-}" = "${postgresUrl}"
 
-    unset skillnet_DATA_DIR
-    unset SKILLNET_DATA_DIR
-    unset SKILLNET_CONFIG
-    unset SKILLNET_CATALOG_CONFIG
-    unset SKILLNET_DATABASE_URL
-    unset AI_SKILLS_REPO
+      unset skillnet_DATA_DIR
+      unset SKILLNET_DATA_DIR
+      unset SKILLNET_CONFIG
+      unset SKILLNET_CATALOG_CONFIG
+      unset SKILLNET_DATABASE_URL
+      unset AI_SKILLS_REPO
 
-    ! grep -F 'SKILLNET_DATABASE_URL=' ${urlFileConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh >/dev/null
-    grep -R -F 'SKILLNET_DATABASE_URL' ${urlFileConfig.activationPackage}/home-files >/dev/null
-    grep -R -F '${urlFile}' ${urlFileConfig.activationPackage}/home-files >/dev/null
+      ! grep -F 'SKILLNET_DATABASE_URL=' ${urlFileConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh >/dev/null
+      grep -R -F 'SKILLNET_DATABASE_URL' ${urlFileConfig.activationPackage}/home-files >/dev/null
+      grep -R -F '${urlFile}' ${urlFileConfig.activationPackage}/home-files >/dev/null
 
-    rm -rf ${skillsRoot}
-    DRY_RUN=1 ${declarativeConfig.activationPackage}/activate --driver-version 1 2>activation-stderr.log
-    ! grep -F 'skillnet:' activation-stderr.log >/dev/null
+      rm -rf ${skillsRoot}
+      DRY_RUN=1 ${declarativeConfig.activationPackage}/activate --driver-version 1 2>activation-stderr.log
+      ! grep -F 'skillnet:' activation-stderr.log >/dev/null
 
-    unset __HM_SESS_VARS_SOURCED
-    . ${declarativeConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
-    test -z "''${SKILLNET_CONFIG:-}"
-    test -z "''${SKILLNET_CATALOG_CONFIG:-}"
-    test "''${SKILLNET_MIRROR_ROOT:-}" = "${skillsRoot}"
-    mkdir -p ${homeDirectory}/.config/skillnet
-    ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml ${homeDirectory}/.config/skillnet/skillnet.toml
-    ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.catalog.toml ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
-    test -f ${homeDirectory}/.config/skillnet/skillnet.toml
-    test -f ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
-    grep -F 'mirror_root = "'${skillsRoot}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'skills_root = "'${skillsRoot}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'data_dir = "'${dataDir}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'user = "skillnet-test"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'host = "destination-with-providers"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'backend = "sqlite"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'label = "claude"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'label = "agents"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'name = "myproject"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'path = "'${declarativeProject}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'project_tree = "'${projectTreeConfig}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'classes = ["owned", "forks"]' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'marker = ".skills"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "[subscriptions.ai-skills]" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'url = "ssh://git@github.com/caniko/ai-skills.git"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'target = "'${declarativeSubscriptionTarget}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'delete_policy = "keep"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F "[subscriptions.external]" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'url = "https://github.com/example/skills.git"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'source = "skills"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -F 'provider = true' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -R -F 'skillnet --allow-dirty-destination subscription sync -- external' ${declarativeConfig.activationPackage}/home-files >/dev/null
-    grep -R -F 'PATH=${pkgs.git}/bin' ${declarativeConfig.activationPackage}/home-files >/dev/null
-    grep -R -F 'OnBootSec=5m' ${declarativeConfig.activationPackage}/home-files >/dev/null
-    grep -R -F 'OnUnitActiveSec=1h' ${declarativeConfig.activationPackage}/home-files >/dev/null
-    grep -R -F 'SKILLNET_CONFIG=${configFileOverride}' ${configFileConfig.activationPackage}/home-files >/dev/null
-    ! grep -F "sync_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    ! grep -F "stale_codex_skill_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      unset __HM_SESS_VARS_SOURCED
+      . ${declarativeConfig.activationPackage}/home-path/etc/profile.d/hm-session-vars.sh
+      test -z "''${SKILLNET_CONFIG:-}"
+      test -z "''${SKILLNET_CATALOG_CONFIG:-}"
+      test "''${SKILLNET_MIRROR_ROOT:-}" = "${skillsRoot}"
+      mkdir -p ${homeDirectory}/.config/skillnet
+      ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml ${homeDirectory}/.config/skillnet/skillnet.toml
+      ln -sf ${declarativeConfig.activationPackage}/home-files/.config/skillnet/skillnet.catalog.toml ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
+      test -f ${homeDirectory}/.config/skillnet/skillnet.toml
+      test -f ${homeDirectory}/.config/skillnet/skillnet.catalog.toml
+      grep -F 'mirror_root = "'${skillsRoot}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'skills_root = "'${skillsRoot}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'data_dir = "'${dataDir}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'user = "skillnet-test"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'host = "destination-with-providers"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'backend = "sqlite"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'label = "claude"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'label = "agents"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'name = "myproject"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'path = "'${declarativeProject}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'project_tree = "'${projectTreeConfig}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'classes = ["owned", "forks"]' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'marker = ".skills"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F "[subscriptions.ai-skills]" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'url = "ssh://git@github.com/caniko/ai-skills.git"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'target = "'${declarativeSubscriptionTarget}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'delete_policy = "keep"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F "[subscriptions.external]" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'url = "https://github.com/example/skills.git"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'source = "skills"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'provider = true' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -R -F 'skillnet --allow-dirty-destination subscription sync -- external' ${declarativeConfig.activationPackage}/home-files >/dev/null
+      grep -R -F 'PATH=${pkgs.git}/bin' ${declarativeConfig.activationPackage}/home-files >/dev/null
+      grep -R -F 'OnBootSec=5m' ${declarativeConfig.activationPackage}/home-files >/dev/null
+      grep -R -F 'OnUnitActiveSec=1h' ${declarativeConfig.activationPackage}/home-files >/dev/null
+      grep -R -F 'SKILLNET_CONFIG=${configFileOverride}' ${configFileConfig.activationPackage}/home-files >/dev/null
+      ! grep -F "sync_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      ! grep -F "stale_codex_skill_paths" ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
 
-    export PATH="${declarativeConfig.activationPackage}/home-path/bin:$PATH"
-    mkdir -p ${skillsRoot}/global
-    mkdir -p ${declarativeSource}
-    mkdir -p ${declarativeAgentsView}
-    mkdir -p ${declarativeProject}/.skills
-    cd /tmp
-    test ! -e skillnet.toml
-    unset SKILLNET_CONFIG
-    unset SKILLNET_CATALOG_CONFIG
-    unset SKILLNET_MIRROR_ROOT
-    skillnet status --all >/dev/null
+      export PATH="${declarativeConfig.activationPackage}/home-path/bin:$PATH"
+      mkdir -p ${skillsRoot}/global
+      mkdir -p ${declarativeSource}
+      mkdir -p ${declarativeAgentsView}
+      mkdir -p ${declarativeProject}/.skills
+      cd /tmp
+      test ! -e skillnet.toml
+      unset SKILLNET_CONFIG
+      unset SKILLNET_CATALOG_CONFIG
+      unset SKILLNET_MIRROR_ROOT
+      skillnet status --all >/dev/null
 
-    touch $out
-  ''
+      touch $out
+    ''

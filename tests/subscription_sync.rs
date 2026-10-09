@@ -407,7 +407,9 @@ fn provider_subscription_restores_last_good_checkout_after_collision() {
         .args(["subscription", "sync", "--all"])
         .assert()
         .failure()
-        .stderr(predicates::str::contains("retained last-known-good checkout"));
+        .stderr(predicates::str::contains(
+            "retained last-known-good checkout",
+        ));
 
     assert_eq!(
         fs::read_to_string(fixture.path("view/alpha/SKILL.md")).unwrap(),
@@ -436,7 +438,10 @@ fn replace_provider_references_with_escape(fixture: &Fixture, source: &Path) {
     fs::remove_dir_all(source.join("skills/alpha/references")).unwrap();
     std::os::unix::fs::symlink(&outside, source.join("skills/alpha/references")).unwrap();
     git(source, ["add", "-A"]);
-    git(source, ["commit", "-m", "replace references with escaping link"]);
+    git(
+        source,
+        ["commit", "-m", "replace references with escaping link"],
+    );
 }
 
 #[test]
@@ -671,10 +676,8 @@ fn option_like_subscription_name_does_not_select_all_subscriptions() {
     init_provider_repo(&source);
     let config = fixture.write_config(format!(
         "{}\n[subscriptions.copy]\nurl = \"/missing\"\ntarget = {:?}\n",
-        provider_config(&fixture, &source).replace(
-            "[subscriptions.external]",
-            "[subscriptions.\"--all\"]"
-        ),
+        provider_config(&fixture, &source)
+            .replace("[subscriptions.external]", "[subscriptions.\"--all\"]"),
         fixture.path("copy").to_str().unwrap(),
     ));
     fixture
