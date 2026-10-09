@@ -107,36 +107,58 @@ fn sync_one(ctx: &Context, name: &str, subscription: &SubscriptionConfig) -> Res
         return Ok(());
     }
 
-    let previous = checkout_head(&checkout)?;
-    let mut compose_started = false;
-    let result: Result<()> = (|| {
-        update_checkout(name, subscription, &checkout)?;
-        provider_source_path(&ctx.data_dir, name, subscription)?
+    let root = checkout
+        .parent()
+        .context("subscription checkout has no parent")?;
+    let revisions = root.join("revisions");
+    fs::create_dir_all(&revisions)?;
+    let staged = tempfile::Builder::new()
+        .prefix("revision-")
+        .tempdir_in(&revisions)?;
+    let staged_path =
+        Utf8Path::from_path(staged.path()).context("provider revision path is not UTF-8")?;
+    let validation: Result<()> = (|| {
+        update_checkout(name, subscription, staged_path)?;
+        let source = subscription_source_path(staged_path, name, subscription)?
             .context("updated provider source is missing")?;
-        compose_started = true;
-        super::view::sync(ctx, true, false, None)?;
-        println!("synced provider subscription {name}");
+        let target = ctx.config.global_target(&ctx.mirror_root)?;
+        let _ = ctx.bundle_plan_with_provider(&target, Some((name, &source)))?;
         Ok(())
     })();
-    if let Err(error) = result {
+    validation.with_context(|| {
+        format!("provider subscription `{name}` update was rejected; retained last-known-good checkout")
+    })?;
+    let current = root.join("current");
+    let previous = match fs::read_link(&current) {
+        Ok(previous) => Some(previous),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error).with_context(|| format!("read provider pointer {current}")),
+    };
+    // ponytail: retain published revisions so interrupted bundle writes cannot dangle;
+    // reclaim them only with a future collector that traces all live resource links.
+    let published = canonical_utf8(staged_path)?;
+    let _ = staged.keep();
+    crate::view::atomic_symlink(&published, &current)?;
+    if let Err(error) = super::view::sync(ctx, true, false, None) {
         let original = format!("{error:#}");
-        if let Err(rollback) = rollback_checkout(name, &checkout, previous.as_deref()) {
+        let rollback = if let Some(previous) = previous {
+            Utf8PathBuf::from_path_buf(previous)
+                .map_err(|path| anyhow::anyhow!("provider pointer is not UTF-8: {}", path.display()))
+                .and_then(|previous| crate::view::atomic_symlink(&previous, &current))
+        } else {
+            fs::remove_file(&current).map_err(anyhow::Error::from)
+        };
+        if let Err(rollback) = rollback {
             bail!("provider subscription `{name}` update failed: {original}; rollback also failed: {rollback:#}");
         }
-        if previous.is_some() || compose_started {
-            if let Err(restore) = super::view::sync(ctx, true, false, None) {
-                bail!("provider subscription `{name}` update failed: {original}; checkout was restored but view restoration failed: {restore:#}");
-            }
+        if let Err(restore) = super::view::sync(ctx, true, false, None) {
+            bail!("provider subscription `{name}` update failed: {original}; checkout pointer was restored but view restoration failed: {restore:#}");
         }
-        let recovery = if previous.is_some() {
-            "restored last-known-good checkout"
-        } else {
-            "discarded rejected initial checkout"
-        };
         return Err(anyhow::anyhow!(original)).with_context(|| {
-            format!("provider subscription `{name}` update was rejected; {recovery}")
+            format!("provider subscription `{name}` update was rejected; retained last-known-good checkout")
         });
     }
+    println!("synced provider subscription {name}");
     Ok(())
 }
 
@@ -146,6 +168,9 @@ fn reject_canonical_target(ctx: &Context, name: &str, target: &Utf8Path) -> Resu
 
 pub(crate) fn validate_provider_storage(ctx: &Context, name: &str) -> Result<()> {
     reject_canonical_overlap(ctx, name, "checkout", &checkout_path(&ctx.data_dir, name))?;
+    let root = ctx.data_dir.join("subscriptions").join(name);
+    reject_canonical_overlap(ctx, name, "revisions", &root.join("revisions"))?;
+    reject_canonical_overlap(ctx, name, "current", &root.join("current"))?;
     let bundle_root = match ctx.config.bundles_root.as_deref() {
         Some(root) => expand_path(root)?,
         None => ctx.data_dir.join("bundles"),
@@ -202,12 +227,29 @@ pub(crate) fn provider_source_path(
     subscription: &SubscriptionConfig,
 ) -> Result<Option<Utf8PathBuf>> {
     validate_subscription(name, subscription)?;
-    let checkout = checkout_path(data_dir, name);
+    let legacy = checkout_path(data_dir, name);
+    let current = legacy
+        .parent()
+        .context("subscription checkout has no parent")?
+        .join("current");
+    let checkout = if subscription.provider && fs::symlink_metadata(&current).is_ok() {
+        current
+    } else {
+        legacy
+    };
+    subscription_source_path(&checkout, name, subscription)
+}
+
+fn subscription_source_path(
+    checkout: &Utf8Path,
+    name: &str,
+    subscription: &SubscriptionConfig,
+) -> Result<Option<Utf8PathBuf>> {
     let source = checkout.join(&subscription.source);
     if !source.exists() {
         return Ok(None);
     }
-    let checkout = canonical_utf8(&checkout)?;
+    let checkout = canonical_utf8(checkout)?;
     let source = canonical_utf8(&source)?;
     if source != checkout && !source.starts_with(&checkout) {
         bail!("subscription `{name}` source escapes its checkout: {source}");
@@ -255,37 +297,6 @@ fn canonical_utf8(path: &Utf8Path) -> Result<Utf8PathBuf> {
         .canonicalize_utf8()
         .with_context(|| format!("failed to canonicalize {path}"))?;
     Ok(canonical)
-}
-
-fn checkout_head(checkout: &Utf8Path) -> Result<Option<String>> {
-    if !checkout.join(".git").exists() {
-        return Ok(None);
-    }
-    let output = StdCommand::new("git")
-        .current_dir(checkout)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .with_context(|| format!("failed to inspect subscription checkout {checkout}"))?;
-    if !output.status.success() {
-        bail!("failed to inspect subscription checkout {checkout}");
-    }
-    Ok(Some(String::from_utf8(output.stdout)?.trim().to_string()))
-}
-
-fn rollback_checkout(name: &str, checkout: &Utf8Path, previous: Option<&str>) -> Result<()> {
-    if let Some(previous) = previous {
-        git(checkout, ["checkout", "--force", previous])
-            .with_context(|| format!("failed to restore provider subscription `{name}`"))
-    } else {
-        let root = checkout
-            .parent()
-            .context("subscription checkout has no parent")?;
-        if root.exists() {
-            fs::remove_dir_all(root)
-                .with_context(|| format!("failed to remove rejected provider checkout {root}"))?;
-        }
-        Ok(())
-    }
 }
 
 fn update_checkout(

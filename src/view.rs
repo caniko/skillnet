@@ -1480,7 +1480,7 @@ fn remove_view_entry(path: &Utf8Path) -> Result<()> {
     .with_context(|| format!("failed to remove {path}"))
 }
 
-fn atomic_symlink(target: &Utf8Path, link: &Utf8Path) -> Result<()> {
+pub(crate) fn atomic_symlink(target: &Utf8Path, link: &Utf8Path) -> Result<()> {
     let parent = link.parent().context("symlink path has no parent")?;
     fs::create_dir_all(parent)?;
     let file_name = link.file_name().context("symlink path has no file name")?;

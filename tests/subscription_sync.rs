@@ -287,7 +287,7 @@ skills: Mapping<String, Skill> = new {
 "#,
     )
     .unwrap();
-    let project = fixture.path("projects/owned/project");
+    let project = fixture.path("projects/owned/demo");
     init_provider_repo(&project);
     fs::create_dir_all(project.join(".skills/project-skill")).unwrap();
     fs::write(project.join(".skills/project-skill/SKILL.md"), "project").unwrap();
@@ -407,9 +407,7 @@ fn provider_subscription_restores_last_good_checkout_after_collision() {
         .args(["subscription", "sync", "--all"])
         .assert()
         .failure()
-        .stderr(predicates::str::contains(
-            "restored last-known-good checkout",
-        ));
+        .stderr(predicates::str::contains("retained last-known-good checkout"));
 
     assert_eq!(
         fs::read_to_string(fixture.path("view/alpha/SKILL.md")).unwrap(),
@@ -420,8 +418,146 @@ fn provider_subscription_restores_last_good_checkout_after_collision() {
         "beta canonical"
     );
     assert!(fixture
-        .path("data/subscriptions/external/repo/skills/alpha/SKILL.md")
+        .path("data/subscriptions/external/current/skills/alpha/SKILL.md")
         .is_file());
+}
+
+fn add_provider_references(source: &Path) {
+    fs::create_dir_all(source.join("skills/alpha/references")).unwrap();
+    fs::write(source.join("skills/alpha/references/guide.md"), "safe").unwrap();
+    git(source, ["add", "."]);
+    git(source, ["commit", "-m", "add references"]);
+}
+
+fn replace_provider_references_with_escape(fixture: &Fixture, source: &Path) {
+    let outside = fixture.path("private");
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(outside.join("guide.md"), "private").unwrap();
+    fs::remove_dir_all(source.join("skills/alpha/references")).unwrap();
+    std::os::unix::fs::symlink(&outside, source.join("skills/alpha/references")).unwrap();
+    git(source, ["add", "-A"]);
+    git(source, ["commit", "-m", "replace references with escaping link"]);
+}
+
+#[test]
+fn rejected_provider_update_never_changes_published_resources() {
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    init_provider_repo(&source);
+    add_provider_references(&source);
+    let config = fixture.write_config(provider_config(&fixture, &source));
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .success();
+    let references = fixture.path("view/alpha/references");
+    let published_source = fs::canonicalize(&references).unwrap();
+    let current = fs::read_link(fixture.path("data/subscriptions/external/current")).unwrap();
+    replace_provider_references_with_escape(&fixture, &source);
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--all"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("provider symlink escapes"));
+    assert_eq!(fs::canonicalize(&references).unwrap(), published_source);
+    assert_eq!(
+        fs::read_to_string(references.join("guide.md")).unwrap(),
+        "safe"
+    );
+    assert_eq!(
+        fs::read_link(fixture.path("data/subscriptions/external/current")).unwrap(),
+        current
+    );
+}
+
+#[test]
+fn interrupted_provider_checkout_keeps_legacy_published_resources_safe() {
+    use std::{os::unix::fs::PermissionsExt, process::Stdio, time::Instant};
+
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    init_provider_repo(&source);
+    add_provider_references(&source);
+    let legacy = fixture.path("data/subscriptions/external/repo");
+    fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+    git(
+        fixture.tmp.path(),
+        ["clone", source.to_str().unwrap(), legacy.to_str().unwrap()],
+    );
+    let config = fixture.write_config(provider_config(&fixture, &source));
+    fixture
+        .command(&config)
+        .args(["view", "sync", "--all"])
+        .assert()
+        .success();
+    let references = fixture.path("view/alpha/references");
+    let published_source = fs::canonicalize(&references).unwrap();
+    replace_provider_references_with_escape(&fixture, &source);
+
+    let real_git = StdCommand::new("sh")
+        .args(["-c", "command -v git"])
+        .output()
+        .unwrap();
+    assert!(real_git.status.success());
+    let bin = fixture.path("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let shim = bin.join("git");
+    fs::write(
+        &shim,
+        r#"#!/bin/sh
+"$SKILLNET_TEST_REAL_GIT" "$@" || exit $?
+if [ "$1" = checkout ]; then
+  kill -STOP "$PPID"
+  : > "$SKILLNET_TEST_CHECKOUT_READY"
+fi
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(&shim, fs::Permissions::from_mode(0o755)).unwrap();
+    let ready = fixture.path("checkout-ready");
+    let mut child = StdCommand::new(assert_cmd::cargo::cargo_bin("skillnet"))
+        .args([
+            "--config",
+            config.to_str().unwrap(),
+            "subscription",
+            "sync",
+            "--all",
+        ])
+        .env("SKILLNET_DATA_DIR", fixture.path("data"))
+        .env(
+            "SKILLNET_TEST_REAL_GIT",
+            String::from_utf8(real_git.stdout).unwrap().trim(),
+        )
+        .env("SKILLNET_TEST_CHECKOUT_READY", &ready)
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + std::time::Duration::from_secs(10);
+    while !ready.exists() && Instant::now() < deadline {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let stopped_after_checkout = ready.exists();
+    let resource = fs::read_to_string(references.join("guide.md"));
+    let resolved = fs::canonicalize(&references);
+    let _ = child.kill();
+    child.wait().unwrap();
+    assert!(
+        stopped_after_checkout,
+        "did not reach the staged-checkout boundary"
+    );
+    assert_eq!(resource.unwrap(), "safe");
+    assert_eq!(resolved.unwrap(), published_source);
+    assert!(!fixture.path("data/subscriptions/external/current").exists());
 }
 
 #[test]
@@ -488,7 +624,13 @@ fn provider_subscription_rejects_symlinks_outside_source_root() {
         .stderr(predicates::str::contains(
             "provider symlink escapes its source root",
         ));
-    assert!(!fixture.path("data/subscriptions/external").exists());
+    assert!(!fixture.path("data/subscriptions/external/current").exists());
+    assert_eq!(
+        fs::read_dir(fixture.path("data/subscriptions/external/revisions"))
+            .unwrap()
+            .count(),
+        0
+    );
 }
 
 #[test]
@@ -513,5 +655,36 @@ fn provider_subscription_rejects_reserved_hidden_skill_names() {
         .stderr(predicates::str::contains(
             "invalid provider skill name `.skillnet-tmp`",
         ));
-    assert!(!fixture.path("data/subscriptions/external").exists());
+    assert!(!fixture.path("data/subscriptions/external/current").exists());
+    assert_eq!(
+        fs::read_dir(fixture.path("data/subscriptions/external/revisions"))
+            .unwrap()
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn option_like_subscription_name_does_not_select_all_subscriptions() {
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    init_provider_repo(&source);
+    let config = fixture.write_config(format!(
+        "{}\n[subscriptions.copy]\nurl = \"/missing\"\ntarget = {:?}\n",
+        provider_config(&fixture, &source).replace(
+            "[subscriptions.external]",
+            "[subscriptions.\"--all\"]"
+        ),
+        fixture.path("copy").to_str().unwrap(),
+    ));
+    fixture
+        .command(&config)
+        .args(["subscription", "sync", "--", "--all"])
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read_to_string(fixture.path("view/alpha/SKILL.md")).unwrap(),
+        "alpha v1"
+    );
+    assert!(!fixture.path("data/subscriptions/copy").exists());
 }

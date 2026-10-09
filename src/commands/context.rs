@@ -85,6 +85,14 @@ impl Context {
     }
 
     pub(crate) fn bundle_plan(&self, target: &Target) -> Result<Option<crate::bundle::BundlePlan>> {
+        self.bundle_plan_with_provider(target, None)
+    }
+
+    pub(crate) fn bundle_plan_with_provider(
+        &self,
+        target: &Target,
+        staged: Option<(&str, &Utf8Path)>,
+    ) -> Result<Option<crate::bundle::BundlePlan>> {
         let external = self
             .config
             .external_manifests
@@ -98,6 +106,11 @@ impl Context {
                 .filter(|(_, subscription)| subscription.provider)
                 .map(|(name, subscription)| {
                     super::subscription::validate_provider_storage(self, name)?;
+                    if let Some((staged_name, source)) = staged {
+                        if name == staged_name {
+                            return Ok(Some(source.to_path_buf()));
+                        }
+                    }
                     super::subscription::provider_source_path(&self.data_dir, name, subscription)
                 })
                 .collect::<Result<Vec<_>>>()?
