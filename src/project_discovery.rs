@@ -70,6 +70,10 @@ pub fn discover(config: &ProjectDiscoveryConfig) -> Result<Vec<DiscoveredProject
     if !tree.root.is_dir() {
         bail!("project tree root `{}` is not a directory", tree.root);
     }
+    let tree_root = tree
+        .root
+        .canonicalize_utf8()
+        .with_context(|| format!("resolve project tree root `{}`", tree.root))?;
     let marker = relative_path(&config.marker, "project_discovery.marker")?;
 
     let mut projects = Vec::new();
@@ -88,6 +92,15 @@ pub fn discover(config: &ProjectDiscoveryConfig) -> Result<Vec<DiscoveredProject
         let class_root = tree.root.join(class_rel);
         if !class_root.is_dir() {
             bail!("project tree class `{class}` root `{class_root}` is not a directory");
+        }
+        let resolved_class = class_root
+            .canonicalize_utf8()
+            .with_context(|| format!("resolve project class `{class}` at `{class_root}`"))?;
+        if !resolved_class.starts_with(&tree_root) {
+            bail!(
+                "project tree class `{class}` root `{class_root}` escapes project tree root `{}`",
+                tree.root
+            );
         }
 
         let mut entries = fs::read_dir(class_root.as_std_path())
@@ -309,6 +322,18 @@ mod tests {
         .unwrap();
         let error = discover(&config).unwrap_err();
         assert!(error.to_string().contains("project_discovery.marker"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_class_roots_resolving_outside_the_project_tree() {
+        let temp = tempdir().unwrap();
+        let outside = tempdir().unwrap();
+        checkout(outside.path(), "demo", true);
+        fs::create_dir_all(temp.path().join("forks")).unwrap();
+        unix_fs::symlink(outside.path(), temp.path().join("owned")).unwrap();
+        let error = discover(&tree_config(temp.path())).unwrap_err();
+        assert!(error.to_string().contains("escapes project tree root"));
     }
 
     #[cfg(unix)]

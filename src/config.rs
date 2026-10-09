@@ -378,7 +378,12 @@ impl Config {
         if !path.exists() {
             return Ok(DatabaseConfig::default());
         }
-        Ok(Self::load(path)?.database)
+        let text = fs::read_to_string(path)
+            .with_context(|| format!("failed to read config file {path}"))?;
+        reject_legacy_schema(&text, path)?;
+        let config: Self =
+            toml::from_str(&text).with_context(|| format!("failed to parse config file {path}"))?;
+        Ok(config.database)
     }
 
     #[allow(dead_code)]
@@ -1298,6 +1303,21 @@ project_tree = "{}"
         fs::write(&tree_path, "not json").unwrap();
         let error = Config::load(&config_path).unwrap_err();
         assert!(error.to_string().contains("parse project tree config"));
+    }
+
+    #[test]
+    fn database_settings_do_not_require_project_discovery() {
+        let temp = tempdir().unwrap();
+        let path = Utf8PathBuf::from_path_buf(temp.path().join("skillnet.toml")).unwrap();
+        fs::write(
+            &path,
+            "[global]\nviews = []\n[database]\nbackend = \"sqlite\"\npath = \"/calibration.sqlite\"\n[project_discovery]\nproject_tree = \"/missing/project-tree.json\"\n",
+        )
+        .unwrap();
+        assert!(Config::load(&path).is_err());
+        let database = Config::load_database_or_default(&path).unwrap();
+        assert_eq!(database.backend, DatabaseBackend::Sqlite);
+        assert_eq!(database.path.as_deref(), Some("/calibration.sqlite"));
     }
 
     #[test]

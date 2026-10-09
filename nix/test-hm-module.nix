@@ -107,13 +107,22 @@
   configFileConfig = mkHmConfig {
     database.backend = "sqlite";
     configFile = configFileOverride;
-    subscriptions.external = {
+    subscriptions."--all" = {
       url = "https://github.com/example/skills.git";
       provider = true;
     };
     subscriptionSyncInterval = "1h";
   };
   configFileEnvironment = configFileConfig.config.systemd.user.services.skillnet-subscription-sync.Service.Environment;
+  immutableProviderConfig = mkHmConfig {
+    database.backend = "sqlite";
+    bundlesRoot = "/nix/store/skillnet-bundle/bundles";
+    subscriptions.external = {
+      url = "https://github.com/example/skills.git";
+      provider = true;
+    };
+    subscriptionSyncInterval = "1h";
+  };
   hostOnlyConfig = mkHmConfig {
     host = "host-only-destination";
     database.backend = "sqlite";
@@ -136,6 +145,8 @@ in
     "PATH=${pkgs.lib.makeBinPath [pkgs.git]}"
     "SKILLNET_CONFIG=${configFileOverride}"
   ];
+  assert configFileConfig.config.systemd.user.services.skillnet-subscription-sync.Service.ExecStart == "${package}/bin/skillnet --allow-dirty-destination subscription sync -- ${pkgs.lib.escapeShellArg "--all"}";
+  assert builtins.any (assertion: !assertion.assertion && assertion.message == "programs.skillnet scheduled provider subscriptions require a writable bundlesRoot outside the Nix store.") immutableProviderConfig.config.assertions;
   pkgs.runCommand "skillnet-hm-module-test"
   {
     nativeBuildInputs = [
@@ -256,7 +267,7 @@ in
     grep -F 'url = "https://github.com/example/skills.git"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'source = "skills"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
     grep -F 'provider = true' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
-    grep -R -F 'skillnet --allow-dirty-destination subscription sync external' ${declarativeConfig.activationPackage}/home-files >/dev/null
+    grep -R -F 'skillnet --allow-dirty-destination subscription sync -- external' ${declarativeConfig.activationPackage}/home-files >/dev/null
     grep -R -F 'PATH=${pkgs.git}/bin' ${declarativeConfig.activationPackage}/home-files >/dev/null
     grep -R -F 'OnBootSec=5m' ${declarativeConfig.activationPackage}/home-files >/dev/null
     grep -R -F 'OnUnitActiveSec=1h' ${declarativeConfig.activationPackage}/home-files >/dev/null

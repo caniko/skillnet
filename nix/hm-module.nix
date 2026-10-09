@@ -294,6 +294,10 @@ in {
           message = "programs.skillnet.bundlesRoot must be an absolute path.";
         }
         {
+          assertion = cfg.subscriptionSyncInterval == null || providerNames == [] || cfg.bundlesRoot == null || !(cfg.bundlesRoot == builtins.storeDir || lib.hasPrefix "${builtins.storeDir}/" cfg.bundlesRoot);
+          message = "programs.skillnet scheduled provider subscriptions require a writable bundlesRoot outside the Nix store.";
+        }
+        {
           assertion = cfg.database.backend != "postgres" || cfg.database.url != null || cfg.database.urlFile != null;
           message = "programs.skillnet.database needs `url` or `urlFile` when backend = \"postgres\".";
         }
@@ -417,7 +421,7 @@ in {
           Environment =
             ["PATH=${lib.makeBinPath [pkgs.git]}"]
             ++ lib.optional (cfg.configFile != null) "SKILLNET_CONFIG=${cfg.configFile}";
-          ExecStart = "${cfg.package}/bin/skillnet --allow-dirty-destination subscription sync ${providerArgs}";
+          ExecStart = "${cfg.package}/bin/skillnet --allow-dirty-destination subscription sync -- ${providerArgs}";
         };
         Install.WantedBy = ["default.target"];
       };
