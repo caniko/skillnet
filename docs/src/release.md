@@ -5,7 +5,7 @@ Release validation for this crate uses the same checks documented in the reposit
 ```sh
 simit init flake --check --diff
 simit release trust check
-simit init ci --platform github --check --diff
+simit init ci --platform github --maintainer-key 818D507F1E62139F8A17EAA64623DEA06FDACFE1 --check --diff
 nix flake check --keep-going --print-build-logs
 treefmt --ci
 cargo clippy --all-targets --all-features -- --deny warnings

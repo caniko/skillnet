@@ -304,7 +304,7 @@ in {
       home.packages = [cfg.package];
     }
 
-    (lib.mkIf (cfg.settings != null || cfg.subscriptions != {} || cfg.externalManifests != []) {
+    (lib.mkIf (cfg.host != null || cfg.settings != null || cfg.subscriptions != {} || cfg.externalManifests != []) {
       xdg.enable = lib.mkDefault true;
       xdg.configFile."skillnet/skillnet.toml".source =
         tomlFormat.generate "skillnet.toml" generatedSettings;

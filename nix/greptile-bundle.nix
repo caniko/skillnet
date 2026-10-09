@@ -4,10 +4,10 @@
   mkBundle,
   skillnetVersion,
 }: let
-  revision = "acd653e9bf599f7f04346b0542db06fa2b3219f6";
+  revision = "ee19812658db84ed2893dac855e8e82101800c32";
   archive = pkgs.fetchurl {
     url = "https://codeload.github.com/caniko/ai-skills/tar.gz/${revision}";
-    hash = "sha256-3eU5u1yfUnYDeMWWCBxrZcorrRgR8sz1lhcJvgpOib8=";
+    hash = "sha256-bNMEKhz12wf2//Np8zxhX8mMdzjKXm3/p46JyKMsIwk=";
   };
   source =
     pkgs.runCommand "ai-skills-greptile-${builtins.substring 0 12 revision}" {
@@ -69,6 +69,8 @@ in {
       test -s "$bundle/view/cli-review/.skillnet/deps/write-human-style/SKILL.md"
       test -s "$bundle/view/check-pr/.skillnet/deps/pr-review-reply-style/.skillnet/deps/write-human-style/SKILL.md"
       test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/.skillnet/deps/fix-loop-ref/SKILL.md"
+      test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/.skillnet/deps/graphify/SKILL.md"
+      test -s "$bundle/view/greploop/.skillnet/deps/fix-loop/.skillnet/deps/graphify/SKILL.md"
       test -s "$bundle/view/check-pr/.skillnet/deps/grouped-git-commits/.skillnet/deps/chaosbox-policy/SKILL.md"
       test -s "$bundle/view/check-pr/.skillnet/deps/chaosbox-policy/SKILL.md"
       test -s "$bundle/view/check-pr/.skillnet/deps/fix-loop/.skillnet/deps/solution-placement-policy/SKILL.md"

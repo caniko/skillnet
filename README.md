@@ -224,7 +224,7 @@ manifest-driven composition. It is evaluated by the Rust `pklr` integration
 with local imports confined to that store; environment, network, temporary
 directory, and glob access are disabled.
 
-The manifest declares `schemaVersion = 1` or `schemaVersion = 2` and a `skills` mapping. Skills not
+The manifest declares `schemaVersion = 1`, `schemaVersion = 2` or `schemaVersion = 3` and a `skills` mapping. Skills not
 listed in the mapping remain entrypoints. Listed skills may use `role =
 "entrypoint"` or `role = "reference"` and may name other skills in
 `dependencies`. `defaultDependencies` applies to canonical skills that do not
@@ -442,7 +442,7 @@ The release-prep flow validates the repository with:
 ```sh
 simit init flake --check --diff
 simit release trust check
-simit init ci --platform github --check --diff
+simit init ci --platform github --maintainer-key 818D507F1E62139F8A17EAA64623DEA06FDACFE1 --check --diff
 nix flake check --keep-going --print-build-logs
 treefmt --ci
 cargo clippy --all-targets --all-features -- --deny warnings
