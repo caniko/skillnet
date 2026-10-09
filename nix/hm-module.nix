@@ -5,11 +5,15 @@
   ...
 }: let
   cfg = config.programs.skillnet;
+  settings =
+    if cfg.settings == null
+    then {}
+    else cfg.settings;
   tomlFormat = pkgs.formats.toml {};
   generatedConfigFile = "${config.xdg.configHome}/skillnet/skillnet.toml";
   generatedCatalogConfigFile = "${config.xdg.configHome}/skillnet/skillnet.catalog.toml";
   generatedDatabaseSettings =
-    ((cfg.settings or {}).database or {})
+    (settings.database or {})
     // {
       backend = cfg.database.backend;
     }
@@ -20,7 +24,7 @@
       url = cfg.database.url;
     };
   generatedSettings =
-    ((cfg.settings or {})
+    (settings
       // lib.optionalAttrs (cfg.settings == null) {
         global = {views = [];};
       })

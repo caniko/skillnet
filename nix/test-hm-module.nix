@@ -143,6 +143,7 @@ in
     ! grep -R -F 'host = "wrong-builder"' ${immutableConfig.activationPackage}/home-files >/dev/null
     test -f ${hostOnlyConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml
     grep -F 'host = "host-only-destination"' ${hostOnlyConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml >/dev/null
+    grep -F 'backend = "sqlite"' ${hostOnlyConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml >/dev/null
     ! grep -R -F 'host = ' ${sqliteConfig.activationPackage}/home-files/.config/skillnet/skillnet.toml >/dev/null
     mkdir -p ${dataDir}
     test -d ${dataDir}
