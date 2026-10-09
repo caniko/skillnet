@@ -299,6 +299,16 @@ fn init_git_repo(path: &Path) {
         .current_dir(path)
         .output()
         .unwrap();
+    // Fixture commits must finish all Git writes before a filesystem snapshot.
+    // New Git versions can otherwise detach maintenance after the commit exits.
+    for (key, value) in [("maintenance.auto", "false"), ("gc.auto", "0")] {
+        let output = StdCommand::new("git")
+            .args(["config", "--local", key, value])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "fixture Git configuration failed");
+    }
 }
 
 fn commit_all(path: &Path, message: &str) {
@@ -605,12 +615,13 @@ fn assert_relative_symlink_points_to(link: &Path, target: &str) {
     assert_eq!(fs::read_link(link).unwrap(), Path::new(target));
 }
 
-fn tree_digest(root: &Path) -> String {
-    let mut entries = Vec::new();
+fn tree_entries(root: &Path) -> BTreeMap<String, String> {
+    let mut entries = BTreeMap::new();
     for entry in WalkDir::new(root).follow_links(false) {
         let entry = entry.unwrap();
         let path = entry.path();
-        let metadata = fs::symlink_metadata(path).unwrap();
+        let metadata = fs::symlink_metadata(path)
+            .unwrap_or_else(|error| panic!("snapshot metadata {}: {error}", path.display()));
         let rel = path.strip_prefix(root).unwrap().to_string_lossy();
         let mut hasher = Sha256::new();
         hasher.update(rel.as_bytes());
@@ -631,10 +642,14 @@ fn tree_digest(root: &Path) -> String {
                 hasher.update(&buf[..n]);
             }
         }
-        entries.push(format!("{:x}", hasher.finalize()));
+        entries.insert(rel.into_owned(), format!("{:x}", hasher.finalize()));
     }
-    entries.sort();
+    entries
+}
 
+fn tree_digest(root: &Path) -> String {
+    let mut entries: Vec<_> = tree_entries(root).into_values().collect();
+    entries.sort();
     let mut digest = Sha256::new();
     for entry in entries {
         digest.update(entry.as_bytes());
@@ -853,9 +868,25 @@ fn sync_forwards_allow_delete_and_force() {
 }
 
 #[test]
+fn sync_no_promote_allow_delete_prunes_stale_authored_entries() {
+    let sync = SyncFixture::new();
+    sync.command().arg("sync").assert().success();
+    write_skill(&sync.global_view, "stale-directory", "unwanted");
+    fs::write(sync.global_view.join("stale-file"), "unwanted").unwrap();
+    sync.command()
+        .args(["sync", "--no-promote", "--allow-delete"])
+        .assert()
+        .success();
+    assert!(!sync.global_view.join("stale-directory").exists());
+    assert!(!sync.global_view.join("stale-file").exists());
+    assert!(sync.global_view.join("alpha/SKILL.md").is_file());
+}
+
+#[test]
 fn sync_dry_run_does_not_mutate() {
     let sync = SyncFixture::new();
     let before = tree_digest(sync.fixture.root());
+    let before_entries = tree_entries(sync.fixture.root());
 
     sync.command()
         .args(["--dry-run", "sync"])
@@ -869,7 +900,19 @@ fn sync_dry_run_does_not_mutate() {
                 .and(predicate::str::contains("force: false")),
         );
 
-    assert_eq!(tree_digest(sync.fixture.root()), before);
+    let after_entries = tree_entries(sync.fixture.root());
+    let changed: Vec<_> = before_entries
+        .keys()
+        .chain(after_entries.keys())
+        .filter(|path| before_entries.get(*path) != after_entries.get(*path))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    assert_eq!(
+        tree_digest(sync.fixture.root()),
+        before,
+        "dry-run changed: {changed:?}"
+    );
     assert!(!sync.global_view.exists());
     assert!(!sync.project_view(&sync.first_project).exists());
     assert!(!sync.aggregator("first").exists());
@@ -3368,4 +3411,151 @@ fn doctor_does_not_warn_when_only_one_agent_source() {
         .assert()
         .success()
         .stdout(predicate::str::is_empty());
+}
+
+#[test]
+fn project_list_json_includes_discovered_checkouts() {
+    let fixture = Fixture::new();
+    let projects = fixture.path("projects");
+    for class in ["owned", "forks", "personal", "worktrees", "archives"] {
+        fs::create_dir_all(projects.join(class)).unwrap();
+    }
+    let owned = projects.join("owned/demo");
+    fs::create_dir_all(&owned).unwrap();
+    init_git_repo(&owned);
+    fs::create_dir_all(owned.join(".skills")).unwrap();
+    let fork = projects.join("forks/other");
+    fs::create_dir_all(&fork).unwrap();
+    init_git_repo(&fork);
+    fs::create_dir_all(fork.join(".skills")).unwrap();
+    let markerless = projects.join("owned/markerless");
+    fs::create_dir_all(&markerless).unwrap();
+    init_git_repo(&markerless);
+    fs::create_dir_all(projects.join("owned/not-git/.skills")).unwrap();
+    for excluded in [
+        projects.join("personal/protected"),
+        projects.join("worktrees/generated"),
+        projects.join("archives/old"),
+    ] {
+        fs::create_dir_all(&excluded).unwrap();
+        init_git_repo(&excluded);
+        fs::create_dir_all(excluded.join(".skills")).unwrap();
+    }
+    let tree = fixture.path("project-tree.json");
+    fs::write(
+        &tree,
+        serde_json::json!({
+            "schemaVersion": 1,
+            "root": projects,
+            "layout": {
+                "primary": {"owned": "owned", "forks": "forks", "upstream": "upstream"}
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let config = fixture.write_config(format!(
+        r#"
+[global]
+views = []
+
+[project_discovery]
+project_tree = "{}"
+classes = ["owned", "forks"]
+marker = ".skills"
+"#,
+        tree.display()
+    ));
+
+    let output = fixture
+        .command(&config)
+        .args(["project", "list", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rows: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 2);
+    assert_eq!(rows[0]["name"], "demo");
+    assert_eq!(rows[0]["source"], "discovered");
+    assert_eq!(rows[0]["relative_path"], "owned/demo");
+    assert_eq!(rows[1]["name"], "other");
+    assert_eq!(rows[1]["source"], "discovered");
+    assert_eq!(rows[1]["relative_path"], "forks/other");
+
+    let remove = fixture
+        .command(&config)
+        .args(["project", "remove", "demo"])
+        .output()
+        .unwrap();
+    assert!(!remove.status.success());
+    assert!(String::from_utf8_lossy(&remove.stderr).contains("is discovered"));
+    assert!(!fs::read_to_string(config).unwrap().contains("[[projects]]"));
+
+    let explicit_override = fixture.write_config(format!(
+        r#"
+[global]
+views = []
+
+[project_discovery]
+project_tree = "{}"
+classes = ["owned", "forks"]
+marker = ".skills"
+
+[[projects]]
+name = "demo"
+path = "{}"
+"#,
+        tree.display(),
+        owned.display()
+    ));
+    let override_output = fixture
+        .command(&explicit_override)
+        .args(["project", "list", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(override_output.status.success());
+    let override_rows: serde_json::Value = serde_json::from_slice(&override_output.stdout).unwrap();
+    assert_eq!(override_rows[0]["name"], "demo");
+    assert_eq!(override_rows[0]["source"], "explicit");
+}
+
+#[test]
+fn project_remove_reports_custom_discovery_marker_without_mutation() {
+    let fixture = Fixture::new();
+    let root = fixture.path("projects");
+    let project = root.join("owned/demo");
+    fs::create_dir_all(project.join(".git")).unwrap();
+    fs::create_dir_all(project.join(".skillnet-enabled")).unwrap();
+    fs::create_dir_all(project.join(".skills")).unwrap();
+    let tree = fixture.path("project-tree.json");
+    fs::write(
+        &tree,
+        serde_json::json!({
+            "schemaVersion": 1,
+            "root": root,
+            "layout": {"primary": {"owned": "owned"}}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let text = format!(
+        "[global]\nviews = []\n[project_discovery]\nproject_tree = {:?}\nclasses = [\"owned\"]\nmarker = \".skillnet-enabled\"\n",
+        tree.to_str().unwrap()
+    );
+    let config = fixture.write_config(&text);
+    fixture
+        .command(&config)
+        .args(["project", "remove", "demo"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "remove its `.skillnet-enabled` marker",
+        ));
+    assert!(project.join(".skillnet-enabled").is_dir());
+    assert!(project.join(".skills").is_dir());
+    assert_eq!(fs::read_to_string(config).unwrap(), text);
 }

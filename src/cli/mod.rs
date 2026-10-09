@@ -339,10 +339,7 @@ fn run_scope_command(ctx: &Context, command: ScopeCommand) -> Result<()> {
 
 fn run_project_command(ctx: &Context, command: ProjectCommand) -> Result<()> {
     match command {
-        ProjectCommand::List => {
-            commands::project_list(ctx);
-            Ok(())
-        }
+        ProjectCommand::List { format } => commands::project_list(ctx, format),
         ProjectCommand::Add {
             name,
             path,

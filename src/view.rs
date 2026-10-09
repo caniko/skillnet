@@ -39,6 +39,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ViewSyncOptions {
     pub allow_delete: bool,
+    pub preserve_authored: bool,
     pub force: bool,
     pub relative_links: bool,
     pub link_strategy: LinkStrategy,
@@ -48,6 +49,7 @@ impl Default for ViewSyncOptions {
     fn default() -> Self {
         Self {
             allow_delete: false,
+            preserve_authored: false,
             force: false,
             relative_links: false,
             link_strategy: LinkStrategy::Symlink,
@@ -239,6 +241,9 @@ pub fn materialize_view_with_expected(
 
     if options.allow_delete {
         for stale in stale_view_entries(&view.path, expected.keys())? {
+            if options.preserve_authored && !stale.is_symlink() {
+                continue;
+            }
             remove_view_entry(&stale)
                 .with_context(|| format!("failed to remove stale view entry {stale}"))?;
             summary.removed += 1;
@@ -266,6 +271,7 @@ pub fn materialize_view_with_promotion(
             ViewSyncOptions {
                 allow_delete: options.allow_delete,
                 force: options.force_demote,
+                preserve_authored: false,
                 relative_links: options.relative_links,
                 link_strategy: LinkStrategy::Hardlink,
             },
@@ -798,6 +804,7 @@ pub fn materialize_project_with_options(
                 allow_delete: options.allow_delete,
                 force: options.force,
                 relative_links: true,
+                preserve_authored: false,
                 // Project aggregators may be hardlinked, but their checked-in
                 // agent views remain portable relative symlinks.
                 link_strategy: LinkStrategy::Symlink,
@@ -1477,7 +1484,7 @@ fn remove_view_entry(path: &Utf8Path) -> Result<()> {
     .with_context(|| format!("failed to remove {path}"))
 }
 
-fn atomic_symlink(target: &Utf8Path, link: &Utf8Path) -> Result<()> {
+pub(crate) fn atomic_symlink(target: &Utf8Path, link: &Utf8Path) -> Result<()> {
     let parent = link.parent().context("symlink path has no parent")?;
     fs::create_dir_all(parent)?;
     let file_name = link.file_name().context("symlink path has no file name")?;

@@ -25,12 +25,14 @@
       flake = false;
     };
     plinth = {
-      url = "git+https://github.com/caniko/plinth.git";
+      # Includes Harbor's private build-scoped cache fallback for hosted docs.
+      url = "git+https://github.com/caniko/plinth.git?ref=trunk&rev=ed2424518f888bfb06b3cf4f11101bffe1b740e4";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
   outputs = {
+    self,
     advisory-db,
     home-manager,
     nixpkgs,
@@ -43,8 +45,7 @@
     ...
   }: let
     hmModule = import ./nix/hm-module.nix;
-  in
-    flake-utils.lib.eachSystem ["x86_64-linux"] (system: let
+    systemOutputs = flake-utils.lib.eachSystem ["x86_64-linux"] (system: let
       pkgs = import nixpkgs {
         inherit system;
         overlays = [(import rust-overlay)];
@@ -143,26 +144,37 @@
       mkBundle = import ./nix/bundle.nix {
         inherit package pkgs;
       };
-      bundleCheck = pkgs.runCommand "skillnet-bundle-check" {
-        bundle = mkBundle {
-          canonical = builtins.path {
-            path = ./nix/test-bundle-source;
-            name = "skillnet-test-bundle-source";
+      greptileSkills = import ./nix/greptile-bundle.nix {
+        inherit mkBundle pkgs;
+        skillnetVersion = package.version;
+      };
+      bundleCheck = assert self.lib.${system}.externalManifestSupport;
+      assert self.lib.${system}.externalProviderSupport;
+      assert self.lib.${system}.hostSelectionSupport;
+      assert self.lib.hostSelectionSupport;
+      assert builtins.isFunction self.lib.${system}.mkBundle;
+        pkgs.runCommand "skillnet-bundle-check" {
+          bundle = mkBundle {
+            canonical = builtins.path {
+              path = ./nix/test-bundle-source;
+              name = "skillnet-test-bundle-source";
+            };
+            user = "can";
           };
-          user = "can";
-        };
-      } ''
-        test -L "$bundle/view/demo"
-        test ! -e "$bundle/view/shared"
-        test -f "$bundle/bundles/global/demo/SKILL.md"
-        test ! -L "$bundle/bundles/global/demo/SKILL.md"
-        test -L "$bundle/bundles/global/demo/.skillnet/deps/shared"
-        touch "$out"
-      '';
+        } ''
+          test -L "$bundle/view/demo"
+          test ! -e "$bundle/view/shared"
+          test -f "$bundle/bundles/global/demo/SKILL.md"
+          test ! -L "$bundle/bundles/global/demo/SKILL.md"
+          test -L "$bundle/bundles/global/demo/.skillnet/deps/shared"
+          touch "$out"
+        '';
     in {
       packages = {
         default = package;
         skillnet = package;
+        greptile-skills = greptileSkills.bundle;
+        greptile-skills-archive = greptileSkills.archive;
         docs = docs;
         website = website;
         site = website;
@@ -181,6 +193,8 @@
 
       lib = {
         externalManifestSupport = true;
+        externalProviderSupport = true;
+        hostSelectionSupport = true;
         inherit mkBundle;
       };
 
@@ -197,14 +211,19 @@
         deny = denyCheck;
         hm-module = hmModuleTest;
         bundle = bundleCheck;
+        greptile-skills = greptileSkills.check;
+        # A CI-only runtime hook must not make the composition a dev-shell input.
+        # Attribute-name lookup only: preserve the shell's real dependency context.
+        dev-shell-composition-isolation = assert !(builtins.hasAttr (builtins.unsafeDiscardStringContext greptileSkills.check.drvPath)
+          (builtins.getContext self.devShells.${system}.default.shellHook));
+          pkgs.runCommand "skillnet-dev-shell-composition-isolation" {} ''touch "$out"'';
         # Fail if flake inputs ever point at the retired Codeberg/Codefloe
         # mirrors again (fleet migrated to github.com/caniko/*).
         # sourceUrl package metadata is excluded: informational only, not fetched.
-        host-pinning =
-          let
-            # Split across literals so this file never matches its own pattern.
-            staleHosts = "cod" + "eberg|cod" + "efloe";
-          in
+        host-pinning = let
+          # Split across literals so this file never matches its own pattern.
+          staleHosts = "cod" + "eberg|cod" + "efloe";
+        in
           pkgs.runCommand "skillnet-host-pinning" {} ''
             if ${pkgs.lib.getExe pkgs.ripgrep} -v "sourceUrl" ${./flake.nix} ${./flake.lock} \
               | ${pkgs.lib.getExe pkgs.ripgrep} -q "${staleHosts}"; then
@@ -218,6 +237,13 @@
       };
 
       devShells = {
+        msrv = pkgs.mkShell {
+          inputsFrom = [(self.devShells.${system}.default.overrideAttrs (_: {shellHook = "";}))];
+          packages = [pkgs.rust-bin.stable."1.88.0".minimal];
+          RUSTFLAGS = "";
+          CARGO_ENCODED_RUSTFLAGS = "";
+          RUSTC_WRAPPER = "";
+        };
         default = craneLib.devShell {
           packages = with pkgs;
             [
@@ -232,8 +258,25 @@
               rust-analyzer
               taplo
             ]
+            ++ [harbor-rs.packages.${system}.harbor-ci]
             ++ pre-commit-check.enabledPackages;
-          shellHook = pre-commit-check.shellHook;
+          shellHook =
+            pre-commit-check.shellHook
+            + ''
+              # Keep the qualified portable consumer export retrievable from the
+              # existing hosted logs until the artifact-upload workflow is installed.
+              if [ "''${CI:-}" = true ] && [ "''${GITHUB_REPOSITORY:-}" = caniko/skillnet ] \
+                && [ -d "''${RUNNER_TEMP:-}" ]; then
+                # Resolve only inside hosted CI, not via a derivation interpolation
+                # that Nix would realize before the runtime condition is evaluated.
+                consumer=$(nix build --no-link --print-out-paths .#checks.${system}.greptile-skills) || exit 1
+                marker="$RUNNER_TEMP/$(basename "$consumer").exported"
+                if [ ! -e "$marker" ]; then
+                  cat "$consumer/consumer-archive.log"
+                  touch "$marker"
+                fi
+              fi
+            '';
         };
 
         docs = harbor-rs.lib.mkDocsShell {
@@ -250,11 +293,20 @@
           extraShellHook = pre-commit-check.shellHook;
         };
       };
-    })
+    });
+  in
+    systemOutputs
     // {
       hmModules = {
         default = hmModule;
         skillnet = hmModule;
       };
+      lib =
+        systemOutputs.lib
+        // {
+          externalManifestSupport = true;
+          externalProviderSupport = true;
+          hostSelectionSupport = true;
+        };
     };
 }

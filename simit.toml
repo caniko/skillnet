@@ -2,16 +2,16 @@
 scope = "hooks-only"
 
 [ci]
-runner = "atlas-nix-trusted"
+runner = "ubuntu-24.04"
 with_audit = true
 with_deny = true
 with_docs = true
 with_msrv = true
 runtime = "nix"
-check_command = "harbor-ci full"
-step_runners = { cargo-clippy = "codeberg-small", cargo-doc = "codeberg-small", cargo-fmt = "codeberg-tiny", cargo-package = "codeberg-medium", cargo-test = "codeberg-medium", nix-check = "atlas-nix-trusted", quality-tools = "codeberg-small" }
+required_gates = [{ id = "harbor-ci", run = "nix develop -c harbor-ci full" }]
+step_runners = { cargo-clippy = "ubuntu-24.04", cargo-doc = "ubuntu-24.04", cargo-fmt = "ubuntu-24.04", cargo-package = "ubuntu-24.04", cargo-test = "ubuntu-24.04", nix-check = "ubuntu-24.04", quality-tools = "ubuntu-24.04" }
 provider = "actions"
-platform = "forgejo"
+platform = "github"
 publish_crates = true
 
 [ci.pages]

@@ -5,11 +5,17 @@
   ...
 }: let
   cfg = config.programs.skillnet;
+  settings =
+    if cfg.settings == null
+    then {}
+    else cfg.settings;
+  providerNames = builtins.attrNames (lib.filterAttrs (_: subscription: subscription.provider) cfg.subscriptions);
+  providerArgs = lib.concatMapStringsSep " " lib.escapeShellArg providerNames;
   tomlFormat = pkgs.formats.toml {};
   generatedConfigFile = "${config.xdg.configHome}/skillnet/skillnet.toml";
   generatedCatalogConfigFile = "${config.xdg.configHome}/skillnet/skillnet.catalog.toml";
   generatedDatabaseSettings =
-    ((cfg.settings or {}).database or {})
+    (settings.database or {})
     // {
       backend = cfg.database.backend;
     }
@@ -20,7 +26,7 @@
       url = cfg.database.url;
     };
   generatedSettings =
-    ((cfg.settings or {})
+    (settings
       // lib.optionalAttrs (cfg.settings == null) {
         global = {views = [];};
       })
@@ -29,6 +35,7 @@
       user = config.home.username;
       database = generatedDatabaseSettings;
     }
+    // lib.optionalAttrs (cfg.host != null) {inherit (cfg) host;}
     // lib.optionalAttrs (cfg.bundlesRoot != null) {
       bundles_root = cfg.bundlesRoot;
     }
@@ -44,15 +51,24 @@
     // lib.optionalAttrs (cfg.subscriptions != {}) {
       subscriptions =
         lib.mapAttrs
-        (_: subscription: {
-          inherit (subscription) url target source;
-          ref = subscription.ref;
-          delete_policy = subscription.deletePolicy;
-        })
+        (_: subscription:
+          {
+            inherit (subscription) url source provider;
+            ref = subscription.ref;
+            delete_policy = subscription.deletePolicy;
+          }
+          // lib.optionalAttrs (subscription.target != null) {
+            target = subscription.target;
+          })
         cfg.subscriptions;
     };
 in {
   options.programs.skillnet = {
+    host = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Explicit destination host for manifest host selection, including cross-built bundles.";
+    };
     enable =
       lib.mkEnableOption "skillnet, the AI skill mirror and calibration CLI"
       // {
@@ -60,9 +76,8 @@ in {
           Enable skillnet, the AI skill mirror and calibration CLI.
 
           The Home Manager module installs skillnet, renders optional
-          configuration, and exports session variables. It does not run
-          skillnet commands during activation; materialisation, hook
-          installation, and calibration migrations are explicit CLI workflows.
+          configuration, and exports session variables. Subscription updates
+          remain explicit unless subscriptionSyncInterval is configured.
         '';
       };
 
@@ -126,7 +141,10 @@ in {
         CLI with a migration error. Project entries may omit canonical_rel;
         skillnet defaults it to ".agents/skills". Link strategy is set here as
         top-level link_strategy or per-project link_strategy; there is no
-        separate Nix option because settings is a TOML pass-through.
+        separate Nix option because settings is a TOML pass-through. The
+        optional [project_discovery] table reads the canix project-tree JSON
+        and discovers Git checkouts containing the configured marker (usually
+        ".skills").
 
         Leave null, and leave configFile null, to use a user-managed config
         file.
@@ -148,14 +166,21 @@ in {
           };
 
           target = lib.mkOption {
-            type = lib.types.str;
-            description = "Local skill directory that receives this subscription's skills.";
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Local skill directory that receives a copy subscription's skills.";
           };
 
           source = lib.mkOption {
             type = lib.types.str;
             default = "global_skills";
             description = "Path inside the subscribed repository containing skill directories.";
+          };
+
+          provider = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Compose this subscription directly into global generated skill views.";
           };
 
           deletePolicy = lib.mkOption {
@@ -168,9 +193,16 @@ in {
       default = {};
       description = ''
         Declarative skill repository subscriptions rendered into
-        skillnet.toml. Home Manager only writes config; run
-        `skillnet subscription sync --all` explicitly to materialise them.
+        skillnet.toml. Copy subscriptions require target; provider subscriptions
+        omit target and are composed into generated global bundles.
       '';
+    };
+
+    subscriptionSyncInterval = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "1h";
+      description = "Optional systemd interval for refreshing all subscriptions; the service also runs at login.";
     };
 
     externalManifests = lib.mkOption {
@@ -262,6 +294,10 @@ in {
           message = "programs.skillnet.bundlesRoot must be an absolute path.";
         }
         {
+          assertion = cfg.subscriptionSyncInterval == null || providerNames == [] || cfg.bundlesRoot == null || !(cfg.bundlesRoot == builtins.storeDir || lib.hasPrefix "${builtins.storeDir}/" cfg.bundlesRoot);
+          message = "programs.skillnet scheduled provider subscriptions require a writable bundlesRoot outside the Nix store.";
+        }
+        {
           assertion = cfg.database.backend != "postgres" || cfg.database.url != null || cfg.database.urlFile != null;
           message = "programs.skillnet.database needs `url` or `urlFile` when backend = \"postgres\".";
         }
@@ -293,12 +329,22 @@ in {
           assertion = cfg.skillsRoot == null || cfg.mirrorRoot == null || cfg.skillsRoot == cfg.mirrorRoot;
           message = "programs.skillnet.skillsRoot and programs.skillnet.mirrorRoot must match; separate mirror and repository roots are not supported yet.";
         }
+        {
+          assertion =
+            lib.all
+            (subscription:
+              if subscription.provider
+              then subscription.target == null
+              else subscription.target != null)
+            (lib.attrValues cfg.subscriptions);
+          message = "programs.skillnet provider subscriptions must omit target; copy subscriptions must set target.";
+        }
       ];
 
       home.packages = [cfg.package];
     }
 
-    (lib.mkIf (cfg.settings != null || cfg.subscriptions != {} || cfg.externalManifests != []) {
+    (lib.mkIf (cfg.host != null || cfg.settings != null || cfg.subscriptions != {} || cfg.externalManifests != []) {
       xdg.enable = lib.mkDefault true;
       xdg.configFile."skillnet/skillnet.toml".source =
         tomlFormat.generate "skillnet.toml" generatedSettings;
@@ -362,6 +408,34 @@ in {
       home.activation.skillnetExternalBundles = lib.hm.dag.entryAfter ["linkGeneration"] ''
         ${cfg.package}/bin/skillnet --allow-dirty-destination sync --scope global --no-promote --allow-delete
       '';
+    })
+
+    (lib.mkIf (cfg.subscriptionSyncInterval != null && providerNames != []) {
+      systemd.user.services.skillnet-subscription-sync = {
+        Unit = {
+          Description = "Refresh Skillnet subscriptions";
+          After = ["network-online.target"];
+        };
+        Service = {
+          Type = "oneshot";
+          Environment =
+            ["PATH=${lib.makeBinPath [pkgs.git]}"]
+            ++ lib.optional (cfg.configFile != null) "SKILLNET_CONFIG=${cfg.configFile}";
+          ExecStart = "${cfg.package}/bin/skillnet --allow-dirty-destination subscription sync -- ${providerArgs}";
+        };
+        Install.WantedBy = ["default.target"];
+      };
+
+      systemd.user.timers.skillnet-subscription-sync = {
+        Unit.Description = "Refresh Skillnet subscriptions periodically";
+        Timer = {
+          OnBootSec = "5m";
+          OnUnitActiveSec = cfg.subscriptionSyncInterval;
+          Persistent = true;
+          Unit = "skillnet-subscription-sync.service";
+        };
+        Install.WantedBy = ["timers.target"];
+      };
     })
   ]);
 }
