@@ -48,6 +48,32 @@ classes only when they are Git checkouts with a real `.skills` directory.
 Protected roots and compatibility aliases remain explicit configuration, and
 `project add`/`project remove` never mutate discovered entries.
 
+Project-tree schemas 1 and 2 use the same confined primary-class discovery.
+Unknown versions are rejected before scanning.
+
+## Bundle exclusions
+
+Set `excluded_skills = ["retired-example"]` at the top level of
+`skillnet.toml` to omit a skill from every generated bundle. The policy applies
+to canonical directories, explicit manifest sources and subscription providers,
+including manifest-free stores. It preserves source files and subscription
+contents. Refreshing a provider cannot recreate the excluded bundle entry.
+
+Run `skillnet view sync --all --allow-delete` to remove stale generated view
+entries. Exclusions never authorize deleting authored source files. A retained
+skill that depends on an excluded skill fails validation before materialization;
+the policy does not silently remove its dependencies.
+
+Nix consumers pass `excludedSkills` to `lib.<system>.mkBundle` and set
+`programs.skillnet.excludedSkills` to the same list for runtime composition.
+The producer supplies the mechanism; consumers choose the names.
+
+For provider-only exclusions, set `excluded_provider_skills` (or the Nix
+`excludedProviderSkills` option/argument). This leaves same-named authored or
+external-manifest skills available. Consumers can detect this interface through
+`lib.bundleExclusionSupport` and supported project-tree schemas through
+`lib.projectTreeSchemaVersions`, also exposed in the per-system library.
+
 `skillnet export` is for repositories that intentionally VCS their own
 globally useful skills under `skills/`. From the repository root, run:
 

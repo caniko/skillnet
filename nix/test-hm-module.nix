@@ -49,6 +49,8 @@
   };
   declarativeConfig = mkHmConfig {
     host = "destination-with-providers";
+    excludedSkills = ["retired-example"];
+    excludedProviderSkills = ["provider-example"];
     database.backend = "sqlite";
     settings = {
       database.backend = "sqlite";
@@ -146,8 +148,10 @@ in
     "PATH=${pkgs.lib.makeBinPath [pkgs.git]}"
     "SKILLNET_CONFIG=${configFileOverride}"
   ];
-  assert configFileConfig.config.systemd.user.services.skillnet-subscription-sync.Service.ExecStart == "${package}/bin/skillnet --allow-dirty-destination subscription sync -- ${pkgs.lib.escapeShellArg "--all"}";
-  assert builtins.any (assertion: !assertion.assertion && assertion.message == "programs.skillnet scheduled provider subscriptions require a writable bundlesRoot outside the Nix store.") immutableProviderConfig.config.assertions;
+  assert pkgs.lib.toList configFileConfig.config.systemd.user.services.skillnet-subscription-sync.Service.ExecStart == ["${package}/bin/skillnet --allow-dirty-destination subscription sync -- ${pkgs.lib.escapeShellArg "--all"}"];
+  # Home Manager now checks assertions before exposing config. Force the
+  # invalid activation and require rejection alongside the valid configurations.
+  assert !(builtins.tryEval immutableProviderConfig.activationPackage.drvPath).success;
     pkgs.runCommand "skillnet-hm-module-test"
     {
       nativeBuildInputs = [
@@ -168,7 +172,7 @@ in
       mkdir -p ${declarativeProject}/.skills
       mkdir -p ${projectTreeRoot}/owned ${projectTreeRoot}/forks
       mkdir -p ${homeDirectory}/.config/canix
-      printf '%s\n' '{"schemaVersion":1,"root":"'${projectTreeRoot}'","layout":{"primary":{"owned":"owned","forks":"forks"}}}' > ${projectTreeConfig}
+      printf '%s\n' '{"schemaVersion":2,"root":"'${projectTreeRoot}'","layout":{"primary":{"owned":"owned","forks":"forks"}}}' > ${projectTreeConfig}
 
       export HOME=${homeDirectory}
       export USER=skillnet-test
@@ -252,6 +256,8 @@ in
       grep -F 'data_dir = "'${dataDir}'"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
       grep -F 'user = "skillnet-test"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
       grep -F 'host = "destination-with-providers"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'retired-example' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
+      grep -F 'provider-example' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
       grep -F 'backend = "sqlite"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
       grep -F 'label = "claude"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null
       grep -F 'label = "agents"' ${homeDirectory}/.config/skillnet/skillnet.toml >/dev/null

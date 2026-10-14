@@ -195,6 +195,8 @@
         externalManifestSupport = true;
         externalProviderSupport = true;
         hostSelectionSupport = true;
+        bundleExclusionSupport = true;
+        projectTreeSchemaVersions = [1 2];
         inherit mkBundle;
       };
 
@@ -307,6 +309,8 @@
           externalManifestSupport = true;
           externalProviderSupport = true;
           hostSelectionSupport = true;
+          bundleExclusionSupport = true;
+          projectTreeSchemaVersions = [1 2];
         };
     };
 }

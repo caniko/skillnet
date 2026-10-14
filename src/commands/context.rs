@@ -120,24 +120,22 @@ impl Context {
         } else {
             Vec::new()
         };
-        match self.config.bundles_root.as_deref() {
-            Some(root) => crate::bundle::plan_for_access_at(
-                &target.canonical_path,
-                crate::config::expand_path(root)?.join(&target.name),
-                &external,
-                &providers,
-                self.config.user.as_deref(),
-                self.config.host.as_deref(),
-            ),
-            None => crate::bundle::plan_for_access(
-                &target.canonical_path,
-                &target.name,
-                &self.data_dir,
-                &external,
-                &providers,
-                self.config.user.as_deref(),
-                self.config.host.as_deref(),
-            ),
-        }
+        crate::bundle::validate_scope_name(&target.name)?;
+        let bundle_root = match self.config.bundles_root.as_deref() {
+            Some(root) => crate::config::expand_path(root)?.join(&target.name),
+            None => self.data_dir.join("bundles").join(&target.name),
+        };
+        crate::bundle::plan_for_selection_at(
+            &target.canonical_path,
+            bundle_root,
+            &external,
+            &providers,
+            crate::bundle::BundleSelection {
+                user: self.config.user.as_deref(),
+                host: self.config.host.as_deref(),
+                excluded_skills: &self.config.excluded_skills,
+                excluded_provider_skills: &self.config.excluded_provider_skills,
+            },
+        )
     }
 }

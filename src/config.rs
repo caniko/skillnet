@@ -51,6 +51,13 @@ pub struct Config {
     /// Immutable, flake-provided Skillnet manifests merged into generated views.
     #[serde(default, rename = "external_manifests", alias = "externalManifests")]
     pub external_manifests: Vec<String>,
+    /// Skill names omitted from every generated bundle, including providers.
+    /// Canonical and subscribed source files are never deleted by this policy.
+    #[serde(default)]
+    pub excluded_skills: Vec<String>,
+    /// Names omitted only from subscription providers, leaving authored skills available.
+    #[serde(default)]
+    pub excluded_provider_skills: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -515,9 +522,7 @@ pub fn legacy_project_canonical_warning(target: &Target) -> Option<String> {
     if !target.canonical_path.is_dir() {
         Some(format!(
             "project {}: canonical '.skills' store is missing at {}; create it or run `skillnet skill new {}/<name>`.",
-            target.name,
-            target.canonical_path,
-            target.name
+            target.name, target.canonical_path, target.name
         ))
     } else {
         None

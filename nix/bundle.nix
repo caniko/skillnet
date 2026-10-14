@@ -6,11 +6,15 @@
   user,
   host ? null,
   externalManifests ? [],
+  excludedSkills ? [],
+  excludedProviderSkills ? [],
 }: let
   configTemplate = (pkgs.formats.toml {}).generate "skillnet-bundle.toml.in" ({
       data_dir = "@bundle@";
       link_strategy = "symlink";
       external_manifests = externalManifests;
+      excluded_skills = excludedSkills;
+      excluded_provider_skills = excludedProviderSkills;
       inherit user;
       database = {
         backend = "sqlite";
