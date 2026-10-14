@@ -65,6 +65,8 @@ pub(crate) fn ensure_clean(root: &Utf8Path) -> Result<()> {
 
 fn git_output<const N: usize>(root: &Utf8Path, args: [&str; N]) -> Result<String> {
     let output = Command::new("git")
+        // Read-only status must not refresh the caller's Git index.
+        .arg("--no-optional-locks")
         .args(args)
         .current_dir(root)
         .output()

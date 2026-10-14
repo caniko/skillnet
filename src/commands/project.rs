@@ -1,4 +1,4 @@
-use std::{fs, process::Command as StdCommand};
+use std::{collections::BTreeMap, fs, process::Command as StdCommand};
 
 use anyhow::{bail, Context as AnyhowContext, Result};
 use camino::Utf8Path;
@@ -9,6 +9,7 @@ use super::{status::promotion_status_counts, view::format_view_summary, Context}
 use crate::cli::args::StatusFormat;
 use crate::config::{
     config_is_hm_managed, expand_path, hm_managed_error_message, legacy_project_canonical_warning,
+    validate_project_name,
 };
 use crate::link::LinkStrategy;
 use crate::view::{
@@ -17,10 +18,53 @@ use crate::view::{
     AggregatorStatus, DriftEntry, DriftKind, FileDeltaKind, ProjectSyncOptions,
 };
 
-pub fn project_list(ctx: &Context) {
-    for project in &ctx.config.projects {
-        println!("{}\t{}", project.name, project.path);
+#[derive(Debug, Serialize)]
+struct ProjectListRow {
+    name: String,
+    path: String,
+    source: &'static str,
+    relative_path: Option<String>,
+}
+
+pub fn project_list(ctx: &Context, format: StatusFormat) -> Result<()> {
+    let discovered = ctx.config.discovered_projects()?;
+    let discovered_by_path = discovered
+        .into_iter()
+        .map(|project| (project.path.to_string(), project))
+        .collect::<BTreeMap<_, _>>();
+    let rows = ctx
+        .config
+        .projects
+        .iter()
+        .map(|project| {
+            let path = expand_path(&project.path)
+                .with_context(|| format!("resolve project path for `{}`", project.name))?;
+            let discovered = discovered_by_path.get(path.as_str());
+            Ok(ProjectListRow {
+                name: project.name.clone(),
+                path: path.to_string(),
+                source: if ctx.config.is_discovered_path(&path) {
+                    "discovered"
+                } else {
+                    "explicit"
+                },
+                relative_path: discovered.map(|project| project.relative_path.to_string()),
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    match format {
+        StatusFormat::Text => {
+            for project in &ctx.config.projects {
+                println!("{}\t{}", project.name, project.path);
+            }
+        }
+        StatusFormat::Json => {
+            serde_json::to_writer_pretty(std::io::stdout(), &rows)?;
+            println!();
+        }
     }
+    Ok(())
 }
 
 pub fn project_add(ctx: &Context, name: &str, path: &Utf8Path, allow_missing: bool) -> Result<()> {
@@ -28,17 +72,21 @@ pub fn project_add(ctx: &Context, name: &str, path: &Utf8Path, allow_missing: bo
         bail!(hm_managed_error_message(&ctx.config_path, "skillnet.toml"));
     }
 
-    if name.is_empty() || name.contains('/') || name.contains('\\') {
-        bail!("project name must be a non-empty scope name, not a path");
-    }
-    if name == "global" || name == "all" || name == "project" || name == "projects" {
-        bail!("`{name}` is reserved and cannot be used as a project name");
-    }
+    validate_project_name(name)?;
     if ctx.config.projects.iter().any(|p| p.name == name) {
         bail!("project `{name}` is already configured");
     }
 
     let expanded_path = expand_path(path.as_str())?;
+    if ctx
+        .config
+        .projects
+        .iter()
+        .filter_map(|project| expand_path(&project.path).ok())
+        .any(|configured| configured == expanded_path)
+    {
+        bail!("project path `{expanded_path}` is already configured");
+    }
     if !allow_missing && !expanded_path.is_dir() {
         bail!("project path `{expanded_path}` does not exist or is not a directory");
     }
@@ -66,6 +114,18 @@ pub fn project_remove(ctx: &Context, name: &str, prune_mirror: bool) -> Result<(
     let project = ctx
         .project(name)
         .with_context(|| format!("unknown project `{name}`"))?;
+    let project_path = expand_path(&project.path)?;
+    if ctx.config.is_discovered_path(&project_path) {
+        let marker = &ctx
+            .config
+            .project_discovery
+            .as_ref()
+            .context("discovered project has no discovery configuration")?
+            .marker;
+        bail!(
+            "project `{name}` is discovered from the project tree; remove its `{marker}` marker or change project_discovery before removing it"
+        );
+    }
     let target = ctx.config.project_target(&ctx.mirror_root, project)?;
 
     if ctx.dry_run {

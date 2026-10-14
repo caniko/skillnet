@@ -2,7 +2,7 @@
 
 <!-- simit:badges:start -->
 
-[![CI](https://img.shields.io/badge/CI-managed-2088ff)](.forgejo/workflows/ci.yaml) [![Nix](https://img.shields.io/badge/Nix-managed-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs) [![crates.io](https://img.shields.io/badge/crates.io-ready-f46623)](https://crates.io/crates/skillnet)
+[![CI](https://img.shields.io/badge/CI-managed-2088ff)](.github/workflows/ci.yaml) [![Nix](https://img.shields.io/badge/Nix-drift-5277c3)](flake.nix) [![docs](https://img.shields.io/badge/docs-enabled-6f42c1)](docs) [![crates.io](https://img.shields.io/badge/crates.io-ready-f46623)](https://crates.io/crates/skillnet)
 
 <!-- simit:badges:end -->
 
@@ -172,6 +172,31 @@ Options:
   available in your package set, use
   `inputs.skillnet.packages.${pkgs.system}.skillnet`.
 
+### External Git providers
+
+Provider subscriptions fetch a repository and compose every immediate
+`SKILL.md` directory below `source` into the generated global views. They do
+not copy into or modify the canonical skill store:
+
+```nix
+programs.skillnet = {
+  subscriptions.external = {
+    url = "https://github.com/example/agent-skills.git";
+    ref = "main";
+    source = "skills";
+    provider = true;
+  };
+  subscriptionSyncInterval = "1h";
+};
+```
+
+With an interval configured, Home Manager starts a user service at login and a
+timer thereafter. Updates are validated against the complete bundle before
+publication; a conflicting or invalid update restores the last working
+checkout and views. Without an interval, run
+`skillnet subscription sync --all` explicitly. Copy subscriptions retain their
+existing behavior and require `target` instead of `provider = true`.
+
 ## Storage backends
 
 Postgres is the default calibration backend:
@@ -196,12 +221,35 @@ The `path` key is optional. Without it, `skillnet` uses
 
 ## Pkl skill manifests and bundles
 
+`packages.x86_64-linux.greptile-skills` composes the official `check-pr`,
+`greploop`, and `cli-review` imports from the immutable `caniko/ai-skills`
+revision recorded in `nix/greptile-bundle.nix`. Its `view/` directory contains
+consumer entrypoints with repository contracts and transitive Skillnet
+dependencies. `checks.x86_64-linux.greptile-skills` qualifies that real
+composition in the existing hosted flake workflow, including license
+retention and reference-only dependency visibility.
+
+`packages.x86_64-linux.greptile-skills-archive` exports the three composed
+entrypoints as `greptile-consumer-skills.tar.gz`, together with
+`provenance.json` and `SHA256SUMS`. Tar entries are dereferenced and have
+normalized ordering, ownership, and timestamps, so the archive can be used
+after the producing runner and its Nix store disappear. The composition
+check rejects links, special files, and paths outside the three entrypoints.
+
+Until the artifact-upload workflow is available, this repository's hosted
+development shell emits the qualified archive once per runner as
+`SKILLNET_CONSUMER_ARCHIVE_V1` JSON frames. Each frame binds the file's SHA-256,
+byte count, chunk count, and index; consumers must recover every chunk and
+verify those fields and `SHA256SUMS` before extraction. The transport is
+limited to 1 MiB per file. Ordinary development shells do not emit these
+frames.
+
 An optional `Skillnet.pkl` at the root of a canonical skill store enables
 manifest-driven composition. It is evaluated by the Rust `pklr` integration
 with local imports confined to that store; environment, network, temporary
 directory, and glob access are disabled.
 
-The manifest declares `schemaVersion = 1` or `schemaVersion = 2` and a `skills` mapping. Skills not
+The manifest declares `schemaVersion = 1`, `schemaVersion = 2` or `schemaVersion = 3` and a `skills` mapping. Skills not
 listed in the mapping remain entrypoints. Listed skills may use `role =
 "entrypoint"` or `role = "reference"` and may name other skills in
 `dependencies`. `defaultDependencies` applies to canonical skills that do not
@@ -257,6 +305,14 @@ skills: Mapping<String, Skill> = new {
   ["admin-only"] = new { users = List("can") }
 }
 ```
+
+Schema version 3 adds `defaultHosts` and per-skill `hosts` using the same
+inheritance rules as users. Omitted lists are unrestricted; empty lists deny
+all hosts. Set `host = "atlas"` in `skillnet.toml`, or
+`programs.skillnet.host = "atlas"` in Home Manager. User and host grants must
+both match, including every dependency. A host policy without an explicit host
+fails before materialisation. The destination host is configuration, never the
+hostname of the builder. Versions 1 and 2 remain supported.
 
 Select Postgres with an environment variable:
 
@@ -339,6 +395,13 @@ cargo test-pg
 
 - `global/` stores the canonical global skills by default.
 - Project canonical stores live in each project repository at `<project>/.skills`.
+- A checkout is eligible for declarative project discovery when it is a Git
+  repository under an enabled primary project-tree class and contains a real
+  `.skills` directory. Worktrees and protected roots are not discovered.
+- Home Manager supplies the project-tree JSON and discovery policy in
+  `project_discovery`; do not maintain the list with `skillnet project add`.
+- Protected projects and compatibility scope names can still be declared as
+  explicit `[[projects]]` entries.
 - Project-local working copies live at each project's `canonical_rel`,
   defaulting to `.agents/skills`, and are materialised from canonical.
 - Global and project views such as `.claude/skills` are generated symlink
@@ -383,6 +446,10 @@ Many scope-aware commands accept `--scope <name>`. The selector
 selects global plus every project. `skillnet sync --all` is an alias for
 `skillnet sync --scope all`.
 
+`skillnet project list` shows the resolved explicit and discovered projects.
+Use `skillnet project list --format json` for automation; discovered rows
+include their workspace-relative path and source.
+
 Use `skillnet export` from a repo root to copy repo-stored global skills from
 `skills/` into the configured global canonical store and sync global views.
 This is intended for repos such as `visual-rubric`, `fragpipe`, and `tzu` that
@@ -411,9 +478,9 @@ The release-prep flow validates the repository with:
 ```sh
 simit init flake --check --diff
 simit release trust check
-simit init ci --platform forgejo --check --diff
+simit init ci --platform github --maintainer-key 818D507F1E62139F8A17EAA64623DEA06FDACFE1 --check --diff
 nix flake check --keep-going --print-build-logs
-cargo fmt --all -- --check
+treefmt --ci
 cargo clippy --all-targets --all-features -- --deny warnings
 cargo test --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features

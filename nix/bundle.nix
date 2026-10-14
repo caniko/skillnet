@@ -4,28 +4,34 @@
 }: {
   canonical,
   user,
+  host ? null,
   externalManifests ? [],
+  excludedSkills ? [],
+  excludedProviderSkills ? [],
 }: let
-  configTemplate = (pkgs.formats.toml {}).generate "skillnet-bundle.toml.in" {
-    data_dir = "@bundle@";
-    link_strategy = "symlink";
-    external_manifests = externalManifests;
-    inherit user;
-    database = {
-      backend = "sqlite";
-      path = "@bundle@/skillnet.sqlite";
-    };
-    global = {
-      canonical_path = toString canonical;
-      views = [
-        {
-          label = "view";
-          path = "@bundle@/view";
-          scope = "global";
-        }
-      ];
-    };
-  };
+  configTemplate = (pkgs.formats.toml {}).generate "skillnet-bundle.toml.in" ({
+      data_dir = "@bundle@";
+      link_strategy = "symlink";
+      external_manifests = externalManifests;
+      excluded_skills = excludedSkills;
+      excluded_provider_skills = excludedProviderSkills;
+      inherit user;
+      database = {
+        backend = "sqlite";
+        path = "@bundle@/skillnet.sqlite";
+      };
+      global = {
+        canonical_path = toString canonical;
+        views = [
+          {
+            label = "view";
+            path = "@bundle@/view";
+            scope = "global";
+          }
+        ];
+      };
+    }
+    // pkgs.lib.optionalAttrs (host != null) {inherit host;});
 in
   pkgs.runCommandLocal "skillnet-bundle-${user}" {
     nativeBuildInputs = [package];

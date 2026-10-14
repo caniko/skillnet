@@ -198,6 +198,7 @@ mod tests {
                 views: Vec::new(),
             },
             user: None,
+            host: None,
             data_dir: None,
             bundles_root: None,
             skills_root: None,
@@ -205,7 +206,11 @@ mod tests {
             database: DatabaseConfig::default(),
             subscriptions: Default::default(),
             external_manifests: Default::default(),
+            excluded_skills: Default::default(),
+            excluded_provider_skills: Default::default(),
             link_strategy: None,
+            project_discovery: None,
+            discovered_project_paths: Default::default(),
             projects: project_names
                 .iter()
                 .map(|name| crate::config::ProjectConfig {

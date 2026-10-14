@@ -13,14 +13,29 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use walkdir::WalkDir;
 
 use crate::{manifest, mirror::mirror_skill_dirs};
+
+#[cfg(test)]
+mod exclusion_tests;
+#[cfg(test)]
+mod host_tests;
 
 #[derive(Debug, Clone)]
 pub struct BundlePlan {
     pub bundle_root: Utf8PathBuf,
     skills: BTreeMap<String, SkillBundle>,
     expected: BTreeMap<String, Utf8PathBuf>,
+}
+
+/// Destination policy applied equally to canonical, manifest and provider skills.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BundleSelection<'a> {
+    pub user: Option<&'a str>,
+    pub host: Option<&'a str>,
+    pub excluded_skills: &'a [String],
+    pub excluded_provider_skills: &'a [String],
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +45,7 @@ struct SkillBundle {
     role: String,
     dependencies: Vec<String>,
     users: Option<Vec<String>>,
+    hosts: Option<Vec<String>>,
 }
 
 #[cfg(test)]
@@ -39,9 +55,18 @@ pub fn plan(
     data_dir: &Utf8Path,
     external_manifests: &[Utf8PathBuf],
 ) -> Result<Option<BundlePlan>> {
-    plan_for_user(canonical, scope_name, data_dir, external_manifests, None)
+    plan_for_access(
+        canonical,
+        scope_name,
+        data_dir,
+        external_manifests,
+        &[],
+        None,
+        None,
+    )
 }
 
+#[cfg(test)]
 pub fn plan_for_user(
     canonical: &Utf8Path,
     scope_name: &str,
@@ -49,21 +74,92 @@ pub fn plan_for_user(
     external_manifests: &[Utf8PathBuf],
     user: Option<&str>,
 ) -> Result<Option<BundlePlan>> {
-    validate_scope_name(scope_name)?;
-    plan_for_user_at(
+    plan_for_access(
         canonical,
-        data_dir.join("bundles").join(scope_name),
+        scope_name,
+        data_dir,
         external_manifests,
+        &[],
         user,
+        None,
     )
 }
 
+#[cfg(test)]
 pub fn plan_for_user_at(
     canonical: &Utf8Path,
     bundle_root: Utf8PathBuf,
     external_manifests: &[Utf8PathBuf],
     user: Option<&str>,
 ) -> Result<Option<BundlePlan>> {
+    plan_for_access_at(canonical, bundle_root, external_manifests, &[], user, None)
+}
+
+#[cfg(test)]
+pub fn plan_for_access(
+    canonical: &Utf8Path,
+    scope_name: &str,
+    data_dir: &Utf8Path,
+    external_manifests: &[Utf8PathBuf],
+    provider_roots: &[Utf8PathBuf],
+    user: Option<&str>,
+    host: Option<&str>,
+) -> Result<Option<BundlePlan>> {
+    validate_scope_name(scope_name)?;
+    plan_for_access_at(
+        canonical,
+        data_dir.join("bundles").join(scope_name),
+        external_manifests,
+        provider_roots,
+        user,
+        host,
+    )
+}
+
+#[cfg(test)]
+pub fn plan_for_access_at(
+    canonical: &Utf8Path,
+    bundle_root: Utf8PathBuf,
+    external_manifests: &[Utf8PathBuf],
+    provider_roots: &[Utf8PathBuf],
+    user: Option<&str>,
+    host: Option<&str>,
+) -> Result<Option<BundlePlan>> {
+    plan_for_selection_at(
+        canonical,
+        bundle_root,
+        external_manifests,
+        provider_roots,
+        BundleSelection {
+            user,
+            host,
+            excluded_skills: &[],
+            excluded_provider_skills: &[],
+        },
+    )
+}
+
+pub fn plan_for_selection_at(
+    canonical: &Utf8Path,
+    bundle_root: Utf8PathBuf,
+    external_manifests: &[Utf8PathBuf],
+    provider_roots: &[Utf8PathBuf],
+    selection: BundleSelection<'_>,
+) -> Result<Option<BundlePlan>> {
+    let BundleSelection {
+        user,
+        host,
+        excluded_skills,
+        excluded_provider_skills,
+    } = selection;
+    let excluded: BTreeSet<_> = excluded_skills.iter().collect();
+    let excluded_provider: BTreeSet<_> = excluded_provider_skills.iter().collect();
+    for name in excluded.iter().chain(excluded_provider.iter()) {
+        validate_skill_name(name, "excluded skill")?;
+    }
+    if let Some(host) = host {
+        manifest::validate_host(host)?;
+    }
     let canonical_manifest = manifest::load(canonical)?;
     let mut manifests = Vec::new();
     if let Some(manifest) = canonical_manifest {
@@ -74,7 +170,7 @@ pub fn plan_for_user_at(
             .with_context(|| format!("external Skillnet manifest does not exist: {path}"))?;
         manifests.push((manifest, true));
     }
-    if manifests.is_empty() {
+    if manifests.is_empty() && provider_roots.is_empty() && excluded.is_empty() {
         return Ok(None);
     }
     if !canonical.is_dir() && manifests.iter().any(|(_, external)| !*external) {
@@ -101,6 +197,9 @@ pub fn plan_for_user_at(
         .find(|(_, external)| !*external)
         .map(|(manifest, _)| manifest);
     for (name, source) in &sources {
+        if excluded.contains(name) {
+            continue;
+        }
         let spec = canonical_manifest.and_then(|manifest| manifest.document.skills.get(name));
         let role = spec
             .map(|spec| spec.role.clone())
@@ -118,6 +217,9 @@ pub fn plan_for_user_at(
         let users = spec.and_then(|spec| spec.users.clone()).or_else(|| {
             canonical_manifest.and_then(|manifest| manifest.document.default_users.clone())
         });
+        let hosts = spec.and_then(|spec| spec.hosts.clone()).or_else(|| {
+            canonical_manifest.and_then(|manifest| manifest.document.default_hosts.clone())
+        });
         validate_skill_name(name, "skill")?;
         validate_role(name, &role)?;
         validate_dependencies(name, &dependencies)?;
@@ -129,6 +231,7 @@ pub fn plan_for_user_at(
                 role,
                 dependencies,
                 users,
+                hosts,
             },
         );
     }
@@ -139,6 +242,9 @@ pub fn plan_for_user_at(
             .parent()
             .context("Skillnet manifest has no parent")?;
         for (name, spec) in &manifest.document.skills {
+            if excluded.contains(name) {
+                continue;
+            }
             validate_skill_name(name, "manifest skill")?;
             if skills.contains_key(name) {
                 if *external {
@@ -165,6 +271,10 @@ pub fn plan_for_user_at(
                             .users
                             .clone()
                             .or_else(|| manifest.document.default_users.clone()),
+                        hosts: spec
+                            .hosts
+                            .clone()
+                            .or_else(|| manifest.document.default_hosts.clone()),
                         dependencies: if *external {
                             manifest
                                 .document
@@ -181,6 +291,36 @@ pub fn plan_for_user_at(
             }
             validate_role(name, &spec.role)?;
             validate_dependencies(name, &spec.dependencies)?;
+        }
+    }
+    for root in provider_roots {
+        if !root.is_dir() {
+            bail!("Skillnet provider root does not exist or is not a directory: {root}");
+        }
+        validate_provider_tree(root)?;
+        for source in mirror_skill_dirs(root)? {
+            let name = source
+                .file_name()
+                .context("provider skill directory has no final component")?
+                .to_string();
+            if excluded.contains(&name) || excluded_provider.contains(&name) {
+                continue;
+            }
+            validate_skill_name(&name, "provider skill")?;
+            if skills.contains_key(&name) {
+                bail!("Skillnet provider skill `{name}` is duplicated across skill sources");
+            }
+            skills.insert(
+                name,
+                SkillBundle {
+                    source,
+                    source_is_file: false,
+                    role: "entrypoint".to_string(),
+                    dependencies: Vec::new(),
+                    users: None,
+                    hosts: None,
+                },
+            );
         }
     }
     for (name, skill) in &skills {
@@ -209,14 +349,28 @@ pub fn plan_for_user_at(
             "Skillnet manifests declare user access, but no Skillnet user is configured; set `user` in skillnet.toml"
         );
     }
-    if let Some(user) = user {
+    let has_host_policy = manifests.iter().any(|(manifest, _)| {
+        manifest.document.default_hosts.is_some()
+            || manifest
+                .document
+                .skills
+                .values()
+                .any(|skill| skill.hosts.is_some())
+    });
+    if has_host_policy && host.is_none() {
+        bail!(
+            "Skillnet manifests declare host access, but no Skillnet host is configured; set `host` in skillnet.toml"
+        );
+    }
+    if user.is_some() || host.is_some() {
         let denied: BTreeSet<String> = skills
             .iter()
             .filter(|(_, skill)| {
-                !skill
-                    .users
-                    .as_ref()
-                    .is_none_or(|users| users.iter().any(|candidate| candidate == user))
+                !skill.users.as_ref().is_none_or(|users| {
+                    user.is_some_and(|user| users.iter().any(|candidate| candidate == user))
+                }) || !skill.hosts.as_ref().is_none_or(|hosts| {
+                    host.is_some_and(|host| hosts.iter().any(|candidate| candidate == host))
+                })
             })
             .map(|(name, _)| name.clone())
             .collect();
@@ -227,7 +381,7 @@ pub fn plan_for_user_at(
             for dependency in &skill.dependencies {
                 if denied.contains(dependency) {
                     bail!(
-                        "Skillnet skill `{name}` is available to user `{user}` but its dependency `{dependency}` is not"
+                        "Skillnet skill `{name}` is available to user {user:?} on host {host:?} but its dependency `{dependency}` is not"
                     );
                 }
             }
@@ -245,6 +399,27 @@ pub fn plan_for_user_at(
         skills,
         expected,
     }))
+}
+
+fn validate_provider_tree(root: &Utf8Path) -> Result<()> {
+    let canonical_root = root
+        .canonicalize_utf8()
+        .with_context(|| format!("failed to canonicalize provider root {root}"))?;
+    for entry in WalkDir::new(root).follow_links(false) {
+        let entry = entry.with_context(|| format!("failed to inspect provider root {root}"))?;
+        if !entry.file_type().is_symlink() {
+            continue;
+        }
+        let path = Utf8PathBuf::from_path_buf(entry.path().to_path_buf())
+            .map_err(|path| anyhow::anyhow!("non-UTF-8 provider path: {}", path.display()))?;
+        let target = path
+            .canonicalize_utf8()
+            .with_context(|| format!("failed to resolve provider symlink {path}"))?;
+        if target != canonical_root && !target.starts_with(&canonical_root) {
+            bail!("Skillnet provider symlink escapes its source root: {path} -> {target}");
+        }
+    }
+    Ok(())
 }
 
 impl BundlePlan {
@@ -485,7 +660,7 @@ fn confined_source_path(canonical: &Utf8Path, source: &str) -> Result<Utf8PathBu
         .map_err(|path| anyhow::anyhow!("non-UTF-8 Skillnet source path: {}", path.display()))
 }
 
-fn validate_scope_name(name: &str) -> Result<()> {
+pub(crate) fn validate_scope_name(name: &str) -> Result<()> {
     if name.is_empty() || name == "." || name == ".." || name.contains('/') || name.contains('\\') {
         bail!("invalid Skillnet bundle scope name `{name}`");
     }
@@ -493,7 +668,7 @@ fn validate_scope_name(name: &str) -> Result<()> {
 }
 
 fn validate_skill_name(name: &str, kind: &str) -> Result<()> {
-    if name.is_empty() || name == "." || name == ".." || name.contains('/') || name.contains('\\') {
+    if name.is_empty() || name.starts_with('.') || name.contains('/') || name.contains('\\') {
         bail!("invalid {kind} name `{name}`; names must be single path components");
     }
     Ok(())

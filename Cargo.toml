@@ -37,7 +37,7 @@ deny = true
 package = true
 
 [dependencies]
-anyhow = "1.0"
+anyhow = "1.0.103"
 blake3 = "1.5"
 camino = { version = "1.1", features = ["serde1"] }
 clap = { version = "4.5", features = ["derive", "env"] }

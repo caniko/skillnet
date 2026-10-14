@@ -22,6 +22,20 @@ pub fn sync(
     force: bool,
     link_strategy: Option<LinkStrategy>,
 ) -> Result<()> {
+    sync_with_preservation(ctx, allow_delete, force, link_strategy, false)
+}
+
+pub(crate) fn sync_provider(ctx: &Context) -> Result<()> {
+    sync_with_preservation(ctx, true, false, None, true)
+}
+
+fn sync_with_preservation(
+    ctx: &Context,
+    allow_delete: bool,
+    force: bool,
+    link_strategy: Option<LinkStrategy>,
+    preserve_authored: bool,
+) -> Result<()> {
     let target = ctx
         .config
         .global_target_with_link_override(&ctx.mirror_root, link_strategy)?;
@@ -34,6 +48,7 @@ pub fn sync(
     for view in &target.views {
         let options = ViewSyncOptions {
             allow_delete,
+            preserve_authored,
             force,
             link_strategy: target.link_strategy,
             ..ViewSyncOptions::default()

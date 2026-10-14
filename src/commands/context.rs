@@ -4,7 +4,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use crate::{
     cli::Scope,
     config::{Config, ProjectConfig},
-    model::Target,
+    model::{Target, TargetScope},
 };
 
 pub struct Context {
@@ -85,26 +85,57 @@ impl Context {
     }
 
     pub(crate) fn bundle_plan(&self, target: &Target) -> Result<Option<crate::bundle::BundlePlan>> {
+        self.bundle_plan_with_provider(target, None)
+    }
+
+    pub(crate) fn bundle_plan_with_provider(
+        &self,
+        target: &Target,
+        staged: Option<(&str, &Utf8Path)>,
+    ) -> Result<Option<crate::bundle::BundlePlan>> {
         let external = self
             .config
             .external_manifests
             .iter()
             .map(|path| crate::config::expand_path(path))
             .collect::<Result<Vec<_>>>()?;
-        match self.config.bundles_root.as_deref() {
-            Some(root) => crate::bundle::plan_for_user_at(
-                &target.canonical_path,
-                crate::config::expand_path(root)?.join(&target.name),
-                &external,
-                self.config.user.as_deref(),
-            ),
-            None => crate::bundle::plan_for_user(
-                &target.canonical_path,
-                &target.name,
-                &self.data_dir,
-                &external,
-                self.config.user.as_deref(),
-            ),
-        }
+        let providers = if target.scope == TargetScope::Global {
+            self.config
+                .subscriptions
+                .iter()
+                .filter(|(_, subscription)| subscription.provider)
+                .map(|(name, subscription)| {
+                    super::subscription::validate_provider_storage(self, name)?;
+                    if let Some((staged_name, source)) = staged {
+                        if name == staged_name {
+                            return Ok(Some(source.to_path_buf()));
+                        }
+                    }
+                    super::subscription::provider_source_path(&self.data_dir, name, subscription)
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .flatten()
+                .collect()
+        } else {
+            Vec::new()
+        };
+        crate::bundle::validate_scope_name(&target.name)?;
+        let bundle_root = match self.config.bundles_root.as_deref() {
+            Some(root) => crate::config::expand_path(root)?.join(&target.name),
+            None => self.data_dir.join("bundles").join(&target.name),
+        };
+        crate::bundle::plan_for_selection_at(
+            &target.canonical_path,
+            bundle_root,
+            &external,
+            &providers,
+            crate::bundle::BundleSelection {
+                user: self.config.user.as_deref(),
+                host: self.config.host.as_deref(),
+                excluded_skills: &self.config.excluded_skills,
+                excluded_provider_skills: &self.config.excluded_provider_skills,
+            },
+        )
     }
 }

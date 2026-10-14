@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Declarative bundle exclusions for canonical, manifest and provider skills,
+  exposed through `excluded_skills`, Home Manager `excludedSkills` and
+  `mkBundle.excludedSkills`, preserving source files and dependency validation.
+- Project discovery accepts project-tree schema 2 alongside schema 1.
+
 - `lib.<system>.mkBundle` builds user-filtered immutable skill bundles for
   Nix/Home Manager consumers.
 - `programs.skillnet.bundlesRoot` lets runtime status and doctor inspect a

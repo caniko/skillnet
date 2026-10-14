@@ -16,5 +16,6 @@ pub mod link;
 pub(crate) mod manifest;
 pub mod mirror;
 pub mod model;
+mod project_discovery;
 mod vcs;
 pub mod view;

@@ -26,6 +26,8 @@ pub struct ManifestDocument {
     pub default_dependencies: Vec<String>,
     #[serde(rename = "defaultUsers", default)]
     pub default_users: Option<Vec<String>>,
+    #[serde(rename = "defaultHosts", default)]
+    pub default_hosts: Option<Vec<String>>,
     #[serde(default)]
     pub skills: BTreeMap<String, SkillSpec>,
 }
@@ -41,6 +43,8 @@ pub struct SkillSpec {
     pub source: Option<String>,
     #[serde(default)]
     pub users: Option<Vec<String>>,
+    #[serde(default)]
+    pub hosts: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -80,9 +84,9 @@ pub fn load_path(path: &Utf8Path) -> Result<Option<Manifest>> {
         .map_err(|error| anyhow::anyhow!("failed to evaluate {path}: {error}"))?;
     let document: ManifestDocument = serde_json::from_value(value.to_json())
         .with_context(|| format!("invalid evaluated Skillnet manifest {path}"))?;
-    if !matches!(document.schema_version, 1 | 2) {
+    if !matches!(document.schema_version, 1..=3) {
         bail!(
-            "unsupported Skillnet manifest schemaVersion {} in {path}; expected 1 or 2",
+            "unsupported Skillnet manifest schemaVersion {} in {path}; expected 1, 2 or 3",
             document.schema_version
         );
     }
@@ -95,7 +99,19 @@ pub fn load_path(path: &Utf8Path) -> Result<Option<Manifest>> {
         );
     }
     validate_user_list(document.default_users.as_deref(), "defaultUsers", path)?;
+    if document.schema_version < 3
+        && (document.default_hosts.is_some()
+            || document.skills.values().any(|skill| skill.hosts.is_some()))
+    {
+        bail!("Skillnet manifest {path} uses host access fields; use schemaVersion 3");
+    }
+    validate_host_list(document.default_hosts.as_deref(), "defaultHosts", path)?;
     for (name, skill) in &document.skills {
+        validate_host_list(
+            skill.hosts.as_deref(),
+            &format!("skill `{name}` hosts"),
+            path,
+        )?;
         validate_user_list(
             skill.users.as_deref(),
             &format!("skill `{name}` users"),
@@ -126,6 +142,28 @@ fn validate_user_list(users: Option<&[String]>, field: &str, path: &Utf8Path) ->
 
 fn default_role() -> String {
     "entrypoint".to_string()
+}
+
+pub(crate) fn validate_host(host: &str) -> Result<()> {
+    if host.is_empty()
+        || !host
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-._".contains(&byte))
+    {
+        bail!("invalid Skillnet host `{host}`; use a nonempty explicit host name");
+    }
+    Ok(())
+}
+
+fn validate_host_list(hosts: Option<&[String]>, field: &str, path: &Utf8Path) -> Result<()> {
+    let mut seen = std::collections::BTreeSet::new();
+    for host in hosts.unwrap_or_default() {
+        validate_host(host).with_context(|| format!("Skillnet manifest {path}: {field}"))?;
+        if !seen.insert(host) {
+            bail!("Skillnet manifest {path} lists duplicate host `{host}` in {field}");
+        }
+    }
+    Ok(())
 }
 
 struct LocalCapabilities {
