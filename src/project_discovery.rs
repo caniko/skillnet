@@ -57,9 +57,9 @@ pub fn discover(config: &ProjectDiscoveryConfig) -> Result<Vec<DiscoveredProject
         .with_context(|| format!("read project tree config `{}`", project_tree_path))?;
     let tree: ProjectTreeDocument = serde_json::from_str(&text)
         .with_context(|| format!("parse project tree config `{}`", project_tree_path))?;
-    if tree.schema_version != 1 {
+    if !matches!(tree.schema_version, 1 | 2) {
         bail!(
-            "unsupported project tree schema version {} in `{}` (expected 1)",
+            "unsupported project tree schema version {} in `{}` (expected 1 or 2)",
             tree.schema_version,
             project_tree_path
         );
@@ -126,7 +126,7 @@ pub fn discover(config: &ProjectDiscoveryConfig) -> Result<Vec<DiscoveredProject
                 Err(error) => {
                     return Err(error).with_context(|| {
                         format!("inspect Skillnet marker `{}`", marker_path.display())
-                    })
+                    });
                 }
             };
             if !marker_metadata.file_type().is_dir() || marker_metadata.file_type().is_symlink() {
@@ -255,6 +255,23 @@ mod tests {
     }
 
     #[test]
+    fn discovers_the_same_checkouts_with_project_tree_schema_one_and_two() {
+        let temp = tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("owned")).unwrap();
+        fs::create_dir_all(temp.path().join("forks")).unwrap();
+        checkout(temp.path(), "owned/alpha", true);
+        let config = tree_config(temp.path());
+        let expected = discover(&config).unwrap();
+        let source = fs::read_to_string(&config.project_tree).unwrap();
+        fs::write(
+            &config.project_tree,
+            source.replace("\"schemaVersion\":1", "\"schemaVersion\":2"),
+        )
+        .unwrap();
+        assert_eq!(discover(&config).unwrap(), expected);
+    }
+
+    #[test]
     fn rejects_missing_or_malformed_project_tree() {
         let temp = tempdir().unwrap();
         let mut config = tree_config(temp.path());
@@ -269,7 +286,7 @@ mod tests {
         fs::write(
             &config.project_tree,
             serde_json::json!({
-                "schemaVersion": 2,
+                "schemaVersion": 3,
                 "root": temp.path(),
                 "layout": {"primary": {"owned": "owned", "forks": "forks"}}
             })
@@ -279,7 +296,7 @@ mod tests {
         let error = discover(&config).unwrap_err();
         assert!(error
             .to_string()
-            .contains("unsupported project tree schema version 2"));
+            .contains("unsupported project tree schema version 3"));
 
         fs::write(
             &config.project_tree,

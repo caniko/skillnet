@@ -48,6 +48,12 @@
     // lib.optionalAttrs (cfg.externalManifests != []) {
       external_manifests = cfg.externalManifests;
     }
+    // lib.optionalAttrs (cfg.excludedSkills != []) {
+      excluded_skills = cfg.excludedSkills;
+    }
+    // lib.optionalAttrs (cfg.excludedProviderSkills != []) {
+      excluded_provider_skills = cfg.excludedProviderSkills;
+    }
     // lib.optionalAttrs (cfg.subscriptions != {}) {
       subscriptions =
         lib.mapAttrs
@@ -64,6 +70,16 @@
     };
 in {
   options.programs.skillnet = {
+    excludedProviderSkills = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "Skill names omitted only from subscription providers, preserving authored and external-manifest skills with those names.";
+    };
+    excludedSkills = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "Skill names omitted from all generated bundles, including subscription providers. Source files are preserved; retained skills with excluded dependencies fail validation.";
+    };
     host = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;

@@ -41,8 +41,7 @@ fn init_source_repo(path: &Path) {
     fs::create_dir_all(path.join("global_skills/alpha")).unwrap();
     fs::write(path.join("global_skills/alpha/SKILL.md"), "alpha v1").unwrap();
     git(path, ["init", "-b", "main"]);
-    git(path, ["config", "user.email", "skillnet@example.invalid"]);
-    git(path, ["config", "user.name", "Skillnet Test"]);
+    ensure_fixture_identity(path);
     git(path, ["add", "."]);
     git(path, ["commit", "-m", "initial"]);
 }
@@ -59,8 +58,7 @@ fn init_provider_repo(path: &Path) {
     fs::create_dir_all(path.join("skills/alpha")).unwrap();
     fs::write(path.join("skills/alpha/SKILL.md"), "alpha v1").unwrap();
     git(path, ["init", "-b", "main"]);
-    git(path, ["config", "user.email", "skillnet@example.invalid"]);
-    git(path, ["config", "user.name", "Skillnet Test"]);
+    ensure_fixture_identity(path);
     git(path, ["add", "."]);
     git(path, ["commit", "-m", "initial"]);
 }
@@ -80,6 +78,23 @@ fn git<const N: usize>(cwd: &Path, args: [&str; N]) {
         .status()
         .unwrap();
     assert!(status.success(), "git {args:?} failed with {status}");
+}
+
+fn ensure_fixture_identity(path: &Path) {
+    // Preserve the operator's configured identity and hooks. Bare CI images
+    // still need the existing disposable-fixture identity to create commits.
+    if StdCommand::new("git")
+        .current_dir(path)
+        .args(["var", "GIT_AUTHOR_IDENT"])
+        .output()
+        .unwrap()
+        .status
+        .success()
+    {
+        return;
+    }
+    git(path, ["config", "user.email", "skillnet@example.invalid"]);
+    git(path, ["config", "user.name", "Skillnet Test"]);
 }
 
 fn subscription_config(source: &Path, target: &Path, delete_policy: &str) -> String {
@@ -281,6 +296,7 @@ class Skill {
   hosts: Listing<String>? = null
   dependencies: Listing<String> = new {}
 }
+
 schemaVersion = 3
 skills: Mapping<String, Skill> = new {
   ["atlas-only"] = new {
@@ -365,6 +381,44 @@ marker = ".skills"
         assert!(!project.join(".agents/skills/alpha").exists());
         assert!(!fixture.path("data/bundles/global").exists());
     }
+}
+
+#[test]
+fn exclusions_survive_real_provider_refresh_without_mutating_provider_sources() {
+    let fixture = Fixture::new();
+    let source = fixture.path("source");
+    init_provider_repo(&source);
+    fs::create_dir_all(fixture.path("mirror/global")).unwrap();
+    let settings = provider_config(&fixture, &source);
+    let config = fixture.write_config(&settings);
+    let sync = || {
+        fixture
+            .command(&config)
+            .args(["subscription", "sync", "--all"])
+            .assert()
+            .success();
+    };
+    sync();
+    assert!(fixture.path("view/alpha/SKILL.md").is_file());
+    fs::write(
+        &config,
+        format!("excluded_skills = [\"alpha\"]\nexcluded_provider_skills = [\"beta\"]\n{settings}"),
+    )
+    .unwrap();
+    replace_provider_alpha_with_beta(&source);
+    sync();
+    assert!(!fixture.path("view/alpha").exists());
+    assert!(!fixture.path("view/beta").exists());
+    assert_eq!(
+        fs::read_to_string(source.join("skills/beta/SKILL.md")).unwrap(),
+        "beta provider"
+    );
+    fs::write(source.join("skills/beta/SKILL.md"), "beta refreshed").unwrap();
+    git(&source, ["add", "."]);
+    git(&source, ["commit", "-m", "refresh beta"]);
+    sync();
+    assert!(!fixture.path("view/beta").exists());
+    fixture.command(&config).arg("doctor").assert().success();
 }
 
 #[test]
