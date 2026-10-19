@@ -12,7 +12,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use camino::Utf8Path;
-use pklr::capabilities::{BoxFuture, EvalCapabilities};
+use pklr::capabilities::EvalCapabilities;
 use serde::Deserialize;
 
 pub const MANIFEST_FILE: &str = "Skillnet.pkl";
@@ -75,12 +75,8 @@ pub fn load_path(path: &Utf8Path) -> Result<Option<Manifest>> {
     let manifest_path = path.as_std_path();
     let mut evaluator = pklr::Evaluator::with_capabilities(LocalCapabilities::new(root.clone()));
     evaluator.set_base_path(&root);
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context("failed to create Pkl evaluation runtime")?;
-    let value = runtime
-        .block_on(evaluator.eval_source(&source, manifest_path))
+    let value = evaluator
+        .eval_source(&source, manifest_path)
         .map_err(|error| anyhow::anyhow!("failed to evaluate {path}: {error}"))?;
     let document: ManifestDocument = serde_json::from_value(value.to_json())
         .with_context(|| format!("invalid evaluated Skillnet manifest {path}"))?;
@@ -196,63 +192,79 @@ impl LocalCapabilities {
 }
 
 impl EvalCapabilities for LocalCapabilities {
-    fn read_to_string<'a>(&'a mut self, path: &'a Path) -> BoxFuture<'a, pklr::Result<String>> {
-        Box::pin(async move {
-            let path = self.confined(path)?;
-            fs::read_to_string(&path).map_err(|error| pklr::Error::Io(path, error))
-        })
+    fn read_to_string(&mut self, path: &Path) -> pklr::Result<String> {
+        let path = self.confined(path)?;
+        fs::read_to_string(&path).map_err(|error| pklr::Error::Io(path, error))
     }
 
-    fn path_exists<'a>(&'a mut self, path: &'a Path) -> BoxFuture<'a, pklr::Result<bool>> {
-        Box::pin(async move { Ok(self.confined(path).is_ok()) })
+    fn path_exists(&mut self, path: &Path) -> pklr::Result<bool> {
+        Ok(self.confined(path).is_ok())
     }
 
-    fn canonicalize<'a>(&'a mut self, path: &'a Path) -> BoxFuture<'a, pklr::Result<PathBuf>> {
-        Box::pin(async move { self.confined(path) })
+    fn canonicalize(&mut self, path: &Path) -> pklr::Result<PathBuf> {
+        self.confined(path)
     }
 
-    fn read_env<'a>(&'a mut self, name: &'a str) -> BoxFuture<'a, pklr::Result<Option<String>>> {
-        Box::pin(async move {
-            Err(pklr::Error::Unsupported(format!(
-                "environment access is disabled while evaluating Skillnet.pkl: {name}"
-            )))
-        })
+    fn read_bytes(&mut self, path: &Path) -> pklr::Result<Vec<u8>> {
+        let path = self.confined(path)?;
+        fs::read(&path).map_err(|error| pklr::Error::Io(path, error))
     }
 
-    fn fetch_text<'a>(&'a mut self, url: &'a str) -> BoxFuture<'a, pklr::Result<String>> {
-        Box::pin(async move {
-            Err(pklr::Error::Unsupported(format!(
-                "network access is disabled while evaluating Skillnet.pkl: {url}"
-            )))
-        })
+    fn create_dir_all(&mut self, path: &Path) -> pklr::Result<()> {
+        Err(pklr::Error::Unsupported(format!(
+            "filesystem mutations are disabled while evaluating Skillnet.pkl: {}",
+            path.display()
+        )))
     }
 
-    fn fetch_bytes<'a>(&'a mut self, url: &'a str) -> BoxFuture<'a, pklr::Result<Vec<u8>>> {
-        Box::pin(async move {
-            Err(pklr::Error::Unsupported(format!(
-                "network access is disabled while evaluating Skillnet.pkl: {url}"
-            )))
-        })
+    fn write_atomic(&mut self, path: &Path, _bytes: &[u8]) -> pklr::Result<()> {
+        Err(pklr::Error::Unsupported(format!(
+            "filesystem mutations are disabled while evaluating Skillnet.pkl: {}",
+            path.display()
+        )))
     }
 
-    fn temp_dir<'a>(&'a mut self, prefix: &'a str) -> BoxFuture<'a, pklr::Result<PathBuf>> {
-        Box::pin(async move {
-            Err(pklr::Error::Unsupported(format!(
-                "temporary directories are disabled while evaluating Skillnet.pkl: {prefix}"
-            )))
-        })
+    fn remove_file(&mut self, path: &Path) -> pklr::Result<()> {
+        Err(pklr::Error::Unsupported(format!(
+            "filesystem mutations are disabled while evaluating Skillnet.pkl: {}",
+            path.display()
+        )))
     }
 
-    fn glob<'a>(
-        &'a mut self,
-        _base: &'a Path,
-        pattern: &'a str,
-    ) -> BoxFuture<'a, pklr::Result<Vec<PathBuf>>> {
-        Box::pin(async move {
-            Err(pklr::Error::Unsupported(format!(
-                "glob access is disabled while evaluating Skillnet.pkl: {pattern}"
-            )))
-        })
+    fn read_env(&mut self, name: &str) -> pklr::Result<Option<String>> {
+        Err(pklr::Error::Unsupported(format!(
+            "environment access is disabled while evaluating Skillnet.pkl: {name}"
+        )))
+    }
+
+    fn env_vars(&mut self) -> pklr::Result<Vec<(String, String)>> {
+        Err(pklr::Error::Unsupported(
+            "environment access is disabled while evaluating Skillnet.pkl".to_string(),
+        ))
+    }
+
+    fn fetch_text(&mut self, url: &str) -> pklr::Result<String> {
+        Err(pklr::Error::Unsupported(format!(
+            "network access is disabled while evaluating Skillnet.pkl: {url}"
+        )))
+    }
+
+    fn fetch_bytes(&mut self, url: &str) -> pklr::Result<Vec<u8>> {
+        Err(pklr::Error::Unsupported(format!(
+            "network access is disabled while evaluating Skillnet.pkl: {url}"
+        )))
+    }
+
+    fn temp_dir(&mut self, prefix: &str) -> pklr::Result<PathBuf> {
+        Err(pklr::Error::Unsupported(format!(
+            "temporary directories are disabled while evaluating Skillnet.pkl: {prefix}"
+        )))
+    }
+
+    fn glob(&mut self, _base: &Path, pattern: &str) -> pklr::Result<Vec<PathBuf>> {
+        Err(pklr::Error::Unsupported(format!(
+            "glob access is disabled while evaluating Skillnet.pkl: {pattern}"
+        )))
     }
 }
 
@@ -369,5 +381,26 @@ value = read("env:HOME")
 
         let error = load(&root).unwrap_err().to_string();
         assert!(error.contains("environment access is disabled"), "{error}");
+    }
+
+    #[test]
+    fn confines_binary_reads_and_rejects_filesystem_mutations() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path().join("manifest");
+        fs::create_dir(&root).unwrap();
+        let outside = tmp.path().join("outside.bin");
+        fs::write(&outside, [0, 255]).unwrap();
+        let mut capabilities = LocalCapabilities::new(root.canonicalize().unwrap());
+
+        let inside = root.join("inside.bin");
+        fs::write(&inside, [1, 254]).unwrap();
+        assert_eq!(capabilities.read_bytes(&inside).unwrap(), [1, 254]);
+        assert!(capabilities.read_bytes(&outside).is_err());
+        assert!(capabilities.env_vars().is_err());
+        assert!(capabilities.create_dir_all(&root.join("created")).is_err());
+        assert!(capabilities.write_atomic(&outside, b"replaced").is_err());
+        assert!(capabilities.remove_file(&outside).is_err());
+        assert_eq!(fs::read(&outside).unwrap(), [0, 255]);
+        assert!(!root.join("created").exists());
     }
 }
