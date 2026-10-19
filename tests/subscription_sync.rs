@@ -1,7 +1,7 @@
 use std::{fs, path::Path, process::Command as StdCommand};
 
 use assert_cmd::Command;
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 struct Fixture {
     tmp: TempDir,
