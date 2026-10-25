@@ -13,6 +13,18 @@ step_runners = { cargo-clippy = "ubuntu-24.04", cargo-doc = "ubuntu-24.04", carg
 provider = "actions"
 platform = "github"
 publish_crates = true
+nix_builds = [".#packages.x86_64-linux.skillnet"]
+
+[prebuild]
+publish_attic = true
+attic_app = ".#push-flake-inputs"
+system_runners = { x86_64-linux = "ubuntu-24.04" }
+
+[release.attic]
+cache = "canix"
+url = "https://attic.candee.baby"
+token_name = "skillnet"
+token_secret = "ATTIC_TOKEN"
 
 [ci.pages]
 repo = "caniko/skillnet"
