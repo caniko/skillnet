@@ -2,7 +2,7 @@
   description = "skillnet AI skill mirror manager";
 
   inputs = {
-    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=ed89d0b13fc61dd1b2217bf4bba97f32cec27ba7";
+    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=0d53ee174d64cdebf22666691a7e8a99b2eb8cc6";
 
     nixpkgs.follows = "harbor-rs/nixpkgs";
     rust-overlay.follows = "harbor-rs/rust-overlay";
@@ -45,7 +45,7 @@
     ...
   }: let
     hmModule = import ./nix/hm-module.nix;
-    systemOutputs = flake-utils.lib.eachSystem ["x86_64-linux"] (system: let
+    systemOutputs = flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-darwin"] (system: let
       pkgs = import nixpkgs {
         inherit system;
         overlays = [(import rust-overlay)];
@@ -77,6 +77,22 @@
           inherit cargoArtifacts;
           nativeCheckInputs = [pkgs.git pkgs.gnupg];
         });
+
+      # Prebuilt release archives for `cargo binstall skillnet`: one static
+      # archive per target, published by the generated release workflow.
+      release = harbor-rs.lib.mkBinstallRelease {
+        inherit pkgs system;
+        pname = "skillnet";
+        version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
+        inherit commonArgs;
+        crates.skillnet = {cargoToml = ./Cargo.toml;};
+        # No Windows archive: the crate uses `std::os::unix` (MetadataExt::ino,
+        # symlink permissions) and does not compile for windows-gnu.
+        targets = {
+          x86_64-linux = ["x86_64-linux-musl" "aarch64-linux-musl"];
+          aarch64-darwin = ["native"];
+        };
+      };
 
       treefmtEval = treefmt-nix.lib.evalModule pkgs (import ./nix/treefmt.nix);
       pre-commit-check = git-hooks.lib.${system}.run {
@@ -170,15 +186,19 @@
           touch "$out"
         '';
     in {
-      packages = {
-        default = package;
-        skillnet = package;
-        greptile-skills = greptileSkills.bundle;
-        greptile-skills-archive = greptileSkills.archive;
-        docs = docs;
-        website = website;
-        site = website;
-      };
+      packages =
+        {
+          default = package;
+          skillnet = package;
+          greptile-skills = greptileSkills.bundle;
+          greptile-skills-archive = greptileSkills.archive;
+          docs = docs;
+          website = website;
+          site = website;
+        }
+        // pkgs.lib.optionalAttrs (release.releaseBundle != null) {
+          release-bundle = release.releaseBundle;
+        };
 
       apps =
         {
@@ -219,43 +239,45 @@
         inherit mkBundle;
       };
 
-      checks = {
-        default = package;
-        formatting = fmtCheck;
-        clippy = clippyCheck;
-        fmt = fmtCheck;
-        test = nextestCheck;
-        nextest = nextestCheck;
-        doc = docCheck;
-        docs = docs;
-        audit = auditCheck;
-        deny = denyCheck;
-        hm-module = hmModuleTest;
-        bundle = bundleCheck;
-        greptile-skills = greptileSkills.check;
-        # A CI-only runtime hook must not make the composition a dev-shell input.
-        # Attribute-name lookup only: preserve the shell's real dependency context.
-        dev-shell-composition-isolation = assert !(builtins.hasAttr (builtins.unsafeDiscardStringContext greptileSkills.check.drvPath)
-          (builtins.getContext self.devShells.${system}.default.shellHook));
-          pkgs.runCommand "skillnet-dev-shell-composition-isolation" {} ''touch "$out"'';
-        # Fail if flake inputs ever point at the retired Codeberg/Codefloe
-        # mirrors again (fleet migrated to github.com/caniko/*).
-        # sourceUrl package metadata is excluded: informational only, not fetched.
-        host-pinning = let
-          # Split across literals so this file never matches its own pattern.
-          staleHosts = "cod" + "eberg|cod" + "efloe";
-        in
-          pkgs.runCommand "skillnet-host-pinning" {} ''
-            if ${pkgs.lib.getExe pkgs.ripgrep} -v "sourceUrl" ${./flake.nix} ${./flake.lock} \
-              | ${pkgs.lib.getExe pkgs.ripgrep} -q "${staleHosts}"; then
-              echo "ERROR: retired forge host in flake inputs:" >&2
-              ${pkgs.lib.getExe pkgs.ripgrep} -v "sourceUrl" ${./flake.nix} ${./flake.lock} \
-                | ${pkgs.lib.getExe pkgs.ripgrep} -n "${staleHosts}" >&2 || true
-              exit 1
-            fi
-            touch $out
-          '';
-      };
+      checks =
+        release.checks
+        // {
+          default = package;
+          formatting = fmtCheck;
+          clippy = clippyCheck;
+          fmt = fmtCheck;
+          test = nextestCheck;
+          nextest = nextestCheck;
+          doc = docCheck;
+          docs = docs;
+          audit = auditCheck;
+          deny = denyCheck;
+          hm-module = hmModuleTest;
+          bundle = bundleCheck;
+          greptile-skills = greptileSkills.check;
+          # A CI-only runtime hook must not make the composition a dev-shell input.
+          # Attribute-name lookup only: preserve the shell's real dependency context.
+          dev-shell-composition-isolation = assert !(builtins.hasAttr (builtins.unsafeDiscardStringContext greptileSkills.check.drvPath)
+            (builtins.getContext self.devShells.${system}.default.shellHook));
+            pkgs.runCommand "skillnet-dev-shell-composition-isolation" {} ''touch "$out"'';
+          # Fail if flake inputs ever point at the retired Codeberg/Codefloe
+          # mirrors again (fleet migrated to github.com/caniko/*).
+          # sourceUrl package metadata is excluded: informational only, not fetched.
+          host-pinning = let
+            # Split across literals so this file never matches its own pattern.
+            staleHosts = "cod" + "eberg|cod" + "efloe";
+          in
+            pkgs.runCommand "skillnet-host-pinning" {} ''
+              if ${pkgs.lib.getExe pkgs.ripgrep} -v "sourceUrl" ${./flake.nix} ${./flake.lock} \
+                | ${pkgs.lib.getExe pkgs.ripgrep} -q "${staleHosts}"; then
+                echo "ERROR: retired forge host in flake inputs:" >&2
+                ${pkgs.lib.getExe pkgs.ripgrep} -v "sourceUrl" ${./flake.nix} ${./flake.lock} \
+                  | ${pkgs.lib.getExe pkgs.ripgrep} -n "${staleHosts}" >&2 || true
+                exit 1
+              fi
+              touch $out
+            '';
+        };
 
       devShells = {
         msrv = pkgs.mkShell {
@@ -279,7 +301,7 @@
               rust-analyzer
               taplo
             ]
-            ++ [harbor-rs.packages.${system}.harbor-ci]
+            ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux harbor-rs.packages.${system}.harbor-ci
             ++ pre-commit-check.enabledPackages;
           shellHook =
             pre-commit-check.shellHook
