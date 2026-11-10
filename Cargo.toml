@@ -2,7 +2,7 @@
 name = "skillnet"
 version = "0.6.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.89"
 description = "Manage canonical AI skill stores, derived views, and calibration data for multi-phase-plan."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/caniko/skillnet"

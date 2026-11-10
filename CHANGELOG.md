@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Raise the MSRV to Rust 1.89 and move rusqlite to 0.41, whose bundled SQLite
+  fixes RUSTSEC-2026-0459.
+
 - Documentation now describes the centralized configuration migration and
   reconciler research findings consistently.
 - Project canonical stores now live in each configured project repository at
