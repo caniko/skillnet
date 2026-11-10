@@ -67,7 +67,7 @@ and move manifest evaluation to restricted synchronous Pklr.
 ## Place in the fleet
 
 Canix consumes skillnet as a flake input and imports
-`inputs.skillnet.homeModules.default` through `home/user/shared/skillnet.nix`,
+`inputs.skillnet.hmModules.default` through `home/user/shared/skillnet.nix`,
 which declares the Claude and agents views, the mirror root, the catalog, and
 the database backend, and which renders external `Skillnet.pkl` manifests for
 the `scientific-agent-skills` checkout and for loop-template skills. The catalog
