@@ -14,11 +14,31 @@ provider = "actions"
 platform = "github"
 publish_crates = true
 nix_builds = [".#packages.x86_64-linux.skillnet"]
+publish_strategy = "members"
 
 [prebuild]
 publish_attic = true
 attic_app = ".#push-flake-inputs"
 system_runners = { x86_64-linux = "ubuntu-24.04" }
+
+[release.github]
+repo = "caniko/skillnet"
+target_branch = "trunk"
+
+[release.artifacts]
+# Prebuilt cargo-binstall archives: one bundle per system, merged into the
+# single release by the generated release workflow.
+prebuild_binaries = true
+binstall = true
+system_runners = { x86_64-linux = "ubuntu-24.04", aarch64-darwin = "macos-15" }
+runner = "ubuntu-24.04"
+substituters = ["https://attic.candee.baby/canix", "https://cache.nixos.org"]
+trusted_public_keys = [
+  "canix:lPzPzKrmYqW5Rxa5r0uQWvCqD3S5nx0h2eCy7XD5JM8=",
+  "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=",
+]
+# No keys/minisign.pub trust root in this repository yet.
+sign = false
 
 [release.attic]
 cache = "canix"
