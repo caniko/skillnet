@@ -325,6 +325,10 @@
         docs = harbor-rs.lib.mkDocsShell {
           inherit pkgs cross;
           inherit (toolchain) craneLib;
+          # Running `cargo doc` needs no generated Cargo config. In CI the hook would
+          # write its mold linker into the shared CARGO_HOME, which breaks the
+          # default shell (no mold) in later steps of the same job.
+          cargoConfig = null;
           packages = with pkgs;
             [
               mdbook
