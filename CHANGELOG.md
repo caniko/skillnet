@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-11
+
 ### Added
 
 - Declarative bundle exclusions for canonical, manifest and provider skills,
@@ -24,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Release checksums are now minisign-signed. The release workflow signs
+  `SHA256SUMS.txt` with `MINISIGN_SECRET_KEY` and verifies the signature against
+  the committed `keys/minisign.pub`, publishing `SHA256SUMS.txt.minisig`
+  alongside the release assets.
 - Raise the MSRV to Rust 1.89 and move rusqlite to 0.41, whose bundled SQLite
   fixes RUSTSEC-2026-0459.
 
@@ -260,7 +266,8 @@ Initial release.
 
 No stable Rust library API is committed in `0.1.0`; the supported surface is the `skillnet` binary.
 
-[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.6.0...HEAD
+[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.6.1...HEAD
+[0.6.1]: https://codeberg.org/caniko/skillnet/compare/0.6.0...0.6.1
 [0.6.0]: https://codeberg.org/caniko/skillnet/compare/0.5.1...0.6.0
 [0.5.1]: https://codeberg.org/caniko/skillnet/compare/0.4.0...0.5.1
 [0.5.0]: https://codeberg.org/caniko/skillnet/compare/0.4.0...0.5.0
