@@ -1,45 +1,94 @@
 [site]
 title = "skillnet"
-description = "<!-- simit:badges:start -->"
+description = "skillnet keeps a canonical skills mirror, hardlinks and symlinks it into each agent's directory, and records skill usage in Postgres or SQLite."
 base_url = "/"
-footer_note = "Generated from repository metadata by the plinth-project FOSS sweep."
 
 [[nav]]
 label = "Overview"
 href = "#overview"
 
 [[nav]]
+label = "Install"
+href = "#install"
+
+[[nav]]
+label = "Documentation"
+href = "/docs/"
+
+[[nav]]
 label = "Source"
-href = "ssh://git@github.com/caniko/skillnet.git"
+href = "https://github.com/caniko/skillnet"
+
+[[footer_links]]
+label = "Documentation"
+href = "/docs/"
 
 [[footer_links]]
 label = "Source"
-href = "ssh://git@github.com/caniko/skillnet.git"
+href = "https://github.com/caniko/skillnet"
 
 [[pages]]
 slug = "index"
 title = "skillnet"
-description = "<!-- simit:badges:start -->"
+description = "skillnet keeps a canonical skills mirror, hardlinks and symlinks it into each agent's directory, and records skill usage in Postgres or SQLite."
 
 [[pages.sections]]
 type = "hero"
-title = "skillnet"
-tagline = "<!-- simit:badges:start -->"
-subtitle = "<!-- simit:badges:start -->"
+title = "One skill store, every agent view"
+tagline = "Write skills once. Give each agent its own view."
+subtitle = "skillnet keeps a canonical skills mirror, hardlinks and symlinks it into each agent's directory, and records skill usage in Postgres or SQLite."
 
 [[pages.sections.ctas]]
 label = "View source"
-href = "ssh://git@github.com/caniko/skillnet.git"
+href = "https://github.com/caniko/skillnet"
 primary = true
+
+[[pages.sections.ctas]]
+label = "Documentation"
+href = "/docs/"
 
 [[pages.sections]]
 type = "feature_grid"
 id = "overview"
 
 [[pages.sections.features]]
-title = "Rust"
-description = "Project technology detected from repository manifests."
+title = "Canonical store, derived views"
+description = "Project skills live in the .skills directory. The .agents/skills copy is hardlinked from canonical and .claude/skills holds one relative symlink per skill, so a sync converges every view on the same immutable files and edits stay in the store."
 
 [[pages.sections.features]]
-title = "Nix"
-description = "Project technology detected from repository manifests."
+title = "Hook ingestion for Claude Code"
+description = "skillnet hook install writes the managed hook entries, and skillnet hook ingest records each invocation as a row in skill_invocations. The default backend is Postgres; SQLite is one config key away."
+
+[[pages.sections.features]]
+title = "Usage reports that keep the zeroes"
+description = "Normalized harness adapters call skillnet usage record with a source event ID, so retries stay idempotent, and skillnet usage report lists every catalog skill, including the ones nobody used in the window."
+
+[[pages.sections.features]]
+title = "Declarative Home Manager install"
+description = "The flake's Home Manager module renders skillnet.toml and the catalog config from Nix, reads the Postgres URL from a file instead of the store, and can sync external provider subscriptions on a timer with the last good checkout restored when an update is invalid."
+
+[[pages.sections]]
+type = "install"
+id = "install"
+heading = "Install"
+intro = "Install the CLI from crates.io, or take the flake input and let the Home Manager module render the configuration and the database secret path."
+guide_href = "/docs/quickstart.html"
+
+[[pages.sections.primary_routes]]
+label = "Cargo"
+audience = "crates.io, skillnet 0.6.0 interface"
+href = "/docs/quickstart.html#quick-start"
+command = "cargo install skillnet"
+recommended = true
+
+[[pages.sections.secondary_routes]]
+label = "Home Manager"
+audience = "Flake input plus module"
+href = "/docs/quickstart.html#home-manager"
+command = 'inputs.skillnet.url = "git+ssh://git@github.com/caniko/skillnet.git";'
+
+[[pages.sections.secondary_routes]]
+label = "Source checkout"
+audience = "Build the current tree"
+href = "/docs/quickstart.html#quick-start"
+command = "cargo install --path ."
