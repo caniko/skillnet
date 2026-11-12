@@ -1,0 +1,56 @@
+# Native macOS qualification for the Rust test suite.
+#
+# The Linux CI runs `cargo test` inside the Nix dev shell, but the failing
+# platform was the native `aarch64-darwin` release archive: `mkBinstallRelease`
+# keeps `doCheck = true` for the native target only, so the release bundle ran
+# the suite in a build environment without Git. This job builds the same crate
+# checks on a native runner so a darwin-only regression fails the pull request
+# instead of the release.
+#
+# Hand-written because simit renders native per-system matrices for flake-only
+# projects, not for a Cargo project's test lane.
+name: macOS tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      NIX_CONFIG: "experimental-features = nix-command flakes"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            max-jobs = 1
+            cores = 2
+            substituters = https://attic.candee.baby/canix https://cache.nixos.org
+            trusted-public-keys = canix:lPzPzKrmYqW5Rxa5r0uQWvCqD3S5nx0h2eCy7XD5JM8= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+
+      - name: Verify native Nix runner
+        run: test "$(nix eval --impure --raw --expr builtins.currentSystem)" = aarch64-darwin
+
+      - name: Build the crate test check
+        run: nix build .#checks.aarch64-darwin.test --print-build-logs --max-jobs 1 --cores 2
+
+      # The release archive builds the same package with cargo test enabled and
+      # no test-only inputs of its own, which is where 0.6.3 failed.
+      - name: Build the release-path package
+        run: nix build .#packages.aarch64-darwin.skillnet --print-build-logs --max-jobs 1 --cores 2

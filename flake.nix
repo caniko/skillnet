@@ -68,6 +68,12 @@
         inherit src;
         strictDeps = true;
         cargoExtraArgs = "--all-features";
+        # Integration fixtures create Git repositories, so every derivation
+        # that runs the test suite needs Git on PATH. Keep it in `commonArgs`
+        # rather than per-check: the binstall release packages inherit these
+        # arguments and the native `aarch64-darwin` archive runs the suite,
+        # while the cross-built Linux archives skip it (`doCheck = false`).
+        nativeCheckInputs = [pkgs.git pkgs.gnupg];
       };
 
       cargoArtifacts = craneLib.buildDepsOnly commonArgs;
@@ -75,7 +81,6 @@
       package = craneLib.buildPackage (commonArgs
         // {
           inherit cargoArtifacts;
-          nativeCheckInputs = [pkgs.git pkgs.gnupg];
         });
 
       # Prebuilt release archives for `cargo binstall skillnet`: one static
@@ -114,7 +119,6 @@
       nextestCheck = craneLib.cargoNextest (commonArgs
         // {
           inherit cargoArtifacts;
-          nativeCheckInputs = [pkgs.git pkgs.gnupg];
         });
 
       docCheck = craneLib.cargoDoc (commonArgs
