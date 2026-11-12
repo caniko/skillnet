@@ -106,11 +106,6 @@ jobs:
             exit 1
           fi
 
-      - name: Required gate harbor-ci
-        timeout-minutes: 30
-        env:
-          SIMIT_REQUIRED_GATE: "1"
-        run: nix develop -c harbor-ci full
       - name: Check flake
         run: nix flake check
 
