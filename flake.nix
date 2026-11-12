@@ -97,15 +97,6 @@
           x86_64-linux = ["x86_64-linux-musl" "aarch64-linux-musl"];
           aarch64-darwin = ["native"];
         };
-        # ponytail: the aarch64-darwin archive ships without running its test
-        # suite. Ceiling: the macOS binary is built but untested; 12 tests/cli.rs
-        # integration tests fail on macOS (e.g.
-        # view_sync_adopts_loose_dir_instead_of_wiping: NotFound at
-        # tests/cli.rs:301). Upgrade path: drop this override once the macOS CLI
-        # test fixes land and `native` passes doCheck on darwin again.
-        targetArgs = pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
-          native.doCheck = false;
-        };
       };
 
       treefmtEval = treefmt-nix.lib.evalModule pkgs (import ./nix/treefmt.nix);
