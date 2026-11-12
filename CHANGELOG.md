@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The macOS release archive runs the test suite again: the macOS CLI tests
+  pass now that the release build has `git` and `gnupg` (#11).
+
 ## [0.6.4] - 2026-11-12
 
 ### Fixed
