@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-12
+
+### Fixed
+
+- Release archives: the GitHub release builds and publishes the signed
+  cargo-binstall archives again. The macOS release archive is published again;
+  its tests are skipped on macOS until the macOS CLI test failures are fixed.
+
 ## [0.6.3] - 2026-11-12
 
 ### Fixed
@@ -281,7 +289,8 @@ Initial release.
 
 No stable Rust library API is committed in `0.1.0`; the supported surface is the `skillnet` binary.
 
-[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.6.3...HEAD
+[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.6.4...HEAD
+[0.6.4]: https://codeberg.org/caniko/skillnet/compare/0.6.3...0.6.4
 [0.6.3]: https://codeberg.org/caniko/skillnet/compare/0.6.2...0.6.3
 [0.6.2]: https://codeberg.org/caniko/skillnet/compare/0.6.1...0.6.2
 [0.6.1]: https://codeberg.org/caniko/skillnet/compare/0.6.0...0.6.1
