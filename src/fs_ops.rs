@@ -453,6 +453,7 @@ pub fn ensure_skill_dir(path: &Utf8Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
     use tempfile::tempdir;
@@ -668,6 +669,9 @@ mod tests {
         assert!(message.contains("different filesystems"));
     }
 
+    // APFS (macOS) rejects file names that are not valid UTF-8, so the invalid
+    // entry this test needs can only be created on Linux file systems.
+    #[cfg(target_os = "linux")]
     #[test]
     fn hardlink_dir_failure_cleans_staging_without_partial_dest() {
         let tmp = tempdir().unwrap();
