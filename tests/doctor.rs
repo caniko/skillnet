@@ -1,8 +1,7 @@
 use std::{
-    ffi::OsString,
     fs,
-    os::unix::ffi::OsStringExt,
     os::unix::fs as unix_fs,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 
@@ -217,11 +216,14 @@ fn doctor_handles_classify_io_error_gracefully() {
     let config = fixture.write_config();
     write_skill(&fixture.canonical(), "unreadable", "canonical", 100);
     let view = write_skill(&fixture.view(), "unreadable", "view", 200);
-    fs::write(
-        view.join(OsString::from_vec(vec![0xff])),
-        "invalid utf-8 path",
-    )
-    .unwrap();
+    // Classification walks the view entry, so an unreadable directory is a
+    // portable I/O error for that step. A non-UTF-8 child name would be
+    // simpler, but APFS rejects those.
+    fs::set_permissions(&view, fs::Permissions::from_mode(0o000)).unwrap();
+    // Root ignores permission bits, so the fixture cannot fail there.
+    if fs::read_dir(&view).is_ok() {
+        return;
+    }
 
     fixture
         .command(&config)
@@ -232,4 +234,6 @@ fn doctor_handles_classify_io_error_gracefully() {
         .stderr(predicate::str::contains(
             "rerun doctor or check permissions",
         ));
+
+    fs::set_permissions(&view, fs::Permissions::from_mode(0o755)).unwrap();
 }
