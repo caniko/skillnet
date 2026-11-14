@@ -1276,14 +1276,20 @@ fn ensure_aggregator(
     }
 }
 
+// Repositories commit this link, so it stays relative (`../.skills`) to survive checkout moves.
 fn ensure_aggregator_symlink(path: &Utf8Path, canonical: &Utf8Path) -> Result<AggregatorStatus> {
+    let desired = desired_link_target(
+        path.parent().context("aggregator path has no parent")?,
+        canonical,
+        true,
+    )?;
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             let current = read_link_utf8(path)?;
-            if current == canonical {
+            if current == desired {
                 return Ok(AggregatorStatus::Unchanged);
             }
-            atomic_symlink(canonical, path)?;
+            atomic_symlink(&desired, path)?;
             Ok(AggregatorStatus::Updated)
         }
         Ok(metadata) if metadata.is_dir() => bail!(
@@ -1291,7 +1297,7 @@ fn ensure_aggregator_symlink(path: &Utf8Path, canonical: &Utf8Path) -> Result<Ag
         ),
         Ok(_) => bail!("aggregator path `{path}` exists and is not a symlink"),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            atomic_symlink(canonical, path)?;
+            atomic_symlink(&desired, path)?;
             Ok(AggregatorStatus::Created)
         }
         Err(err) => Err(err).with_context(|| format!("failed to inspect {path}")),
@@ -1359,10 +1365,15 @@ fn aggregator_status(
 }
 
 fn aggregator_symlink_status(path: &Utf8Path, canonical: &Utf8Path) -> Result<AggregatorStatus> {
+    let desired = desired_link_target(
+        path.parent().context("aggregator path has no parent")?,
+        canonical,
+        true,
+    )?;
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             let current = read_link_utf8(path)?;
-            if current == canonical {
+            if current == desired {
                 Ok(AggregatorStatus::Unchanged)
             } else {
                 Ok(AggregatorStatus::Updated)
@@ -1387,7 +1398,14 @@ fn aggregator_drift_entry(
     Ok(Some(DriftEntry {
         skill: "working-copy".to_string(),
         kind,
-        expected: Some(canonical.to_path_buf()),
+        expected: Some(match strategy {
+            LinkStrategy::Symlink => desired_link_target(
+                path.parent().context("aggregator path has no parent")?,
+                canonical,
+                true,
+            )?,
+            LinkStrategy::Hardlink => canonical.to_path_buf(),
+        }),
         actual,
         view_mtime_nanos: None,
         canonical_mtime_nanos: None,
@@ -1421,7 +1439,14 @@ fn aggregator_file_delta(
     Ok(Some(FileDelta {
         skill: "working-copy".to_string(),
         kind,
-        expected: Some(canonical.to_path_buf()),
+        expected: Some(match strategy {
+            LinkStrategy::Symlink => desired_link_target(
+                path.parent().context("aggregator path has no parent")?,
+                canonical,
+                true,
+            )?,
+            LinkStrategy::Hardlink => canonical.to_path_buf(),
+        }),
         actual,
     }))
 }
@@ -1497,7 +1522,7 @@ pub(crate) fn atomic_symlink(target: &Utf8Path, link: &Utf8Path) -> Result<()> {
     fs::rename(&temp, link).with_context(|| format!("failed to replace symlink {link}"))
 }
 
-fn desired_link_target(
+pub(crate) fn desired_link_target(
     link_parent: &Utf8Path,
     canonical_target: &Utf8Path,
     relative: bool,
