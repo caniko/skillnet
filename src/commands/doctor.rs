@@ -13,7 +13,7 @@ use crate::{
     fs_ops::{hardlink_dir_status, HardlinkStatus},
     link::LinkStrategy,
     model::{Target, TargetScope, ViewTarget},
-    view::{compare_view_entry, ReconcileOutcome},
+    view::{compare_view_entry, desired_link_target, ReconcileOutcome},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -518,14 +518,18 @@ fn check_project_symlink_aggregator(
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             let actual = read_link_utf8(path)?;
-            if actual != target.canonical_path {
+            let expected = desired_link_target(
+                path.parent().context("aggregator path has no parent")?,
+                &target.canonical_path,
+                true,
+            )?;
+            if actual != expected {
                 issue(
                     issues,
                     target,
                     Severity::Error,
                     format!(
-                        "project working-copy symlink {path} points to {actual}; expected {}",
-                        target.canonical_path
+                        "project working-copy symlink {path} points to {actual}; expected {expected}"
                     ),
                 );
                 return Ok(());

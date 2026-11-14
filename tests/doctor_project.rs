@@ -192,7 +192,7 @@ fn doctor_keeps_symlink_strategy_aggregator_checks() {
     let fixture = Fixture::new();
     let project = fixture.project(r#"link_strategy = "symlink""#);
     fs::create_dir_all(project.aggregator.parent().unwrap()).unwrap();
-    unix_fs::symlink(&project.canonical, &project.aggregator).unwrap();
+    unix_fs::symlink("../.skills", &project.aggregator).unwrap();
 
     fixture
         .command(&project.config)
@@ -200,6 +200,17 @@ fn doctor_keeps_symlink_strategy_aggregator_checks() {
         .assert()
         .success()
         .stdout(predicate::str::contains("doctor: no issues"));
+
+    // An absolute link resolves today but dangles once the checkout moves.
+    fs::remove_file(&project.aggregator).unwrap();
+    unix_fs::symlink(&project.canonical, &project.aggregator).unwrap();
+
+    fixture
+        .command(&project.config)
+        .arg("doctor")
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("expected ../.skills"));
 
     fs::remove_file(&project.aggregator).unwrap();
     unix_fs::symlink(project.canonical.join("missing"), &project.aggregator).unwrap();

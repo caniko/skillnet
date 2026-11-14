@@ -1,6 +1,7 @@
 use std::{
     fs,
     os::unix::fs::{self as unix_fs, MetadataExt},
+    path::Path,
 };
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -83,7 +84,7 @@ fn materialize_project_preserves_symlink_aggregator_for_symlink_strategy() {
     let aggregator = target.aggregator_path.as_ref().unwrap();
     let metadata = fs::symlink_metadata(aggregator).unwrap();
     assert!(metadata.file_type().is_symlink());
-    assert_eq!(fs::read_link(aggregator).unwrap(), target.canonical_path);
+    assert_eq!(fs::read_link(aggregator).unwrap(), Path::new("../.skills"));
 
     let second = materialize_project(&target).unwrap();
     assert!(second
@@ -92,6 +93,24 @@ fn materialize_project_preserves_symlink_aggregator_for_symlink_strategy() {
         .all(|view| view.summary.created == 0 && view.summary.updated == 0));
     assert_eq!(second.aggregator, Some(AggregatorStatus::Unchanged));
     assert!(second.aggregator_pending.is_empty());
+}
+
+#[test]
+fn materialize_project_rewrites_absolute_symlink_aggregator_as_relative() {
+    let tmp = tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
+    let target = project_target(&root, LinkStrategy::Symlink);
+    write_skill(&target.canonical_path, "alpha");
+    let aggregator = target.aggregator_path.as_ref().unwrap();
+    fs::create_dir_all(aggregator.parent().unwrap()).unwrap();
+    unix_fs::symlink(&target.canonical_path, aggregator).unwrap();
+
+    let summary = materialize_project(&target).unwrap();
+    assert_eq!(summary.aggregator, Some(AggregatorStatus::Updated));
+    assert_eq!(fs::read_link(aggregator).unwrap(), Path::new("../.skills"));
+
+    let second = materialize_project(&target).unwrap();
+    assert_eq!(second.aggregator, Some(AggregatorStatus::Unchanged));
 }
 
 #[test]
