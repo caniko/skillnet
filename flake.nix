@@ -2,7 +2,7 @@
   description = "skillnet AI skill mirror manager";
 
   inputs = {
-    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=0d53ee174d64cdebf22666691a7e8a99b2eb8cc6";
+    harbor-rs.url = "git+https://github.com/caniko/harbor-rs.git?ref=trunk&rev=a2c6f8e0d0b3356a2528de381e6a095d150971fb";
 
     nixpkgs.follows = "harbor-rs/nixpkgs";
     rust-overlay.follows = "harbor-rs/rust-overlay";
