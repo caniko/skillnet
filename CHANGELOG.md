@@ -23,7 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first template never deletes a skill authored in a view. Real directories
   left over from an earlier hardlink view now stay too; remove them once with
   `skillnet sync --scope global --no-promote --allow-delete`, which still
-  prunes them.
+  prunes them. That command also deletes skills authored in a view, so move
+  or back those up first.
 - The macOS release archive runs the test suite again: the macOS CLI tests
   pass now that the release build has `git` and `gnupg` (#11).
 
