@@ -70,7 +70,6 @@ pub fn run(
     opened: &Opened,
     skill: &str,
     binding: &SkillBinding,
-    config: Option<Utf8PathBuf>,
     hosts_command: Option<Vec<String>>,
 ) -> Applied {
     let mut applied = Applied::default();
@@ -141,11 +140,9 @@ pub fn run(
                     log.push(format!("{error:#}"));
                 }
             }
+            // Sync the exact config this editor validated, never a rediscovered one.
             let mut sync = Command::new("skillnet");
-            if let Some(config) = config {
-                sync.arg("--config").arg(config);
-            }
-            sync.args(SYNC_ARGS);
+            sync.arg("--config").arg(config_path).args(SYNC_ARGS);
             match run_command(&mut sync) {
                 Ok(output) => log.push(command_output(&output)),
                 Err(error) => log.push(format!("{error:#}")),

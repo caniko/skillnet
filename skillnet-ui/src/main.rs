@@ -55,26 +55,21 @@ fn main() -> Result<()> {
             config_home.join("skillnet/skillnet.toml")
         }
     };
-    iced::application(
-        move || App::load(&config, explicit.clone()),
-        App::update,
-        App::view,
-    )
-    .title("Skillnet — Model bindings")
-    .window(iced::window::Settings {
-        size: iced::Size::new(1060.0, 850.0),
-        min_size: Some(iced::Size::new(760.0, 590.0)),
-        position: iced::window::Position::Centered,
-        ..Default::default()
-    })
-    .run()?;
+    iced::application(move || App::load(&config), App::update, App::view)
+        .title("Skillnet — Model bindings")
+        .window(iced::window::Settings {
+            size: iced::Size::new(1060.0, 850.0),
+            min_size: Some(iced::Size::new(760.0, 590.0)),
+            position: iced::window::Position::Centered,
+            ..Default::default()
+        })
+        .run()?;
     Ok(())
 }
 
 struct App {
     config: Utf8PathBuf,
     settings: Settings,
-    explicit_config: Option<Utf8PathBuf>,
     templates: Vec<(String, TemplateMeta)>,
     fleet: BindingsDoc,
     local: BindingsDoc,
@@ -115,10 +110,7 @@ enum SeatEdit {
 }
 
 impl App {
-    fn load(
-        config: &Utf8Path,
-        explicit_config: Option<Utf8PathBuf>,
-    ) -> (Result<Self>, Task<Message>) {
+    fn load(config: &Utf8Path) -> (Result<Self>, Task<Message>) {
         let init = (|| -> Result<Self> {
             let settings = Settings::load(config)?;
             let fleet = templates::load_existing(settings.fleet.as_slice())?;
@@ -127,7 +119,6 @@ impl App {
             let mut app = Self {
                 config: config.to_owned(),
                 settings,
-                explicit_config,
                 templates,
                 fleet,
                 local,
@@ -289,7 +280,6 @@ impl App {
                         app.settings.canonical.clone(),
                     );
                     let config = app.config.clone();
-                    let explicit = app.explicit_config.clone();
                     let hosts_command = app.hosts_command().cloned();
                     let skill = skill.clone();
                     app.busy = true;
@@ -297,15 +287,7 @@ impl App {
                     app.status = "Applying…".into();
                     return Task::perform(
                         async move {
-                            apply::run(
-                                scope,
-                                &config,
-                                &opened,
-                                &skill,
-                                &binding,
-                                explicit,
-                                hosts_command,
-                            )
+                            apply::run(scope, &config, &opened, &skill, &binding, hosts_command)
                         },
                         |result| Message::Applied(Box::new(result)),
                     );
