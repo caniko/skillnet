@@ -139,17 +139,20 @@ pub fn run(
     match writes {
         Err(error) => log.push(format!("{error:#}")),
         Ok(fleet_path) => {
-            if let Some(path) = fleet_path {
-                if let Err(error) = publish(&path, skill) {
-                    log.push(format!("{error:#}"));
-                }
-            }
-            // Sync the exact config this editor validated, never a rediscovered one.
+            // Sync the exact config this editor validated, never a rediscovered
+            // one, and publish only a fleet file that sync accepted.
             let mut sync = Command::new("skillnet");
             sync.arg("--config").arg(config_path).args(SYNC_ARGS);
             match run_command(&mut sync) {
-                Ok(output) => log.push(command_output(&output)),
-                Err(error) => log.push(format!("{error:#}")),
+                Ok(output) => {
+                    log.push(command_output(&output));
+                    if let Some(path) = fleet_path {
+                        if let Err(error) = publish(&path, skill) {
+                            log.push(format!("{error:#}"));
+                        }
+                    }
+                }
+                Err(error) => log.push(format!("{error:#}; fleet file not published")),
             }
         }
     }
@@ -172,6 +175,10 @@ pub fn run(
 
 /// Refuse files skillnet did not write; keep the permissions of ones it did.
 fn managed_permissions(path: &Utf8Path) -> Result<Option<fs::Permissions>> {
+    // Replacing a link would leave its (versioned) target unchanged.
+    if path.is_symlink() {
+        bail!("{path} is a symlink; point the config at the file itself");
+    }
     match fs::metadata(path) {
         Ok(meta) => {
             if !fs::read(path)?.starts_with(b"// Managed by skillnet; edits are overwritten.") {

@@ -306,6 +306,9 @@ pub fn render(
                 .filter(|fallback| fallback.enabled)
                 .map(|fallback| &fallback.route),
         );
+        if seat.name.trim().is_empty() {
+            bail!("template `{skill}`: a seat has a blank name");
+        }
         for route in routes {
             if route.provider.trim().is_empty() || route.model.trim().is_empty() {
                 bail!(

@@ -305,6 +305,10 @@ fn ensure_skill_exists(skill_path: &SkillPath, path: &Utf8Path) -> Result<()> {
             skill_path.scope
         );
     }
+    // Global templates have SKILL.md.tmpl instead of SKILL.md.
+    if matches!(skill_path.scope, Scope::Global) && crate::templates::is_template(path) {
+        return Ok(());
+    }
     fs_ops::ensure_skill_dir(path)
 }
 
