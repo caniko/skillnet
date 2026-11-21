@@ -103,6 +103,13 @@
           nativeBuildInputs = [pkgs.pkg-config];
           buildInputs = guiRuntimeLibs ++ [pkgs.wayland-protocols];
         };
+      guiDesktopItem = pkgs.makeDesktopItem {
+        name = "skillnet-ui";
+        desktopName = "Skillnet Model Bindings";
+        comment = "Configure model bindings for Skillnet skill templates";
+        exec = "skillnet-ui";
+        categories = ["Development" "Settings"];
+      };
       guiPackage = craneLib.buildPackage (guiArgs
         // {
           cargoArtifacts = craneLib.buildDepsOnly guiArgs;
@@ -112,6 +119,8 @@
             wrapProgram "$out/bin/skillnet-ui" \
               --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath guiRuntimeLibs} \
               --prefix PATH : ${pkgs.lib.makeBinPath [package pkgs.git]}
+            install -Dm644 ${guiDesktopItem}/share/applications/skillnet-ui.desktop \
+              "$out/share/applications/skillnet-ui.desktop"
           '';
           meta.mainProgram = "skillnet-ui";
         });

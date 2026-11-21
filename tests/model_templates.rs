@@ -149,8 +149,9 @@ fn models_json_uses_enabled_provider_snapshots() {
     let temp = tempdir().unwrap();
     let snapshot = json!({
         "displayName": "OpenCode", "enabled": true, "status": "ready",
-        "models": [{"slug": "org/model", "name": "Model", "capabilities": {
+        "models": [{"slug": "org/model", "name": "Model", "subProvider": "OpenAI", "capabilities": {
             "optionDescriptors": [{"id": "variant", "label": "Reasoning", "type": "select",
+                "currentValue": "high",
                 "options": [{"id": "high", "label": "High", "isDefault": true}] }]
         }}]
     });
@@ -178,6 +179,11 @@ fn models_json_uses_enabled_provider_snapshots() {
     let providers: Value = serde_json::from_slice(&assert.get_output().stdout).unwrap();
     assert_eq!(providers.as_array().unwrap().len(), 1);
     assert_eq!(providers[0]["instanceId"], "opencode");
+    assert_eq!(providers[0]["models"][0]["subProvider"], "OpenAI");
+    assert_eq!(
+        providers[0]["models"][0]["capabilities"]["optionDescriptors"][0]["currentValue"],
+        "high"
+    );
     assert_eq!(
         providers[0]["models"][0]["capabilities"]["optionDescriptors"][0]["options"][0]["id"],
         "high"

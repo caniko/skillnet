@@ -19,9 +19,12 @@ pub struct Provider {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Model {
     pub slug: String,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub_provider: Option<String>,
     #[serde(default)]
     pub capabilities: Capabilities,
 }
@@ -34,6 +37,7 @@ pub struct Capabilities {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OptionDescriptor {
     pub id: String,
     pub label: String,
@@ -41,6 +45,8 @@ pub struct OptionDescriptor {
     pub kind: String,
     #[serde(default)]
     pub options: Vec<ModelOption>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_value: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

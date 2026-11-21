@@ -67,11 +67,13 @@ pub struct BindingsDoc {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SkillBinding {
     pub seats: Vec<Seat>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Seat {
     pub name: String,
     pub label: Option<String>,
@@ -81,6 +83,7 @@ pub struct Seat {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Route {
     pub provider: String,
     pub model: String,
@@ -89,11 +92,34 @@ pub struct Route {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(from = "RawFallback")]
 pub struct Fallback {
-    #[serde(flatten)]
     pub route: Route,
-    #[serde(default = "enabled_by_default")]
     pub enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawFallback {
+    provider: String,
+    model: String,
+    #[serde(default)]
+    options: BTreeMap<String, String>,
+    #[serde(default = "enabled_by_default")]
+    enabled: bool,
+}
+
+impl From<RawFallback> for Fallback {
+    fn from(raw: RawFallback) -> Self {
+        Self {
+            route: Route {
+                provider: raw.provider,
+                model: raw.model,
+                options: raw.options,
+            },
+            enabled: raw.enabled,
+        }
+    }
 }
 
 fn enabled_by_default() -> bool {
@@ -101,6 +127,7 @@ fn enabled_by_default() -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UiConfig {
     pub providers: Option<Vec<String>>,
     pub hosts_command: Option<Vec<String>>,
@@ -108,7 +135,7 @@ pub struct UiConfig {
 
 /// Allowed seat count, defaulting to one or more seats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct TemplateMeta {
     pub min: usize,
     pub max: Option<usize>,
@@ -299,6 +326,7 @@ pub fn render(
     const OPEN: &str = "{{#seats}}";
     const CLOSE: &str = "{{/seats}}";
     // A blank provider or model renders an unusable dispatch target.
+    let mut seen_names = std::collections::BTreeSet::new();
     for seat in &binding.seats {
         let routes = std::iter::once(&seat.route).chain(
             seat.fallbacks
@@ -306,8 +334,12 @@ pub fn render(
                 .filter(|fallback| fallback.enabled)
                 .map(|fallback| &fallback.route),
         );
-        if seat.name.trim().is_empty() {
+        let seat_name = seat.name.trim();
+        if seat_name.is_empty() {
             bail!("template `{skill}`: a seat has a blank name");
+        }
+        if !seen_names.insert(seat_name) {
+            bail!("template `{skill}`: duplicate seat name `{seat_name}`");
         }
         for route in routes {
             if route.provider.trim().is_empty() || route.model.trim().is_empty() {
@@ -330,13 +362,18 @@ pub fn render(
         .seats
         .iter()
         .map(|seat| {
-            seat.label.clone().unwrap_or_else(|| {
-                std::iter::once(&seat.route.model)
-                    .chain(seat.route.options.values())
-                    .map(String::as_str)
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            })
+            seat.label
+                .as_deref()
+                .map(str::trim)
+                .filter(|label| !label.is_empty())
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    std::iter::once(&seat.route.model)
+                        .chain(seat.route.options.values())
+                        .map(String::as_str)
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
         })
         .collect::<Vec<_>>();
     let seat_labels = labels.join(", ");
@@ -483,7 +520,7 @@ fn read_meta(path: &Utf8Path, skill: &str) -> Result<TemplateMeta> {
     match fs::read_to_string(&meta_path) {
         Ok(source) => {
             #[derive(Default, Deserialize)]
-            #[serde(default)]
+            #[serde(default, deny_unknown_fields)]
             struct Meta {
                 seats: TemplateMeta,
             }
@@ -629,13 +666,16 @@ mod tests {
             seats: vec![reviewer()],
         };
         assert_eq!(render_skill(root, "review", &binding).unwrap(), "1 seats");
-        binding.seats.push(reviewer());
+        binding.seats.push(Seat {
+            name: "second".into(),
+            ..reviewer()
+        });
         assert!(render_skill(root, "review", &binding).is_err());
         assert!(render_skill(root, "plain", &binding).is_err());
     }
 
     #[test]
-    fn rejects_blank_routes() {
+    fn rejects_blank_routes_duplicate_names_and_trims_blank_labels() {
         let mut seat = reviewer();
         seat.route.model = " ".into();
         let binding = SkillBinding { seats: vec![seat] };
@@ -646,6 +686,63 @@ mod tests {
             error.contains("review") && error.contains("reviewer"),
             "{error}"
         );
+
+        let dup = SkillBinding {
+            seats: vec![reviewer(), reviewer()],
+        };
+        let error = render("x", TemplateMeta::default(), "review", &dup)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("duplicate seat name"), "{error}");
+
+        let blank_label = SkillBinding {
+            seats: vec![Seat {
+                label: Some("   ".into()),
+                ..reviewer()
+            }],
+        };
+        assert_eq!(
+            render(
+                "{{seat_labels}}",
+                TemplateMeta::default(),
+                "review",
+                &blank_label
+            )
+            .unwrap(),
+            "openai/gpt-6.2-sol high"
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_binding_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(temp.path()).unwrap();
+        let path = root.join("bad.pkl");
+        for (label, content) in [
+            (
+                "skill",
+                r#"skills { ["r"] { seat = List(); seats = List() } }"#,
+            ),
+            (
+                "seat",
+                r#"skills { ["r"] { seats { new { name = "a"; typo = 1; route { provider = "p"; model = "m" } } } } }"#,
+            ),
+            (
+                "route",
+                r#"skills { ["r"] { seats { new { name = "a"; route { provider = "p"; model = "m"; option { ["k"] = "v" } } } } } }"#,
+            ),
+            (
+                "fallback",
+                r#"skills { ["r"] { seats { new { name = "a"; route { provider = "p"; model = "m" }; fallbacks { new { provider = "p2"; model = "m2"; typo = true } } } } } }"#,
+            ),
+            ("ui", r#"skills {}; ui { hostsCommand = List("a") }"#),
+        ] {
+            fs::write(&path, content).unwrap();
+            assert!(
+                load_bindings(std::slice::from_ref(&path)).is_err(),
+                "{label} typo should be rejected"
+            );
+        }
     }
 
     #[test]

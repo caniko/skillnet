@@ -19,13 +19,21 @@ use apply::{Applied, Apply};
 
 type Models = BTreeMap<String, Vec<(String, Model)>>;
 
+fn canonical_model_name(model: &Model) -> String {
+    if model.sub_provider.as_deref() == Some("Claude Agent") && !model.name.starts_with("Claude ") {
+        format!("Claude {}", model.name)
+    } else {
+        model.name.clone()
+    }
+}
+
 fn group_models(providers: Vec<Provider>) -> Models {
     // ponytail: display-name equality is a heuristic; use an explicit alias table if it fails.
     let mut groups = Models::new();
     for provider in providers {
         for model in provider.models {
             groups
-                .entry(model.name.clone())
+                .entry(canonical_model_name(&model))
                 .or_default()
                 .push((provider.instance_id.clone(), model));
         }
@@ -76,6 +84,7 @@ struct App {
     fleet: BindingsDoc,
     local: BindingsDoc,
     models: Models,
+    model_filter: String,
     selected: Option<usize>,
     drafts: BTreeMap<String, SkillBinding>,
     /// Skills whose draft the user changed; only these survive an Apply.
@@ -91,6 +100,7 @@ struct App {
 enum Message {
     Select(usize),
     RefreshModels,
+    FilterModels(String),
     AddSeat,
     RemoveSeat(usize),
     EditSeat(usize, SeatEdit),
@@ -127,6 +137,7 @@ impl App {
                 fleet,
                 local,
                 models: Models::new(),
+                model_filter: String::new(),
                 selected: None,
                 drafts: BTreeMap::new(),
                 edited: Default::default(),
@@ -211,12 +222,23 @@ impl App {
         draft
     }
 
+    fn fleet_writable(&self) -> bool {
+        self.settings
+            .fleet
+            .as_deref()
+            .is_some_and(apply::is_writable_target)
+    }
+
     fn rendered_binding(&self, skill: &str) -> SkillBinding {
         let mut binding = self.drafts[skill].clone();
         for seat in &mut binding.seats {
-            if seat.label.is_none() {
-                seat.label = auto_label(&self.models, &seat.route);
-            }
+            seat.label = seat
+                .label
+                .as_deref()
+                .map(str::trim)
+                .filter(|label| !label.is_empty())
+                .map(str::to_owned)
+                .or_else(|| auto_label(&self.models, &seat.route));
         }
         binding
     }
@@ -288,6 +310,7 @@ impl App {
             _ if app.busy => {}
             Message::Select(index) => app.select(index),
             Message::RefreshModels => app.refresh_models(),
+            Message::FilterModels(filter) => app.model_filter = filter,
             Message::ToggleMenu => app.menu_open = !app.menu_open,
             message => {
                 let Some(index) = app.selected else {
@@ -306,7 +329,11 @@ impl App {
                     let skill = skill.clone();
                     app.busy = true;
                     app.menu_open = false;
-                    app.status = "Applying…".into();
+                    app.status = if scope == Apply::Fleet {
+                        "Applying fleet-wide… (approve GPG signing if prompted)".into()
+                    } else {
+                        "Applying…".into()
+                    };
                     return Task::perform(
                         async move {
                             apply::run(scope, &config, &opened, &skill, &binding, hosts_command)
@@ -422,16 +449,27 @@ impl App {
             Err(error) => text(format!("{error:#}")),
         };
         let can_apply = !self.busy && self.preview.is_ok();
-        let mut actions = row![
-            button("Apply fleet-wide").on_press_maybe(
-                (can_apply && self.settings.fleet.is_some())
-                    .then_some(Message::Apply(Apply::Fleet))
-            ),
-            button(if self.menu_open { "▴" } else { "▾" })
-                .style(button::secondary)
-                .on_press_maybe((!self.busy).then_some(Message::ToggleMenu)),
-        ];
-        if self.local.skills.contains_key(skill) {
+        let fleet_writable = self.fleet_writable();
+        let has_local_override = self.local.skills.contains_key(skill);
+        let mut actions = if fleet_writable {
+            row![
+                button("Apply fleet-wide")
+                    .on_press_maybe(can_apply.then_some(Message::Apply(Apply::Fleet))),
+                button(if self.menu_open { "▴" } else { "▾" })
+                    .style(button::secondary)
+                    .on_press_maybe((!self.busy).then_some(Message::ToggleMenu)),
+            ]
+        } else {
+            row![
+                button("Apply local only").on_press_maybe(
+                    (can_apply && self.settings.local.is_some())
+                        .then_some(Message::Apply(Apply::Local))
+                ),
+                button("Apply fleet-wide").style(button::secondary),
+            ]
+            .spacing(8)
+        };
+        if has_local_override {
             actions = actions.push(
                 button("Drop local override")
                     .style(button::secondary)
@@ -444,8 +482,13 @@ impl App {
                     ),
             );
         }
+        let filter_input = text_input("Filter models…", &self.model_filter)
+            .on_input(Message::FilterModels)
+            .width(220);
         let mut panel = column![
-            row![text(skill).size(24).width(Fill), refresh].align_y(Alignment::Center),
+            row![text(skill).size(24).width(Fill), filter_input, refresh]
+                .spacing(8)
+                .align_y(Alignment::Center),
             row![
                 scrollable(container(editor).padding([0, 8]))
                     .height(Fill)
@@ -464,7 +507,7 @@ impl App {
         ]
         .spacing(8)
         .width(Fill);
-        if self.menu_open {
+        if fleet_writable && self.menu_open {
             panel = panel.push(
                 button("Apply local only").on_press_maybe(
                     (can_apply && self.settings.local.is_some())
@@ -472,13 +515,33 @@ impl App {
                 ),
             );
         }
+        if self.settings.fleet.is_some() && !fleet_writable {
+            panel = panel.push(
+                text("Fleet bindings are read-only on this host; changes apply locally.").size(13),
+            );
+        } else if fleet_writable && has_local_override {
+            panel = panel.push(
+                text("Applying fleet-wide will also remove this skill's local override.").size(13),
+            );
+        }
         panel.push(actions).into()
     }
 
     fn seat_view<'a>(&'a self, i: usize, seat: &'a Seat, can_remove: bool) -> Element<'a, Message> {
         let send = move |edit| Message::EditSeat(i, edit);
-        let model = find_model(&self.models, &seat.route);
+        let group = find_model_group(&self.models, &seat.route).map(|(name, _)| name);
         let auto = auto_label(&self.models, &seat.route);
+        let query = self.model_filter.trim().to_ascii_lowercase();
+        let model_names: Vec<&str> = self
+            .models
+            .keys()
+            .filter(|name| {
+                query.is_empty()
+                    || name.to_ascii_lowercase().contains(&query)
+                    || group == Some(name.as_str())
+            })
+            .map(String::as_str)
+            .collect();
         let mut fields = column![
             row![
                 text(format!("Seat {}", i + 1)).width(Fill),
@@ -503,18 +566,16 @@ impl App {
             ]
             .spacing(8),
             row![
-                pick_list(
-                    self.models.keys().map(String::as_str).collect::<Vec<_>>(),
-                    model.map(|model| model.name.as_str()),
-                    move |name| send(SeatEdit::Model(name.into())),
-                )
+                pick_list(model_names, group, move |name| send(SeatEdit::Model(
+                    name.into()
+                )),)
                 .placeholder(if seat.route.model.is_empty() {
                     "Model"
                 } else {
                     &seat.route.model
                 })
                 .width(Fill),
-                self.provider_picker(i, model, Some(&seat.route), None, |_| true),
+                self.provider_picker(i, group, Some(&seat.route), None, |_, _| true),
             ]
             .spacing(8),
             self.option_pickers(i, None, &seat.route),
@@ -528,13 +589,13 @@ impl App {
                     row![
                         self.provider_picker(
                             i,
-                            model,
+                            group,
                             Some(&fallback.route),
                             Some(j),
-                            |provider| {
-                                provider != seat.route.provider
+                            |provider, slug| {
+                                !same_route(&seat.route, provider, slug)
                                     && !seat.fallbacks.iter().enumerate().any(|(k, entry)| {
-                                        k != j && entry.route.provider == provider
+                                        k != j && same_route(&entry.route, provider, slug)
                                     })
                             }
                         ),
@@ -558,13 +619,15 @@ impl App {
                 .spacing(6),
             );
         }
-        fields = fields.push(self.provider_picker(i, model, None, None, |provider| {
-            provider != seat.route.provider
-                && !seat
-                    .fallbacks
-                    .iter()
-                    .any(|entry| entry.route.provider == provider)
-        }));
+        fields = fields.push(
+            self.provider_picker(i, group, None, None, |provider, slug| {
+                !same_route(&seat.route, provider, slug)
+                    && !seat
+                        .fallbacks
+                        .iter()
+                        .any(|entry| same_route(&entry.route, provider, slug))
+            }),
+        );
         container(fields)
             .style(container::rounded_box)
             .padding(10)
@@ -575,30 +638,18 @@ impl App {
     fn provider_picker<'a>(
         &'a self,
         i: usize,
-        model: Option<&Model>,
+        group: Option<&str>,
         selected: Option<&Route>,
         fallback: Option<usize>,
-        include: impl Fn(&str) -> bool,
+        include: impl Fn(&str, &str) -> bool,
     ) -> Element<'a, Message> {
-        let routes = model.map_or(&[][..], |model| self.models[&model.name].as_slice());
+        let routes = group.map_or(&[][..], |name| self.models[name].as_slice());
         let choices = routes
             .iter()
-            .filter(|(provider, _)| include(provider))
-            .map(|(provider, model)| {
-                let label = if routes
-                    .iter()
-                    .filter(|(id, _)| id == provider)
-                    .nth(1)
-                    .is_some()
-                {
-                    format!("{provider} ({})", model.slug)
-                } else {
-                    provider.clone()
-                };
-                RouteChoice {
-                    label,
-                    route: new_route(provider, model),
-                }
+            .filter(|(provider, model)| include(provider, &model.slug))
+            .map(|(provider, model)| RouteChoice {
+                label: route_label(provider, model, routes),
+                route: new_route(provider, model),
             })
             .collect::<Vec<_>>();
         let choice = selected.and_then(|route| {
@@ -681,10 +732,51 @@ impl fmt::Display for RouteChoice {
     }
 }
 
-fn find_model<'a>(groups: &'a Models, route: &Route) -> Option<&'a Model> {
-    groups.values().flatten().find_map(|(provider, model)| {
-        (provider == &route.provider && model.slug == route.model).then_some(model)
+fn same_route(route: &Route, provider: &str, slug: &str) -> bool {
+    route.provider == provider && route.model == slug
+}
+
+fn route_label(provider: &str, model: &Model, routes: &[(String, Model)]) -> String {
+    if let Some(sub) = model
+        .sub_provider
+        .as_deref()
+        .map(str::trim)
+        .filter(|sub| !sub.is_empty())
+    {
+        let duplicate_sub = routes
+            .iter()
+            .filter(|(id, entry)| {
+                id == provider && entry.sub_provider.as_deref().map(str::trim) == Some(sub)
+            })
+            .nth(1)
+            .is_some();
+        if duplicate_sub {
+            format!("{provider} · {sub} ({})", model.slug)
+        } else {
+            format!("{provider} · {sub}")
+        }
+    } else if routes
+        .iter()
+        .filter(|(id, _)| id == provider)
+        .nth(1)
+        .is_some()
+    {
+        format!("{provider} ({})", model.slug)
+    } else {
+        provider.to_owned()
+    }
+}
+
+fn find_model_group<'a>(groups: &'a Models, route: &Route) -> Option<(&'a str, &'a Model)> {
+    groups.iter().find_map(|(name, routes)| {
+        routes.iter().find_map(|(provider, model)| {
+            same_route(route, provider, &model.slug).then_some((name.as_str(), model))
+        })
     })
+}
+
+fn find_model<'a>(groups: &'a Models, route: &Route) -> Option<&'a Model> {
+    find_model_group(groups, route).map(|(_, model)| model)
 }
 
 fn new_route(provider: &str, model: &Model) -> Route {
@@ -700,15 +792,24 @@ fn new_route(provider: &str, model: &Model) -> Route {
 fn default_options(model: &Model, route: &mut Route) {
     for descriptor in &model.capabilities.option_descriptors {
         if descriptor.kind == "select" {
-            if let Some(value) = descriptor
+            let default = descriptor
                 .options
                 .iter()
                 .find(|value| value.is_default == Some(true))
-            {
+                .map(|value| value.id.as_str())
+                .or_else(|| {
+                    descriptor.current_value.as_deref().filter(|current| {
+                        descriptor
+                            .options
+                            .iter()
+                            .any(|option| option.id == *current)
+                    })
+                });
+            if let Some(value) = default {
                 route
                     .options
                     .entry(descriptor.id.clone())
-                    .or_insert_with(|| value.id.clone());
+                    .or_insert_with(|| value.to_owned());
             }
         }
     }
@@ -727,11 +828,10 @@ fn fill_defaults(models: &Models, binding: &mut SkillBinding) {
 }
 
 fn auto_label(models: &Models, route: &Route) -> Option<String> {
-    let model = find_model(models, route)?;
+    let (name, _) = find_model_group(models, route)?;
     Some(
-        std::iter::once(&model.name)
-            .chain(route.options.values())
-            .map(String::as_str)
+        std::iter::once(name)
+            .chain(route.options.values().map(String::as_str))
             .collect::<Vec<_>>()
             .join(" "),
     )
@@ -745,7 +845,7 @@ fn edit_seat(seat: &mut Seat, edit: SeatEdit, models: &Models) {
             seat.label = (!label.is_empty()).then_some(label);
         }
         SeatEdit::Model(name) => {
-            if find_model(models, &seat.route).is_none_or(|model| model.name != name) {
+            if find_model_group(models, &seat.route).is_none_or(|(group, _)| group != name) {
                 if let Some((provider, model)) = models.get(&name).and_then(|routes| routes.first())
                 {
                     seat.route = new_route(provider, model);
@@ -756,7 +856,7 @@ fn edit_seat(seat: &mut Seat, edit: SeatEdit, models: &Models) {
         SeatEdit::Route(None, route) => {
             if seat.route.provider != route.provider || seat.route.model != route.model {
                 seat.fallbacks
-                    .retain(|entry| entry.route.provider != route.provider);
+                    .retain(|entry| !same_route(&entry.route, &route.provider, &route.model));
                 seat.route = route;
             }
         }
@@ -800,31 +900,169 @@ fn edit_seat(seat: &mut Seat, edit: SeatEdit, models: &Models) {
 mod tests {
     use super::*;
     use apply::edit_docs;
+    use skillnet::models::{Capabilities, ModelOption, OptionDescriptor};
 
     #[test]
     fn groups_routes_by_display_name_not_slug() {
         let models = group_models(
-            [("first", "org/model"), ("second", "model")]
-                .map(|(id, slug)| Provider {
-                    instance_id: id.into(),
-                    display_name: id.into(),
-                    enabled: true,
-                    status: String::new(),
-                    models: vec![Model {
-                        slug: slug.into(),
-                        name: "The Model".into(),
-                        capabilities: Default::default(),
-                    }],
-                })
-                .into(),
+            [
+                ("first", "org/model", None, "The Model"),
+                ("second", "model", None, "The Model"),
+                ("claudeAgent", "claude-opus-5-5", None, "Claude Opus 5.5"),
+                (
+                    "opencode",
+                    "claude-agent/opus",
+                    Some("Claude Agent"),
+                    "Opus 5.5",
+                ),
+            ]
+            .map(|(id, slug, sub_provider, name)| Provider {
+                instance_id: id.into(),
+                display_name: id.into(),
+                enabled: true,
+                status: String::new(),
+                models: vec![Model {
+                    slug: slug.into(),
+                    name: name.into(),
+                    sub_provider: sub_provider.map(str::to_owned),
+                    capabilities: Default::default(),
+                }],
+            })
+            .into(),
         );
-        assert_eq!(models.len(), 1);
+        assert_eq!(models.len(), 2);
         let routes = &models["The Model"];
         assert_eq!(routes.len(), 2);
         assert_eq!(routes[0].0, "first");
         assert_eq!(routes[0].1.slug, "org/model");
         assert_eq!(routes[1].0, "second");
         assert_eq!(routes[1].1.slug, "model");
+        let opus = &models["Claude Opus 5.5"];
+        assert_eq!(opus.len(), 2);
+        assert_eq!(opus[1].0, "opencode");
+        assert_eq!(opus[1].1.slug, "claude-agent/opus");
+    }
+
+    #[test]
+    fn allows_multiple_opencode_subproviders_as_fallbacks_and_labels_them() {
+        let routes = vec![
+            (
+                "opencode".to_owned(),
+                Model {
+                    slug: "openai/gpt-6.2-sol".into(),
+                    name: "GPT-6.2 Sol".into(),
+                    sub_provider: Some("OpenAI".into()),
+                    capabilities: Default::default(),
+                },
+            ),
+            (
+                "opencode".to_owned(),
+                Model {
+                    slug: "opencode/gpt-6.2-sol".into(),
+                    name: "GPT-6.2 Sol".into(),
+                    sub_provider: Some("Personal / OpenCode".into()),
+                    capabilities: Default::default(),
+                },
+            ),
+            (
+                "opencode".to_owned(),
+                Model {
+                    slug: "cloudflare-ai-gateway/openai/gpt-6.2-sol".into(),
+                    name: "GPT-6.2 Sol".into(),
+                    sub_provider: Some("Cloudflare AI Gateway".into()),
+                    capabilities: Default::default(),
+                },
+            ),
+        ];
+        assert_eq!(
+            route_label("opencode", &routes[0].1, &routes),
+            "opencode · OpenAI"
+        );
+        assert_eq!(
+            route_label("opencode", &routes[2].1, &routes),
+            "opencode · Cloudflare AI Gateway"
+        );
+        let models = Models::from([("GPT-6.2 Sol".into(), routes)]);
+        let mut seat = Seat {
+            name: "reviewer".into(),
+            label: None,
+            route: Route {
+                provider: "opencode".into(),
+                model: "openai/gpt-6.2-sol".into(),
+                options: BTreeMap::new(),
+            },
+            fallbacks: vec![
+                Fallback {
+                    route: Route {
+                        provider: "opencode".into(),
+                        model: "opencode/gpt-6.2-sol".into(),
+                        options: BTreeMap::new(),
+                    },
+                    enabled: true,
+                },
+                Fallback {
+                    route: Route {
+                        provider: "opencode".into(),
+                        model: "cloudflare-ai-gateway/openai/gpt-6.2-sol".into(),
+                        options: BTreeMap::new(),
+                    },
+                    enabled: true,
+                },
+            ],
+        };
+        // Switching primary to another opencode sub-provider drops only that
+        // exact route from fallbacks, preserving the other opencode fallback.
+        edit_seat(
+            &mut seat,
+            SeatEdit::Route(
+                None,
+                Route {
+                    provider: "opencode".into(),
+                    model: "opencode/gpt-6.2-sol".into(),
+                    options: BTreeMap::new(),
+                },
+            ),
+            &models,
+        );
+        assert_eq!(seat.fallbacks.len(), 1);
+        assert_eq!(
+            seat.fallbacks[0].route.model,
+            "cloudflare-ai-gateway/openai/gpt-6.2-sol"
+        );
+    }
+
+    #[test]
+    fn default_options_falls_back_to_current_value() {
+        let model = Model {
+            slug: "gemini-4-neon".into(),
+            name: "Gemini 4 Neon".into(),
+            sub_provider: None,
+            capabilities: Capabilities {
+                option_descriptors: vec![OptionDescriptor {
+                    id: "thought_level".into(),
+                    label: "Thinking Level".into(),
+                    kind: "select".into(),
+                    options: vec![
+                        ModelOption {
+                            id: "low".into(),
+                            label: "Low".into(),
+                            is_default: None,
+                        },
+                        ModelOption {
+                            id: "high".into(),
+                            label: "High".into(),
+                            is_default: None,
+                        },
+                    ],
+                    current_value: Some("high".into()),
+                }],
+            },
+        };
+        let route = new_route("antigravity", &model);
+        assert_eq!(
+            route.options.get("thought_level").map(String::as_str),
+            Some("high")
+        );
     }
 
     #[test]

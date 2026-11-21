@@ -147,8 +147,9 @@ pub fn run(
                 Ok(output) => {
                     log.push(command_output(&output));
                     if let Some(path) = fleet_path {
-                        if let Err(error) = publish(&path, skill) {
-                            log.push(format!("{error:#}"));
+                        match publish(&path, skill) {
+                            Ok(()) => log.push("Published fleet bindings.".into()),
+                            Err(error) => log.push(format!("{error:#}")),
                         }
                     }
                 }
@@ -318,8 +319,38 @@ fn publish(path: &Utf8Path, skill: &str) -> Result<()> {
         remote,
         &format!("{head}:{remote_ref}"),
     ]))
-    .context("git push")?;
+    .context("committed locally; git push failed (pull/rebase if remote moved)")?;
     Ok(())
+}
+
+/// Check whether `path` can be written by `skillnet-ui` (not in `/nix/store`,
+/// not a symlink, and not read-only).
+pub fn is_writable_target(path: &Utf8Path) -> bool {
+    if path == Utf8Path::new("/nix/store") || path.as_str().starts_with("/nix/store/") {
+        return false;
+    }
+    match fs::symlink_metadata(path) {
+        Ok(meta) => {
+            if meta.file_type().is_symlink() || meta.permissions().readonly() {
+                return false;
+            }
+            parent_dir(path)
+                .and_then(|dir| fs::metadata(dir).ok())
+                .is_some_and(|dir| !dir.permissions().readonly())
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            let mut cursor = parent_dir(path);
+            while let Some(dir) = cursor {
+                match fs::metadata(dir) {
+                    Ok(meta) => return meta.is_dir() && !meta.permissions().readonly(),
+                    Err(err) if err.kind() == ErrorKind::NotFound => cursor = dir.parent(),
+                    Err(_) => return false,
+                }
+            }
+            false
+        }
+        Err(_) => false,
+    }
 }
 
 pub fn hosts(command: &[String]) -> Result<String, String> {
@@ -389,6 +420,32 @@ mod tests {
     #[test]
     fn sync_never_prunes_views() {
         assert!(!SYNC_ARGS.contains(&"--allow-delete"));
+    }
+
+    #[test]
+    fn writable_target_rejects_nix_store_symlinks_and_readonly() {
+        assert!(!is_writable_target(Utf8Path::new(
+            "/nix/store/abc-SkillModels.pkl"
+        )));
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(temp.path()).unwrap();
+        let writable = root.join("SkillModels.pkl");
+        assert!(is_writable_target(&writable));
+        fs::write(
+            &writable,
+            "// Managed by skillnet; edits are overwritten.\n",
+        )
+        .unwrap();
+        assert!(is_writable_target(&writable));
+
+        let link = root.join("link.pkl");
+        std::os::unix::fs::symlink(&writable, &link).unwrap();
+        assert!(!is_writable_target(&link));
+
+        let mut perms = fs::metadata(&writable).unwrap().permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&writable, perms).unwrap();
+        assert!(!is_writable_target(&writable));
     }
 
     #[test]
