@@ -1,0 +1,57 @@
+---
+source: tests/cli.rs
+expression: "help_output(&[\"--help\"])"
+---
+Manage canonical AI skill stores, materialise configured skill view symlinks, and record calibration data for multi-phase-plan.
+
+Usage: skillnet [OPTIONS] [COMMAND]
+
+Commands:
+  status        Show scope divergence and catalog health
+  doctor        Check configured scopes for invariant violations
+  completions   Generate shell completion scripts
+  view          Materialise and inspect global view symlinks
+  sync          Materialise every configured global view and project view in one shot
+  export        Export repo-stored skills into the configured global skill store
+  config        Manage skillnet's configuration files
+  project       Manage configured project roots
+  subscription  Sync subscribed skill repositories into local skill directories
+  skill         List, inspect, and edit mirrored skill directories
+  scope         Inspect configured canonical scopes
+  catalog       Generate and validate skill catalog metadata
+  template      Preview model-bound skill templates
+  models        Inspect cached T3 provider models
+  calibration   Record and verify multi-phase-plan calibration data
+  hook          Ingest shell hook payloads
+  usage         Record and report normalized skill usage
+
+Options:
+      --config <CONFIG>
+          Path to the skillnet TOML configuration file
+
+          [env: SKILLNET_CONFIG=]
+
+      --mirror-root <MIRROR_ROOT>
+          Root directory containing the global skill mirror directory
+
+          [env: SKILLNET_MIRROR_ROOT=]
+
+      --catalog-config <CATALOG_CONFIG>
+          Path to the skill catalog metadata configuration file
+
+          [env: SKILLNET_CATALOG_CONFIG=]
+
+      --database-url <URL>
+          Postgres URL for the calibration database
+
+      --dry-run
+          Print planned filesystem changes without mutating files
+
+      --allow-dirty-destination
+          Allow mutating the mirror destination even when its Git working tree is dirty
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version

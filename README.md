@@ -346,6 +346,43 @@ Plain URLs in `programs.skillnet.database.url` are written into the Nix store;
 use `programs.skillnet.database.urlFile` with `sops-nix`, `agenix`, or another
 secret-backed file for production credentials.
 
+## Model-bound skill templates
+
+A global canonical skill with `SKILL.md.tmpl` instead of `SKILL.md` is
+rendered into a regular `SKILL.md` when you sync the global bundle. The
+canonical source stays untouched. Other children link into the bundle, except
+the template and its optional `skillnet-template.toml` metadata.
+
+Template tokens are `{{name}}`, `{{seat_count}}`, and `{{seat_labels}}`.
+Each `{{#seats}}` … `{{/seats}}` block (blocks may follow each other but not nest) repeats for each seat and can also use
+`{{seat.name}}`, `{{seat.label}}`, and `{{seat.dispatch}}`. Standalone block
+tags do not add blank lines. To require exactly one seat, put `min = 1` and
+`max = 1` under `[seats]` in `skillnet-template.toml`. Without metadata the
+minimum is one and there is no maximum.
+
+```toml
+[templates]
+fleet = "~/canix/lib/ai/SkillModels.pkl"                # shared, versioned
+local = "~/.config/skillnet/skill-models.local.pkl"     # this host only
+
+[models]
+t3_caches = "~/.local/share/t3code-native/caches"
+```
+
+Both sections are optional. `local` loads after `fleet`: it replaces each skill
+it names, and replaces `ui` if it supplies that section. A configured file that
+does not exist is skipped. A template without a binding stops global sync.
+Global sync builds a bundle when a canonical template exists.
+`ui.providers` can restrict the model list to named provider instance IDs.
+Omit it or set it to `null` to list all enabled providers.
+
+```sh
+skillnet template render sol-loop                          # preview without writing
+skillnet template render sol-loop --bindings ./models.pkl # override configured files
+skillnet models list --json                              # use configured or default T3 caches
+skillnet models list --caches ./snapshots                 # override the cache directory
+```
+
 ## Quick Start
 
 Inspect configured scopes and current view drift:

@@ -20,8 +20,8 @@ use crate::{
 };
 
 use args::{
-    CatalogCommand, Cli, Command, ProjectCommand, ScopeCommand, SkillCommand, SubscriptionCommand,
-    UsageCommand, ViewCommand,
+    CatalogCommand, Cli, Command, ModelsCommand, ProjectCommand, ScopeCommand, SkillCommand,
+    SubscriptionCommand, TemplateCommand, UsageCommand, ViewCommand,
 };
 use scope::{resolve_scope, resolve_scopes};
 
@@ -39,6 +39,7 @@ pub fn run() -> Result<()> {
         return commands::config::run(command, dry_run);
     }
 
+    let explicit_config = config.is_some();
     let config = resolve_config_path(config)?;
     let catalog_config = resolve_catalog_config_path(catalog_config)?;
     let command = command.unwrap_or(Command::Status {
@@ -87,6 +88,16 @@ pub fn run() -> Result<()> {
             None
         };
         return commands::usage::run(args, target, context.as_ref());
+    }
+
+    if let Command::Models {
+        command: ModelsCommand::List { json, caches },
+    } = command
+    {
+        let config = (explicit_config || config.exists())
+            .then(|| Config::load(&config))
+            .transpose()?;
+        return list_models(config.as_ref(), json, caches);
     }
 
     let ctx = Context::load(
@@ -152,12 +163,84 @@ pub fn run() -> Result<()> {
         Command::Project { command } => run_project_command(&ctx, command),
         Command::Subscription { command } => run_subscription_command(&ctx, command),
         Command::Catalog { command } => run_catalog_command(&ctx, command),
+        Command::Template {
+            command: TemplateCommand::Render { skill, bindings },
+        } => {
+            crate::bundle::validate_skill_name(&skill, "template skill")?;
+            let target = ctx.config.global_target(&ctx.mirror_root)?;
+            let path = target.canonical_path.join(&skill);
+            if !crate::templates::is_template(&path) {
+                anyhow::bail!("`{skill}` is not a canonical template at {path}");
+            }
+            let (paths, doc) = if bindings.is_empty() {
+                let paths = ctx.config.templates.binding_paths()?;
+                let doc = crate::templates::load_existing(&paths)?;
+                (paths, doc)
+            } else {
+                let paths = bindings
+                    .iter()
+                    .map(|path| expand_path(path.as_str()))
+                    .collect::<Result<Vec<_>>>()?;
+                let doc = crate::templates::load_bindings(&paths)?;
+                (paths, doc)
+            };
+            print!(
+                "{}",
+                crate::templates::render_dir(&path, &skill, &doc, &paths)?
+            );
+            Ok(())
+        }
+        Command::Models { .. } => unreachable!("handled before context loading"),
         Command::Config { .. } => unreachable!("handled before config loading"),
         Command::Calibration(_) => unreachable!("handled before config loading"),
         Command::Hook(_) => unreachable!("handled before config loading"),
         Command::Usage(_) => unreachable!("handled before context loading"),
         Command::Completions { .. } => unreachable!("handled before config loading"),
     }
+}
+
+fn list_models(config: Option<&Config>, json: bool, caches: Option<Utf8PathBuf>) -> Result<()> {
+    let paths = config
+        .map(|config| config.templates.binding_paths())
+        .transpose()?
+        .unwrap_or_default();
+    let allowlist = crate::templates::load_existing(&paths)?
+        .ui
+        .and_then(|ui| ui.providers);
+    let caches = caches
+        .as_deref()
+        .map(|path| path.as_str())
+        .or_else(|| config.and_then(|config| config.models.t3_caches.as_deref()))
+        .unwrap_or("~/.local/share/t3code-native/caches");
+    let mut providers = crate::models::load_t3_caches(&expand_path(caches)?)?;
+    if let Some(allowlist) = allowlist {
+        providers.retain(|provider| allowlist.contains(&provider.instance_id));
+    }
+    if json {
+        println!("{}", serde_json::to_string_pretty(&providers)?);
+    } else {
+        for provider in providers {
+            for model in provider.models {
+                let mut line = format!("{} {}", provider.instance_id, model.slug);
+                for option in model.capabilities.option_descriptors {
+                    use std::fmt::Write as _;
+                    let values = if option.kind == "boolean" && option.options.is_empty() {
+                        "true|false".into()
+                    } else {
+                        option
+                            .options
+                            .iter()
+                            .map(|value| value.id.as_str())
+                            .collect::<Vec<_>>()
+                            .join("|")
+                    };
+                    let _ = write!(line, " {}={values}", option.id);
+                }
+                println!("{line}");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn resolve_config_path(flag_or_env: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> {

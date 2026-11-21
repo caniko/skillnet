@@ -1,9 +1,12 @@
 use std::fs;
 
 use anyhow::{Context as AnyhowContext, Result};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 
-use crate::commands::Context;
+use crate::{
+    commands::Context,
+    templates::{canonical_skill_dirs, is_template, TEMPLATE_FILE},
+};
 
 use super::config::CatalogConfig;
 use super::entry::SkillEntry;
@@ -13,7 +16,7 @@ pub(super) fn load_entries(ctx: &Context, config: &CatalogConfig) -> Result<Vec<
     let mut entries = Vec::new();
     let global_target = ctx.config.global_target(&ctx.mirror_root)?;
     if global_target.canonical_path.exists() {
-        for skill in skill_dirs(&global_target.canonical_path)? {
+        for skill in canonical_skill_dirs(&global_target.canonical_path)? {
             entries.push(entry_from_skill(config, &skill, None)?);
         }
     }
@@ -21,7 +24,8 @@ pub(super) fn load_entries(ctx: &Context, config: &CatalogConfig) -> Result<Vec<
     for project in &ctx.config.projects {
         let target = ctx.config.project_target(&ctx.mirror_root, project)?;
         if target.canonical_path.exists() {
-            for skill in skill_dirs(&target.canonical_path)? {
+            // Templates are global-only; project sync cannot render them.
+            for skill in crate::mirror::mirror_skill_dirs(&target.canonical_path)? {
                 entries.push(entry_from_skill(config, &skill, Some(&project.name))?);
             }
         }
@@ -36,7 +40,11 @@ fn entry_from_skill(
     skill_dir: &Utf8Path,
     project: Option<&str>,
 ) -> Result<SkillEntry> {
-    let skill_file = skill_dir.join("SKILL.md");
+    let skill_file = skill_dir.join(if is_template(skill_dir) {
+        TEMPLATE_FILE
+    } else {
+        "SKILL.md"
+    });
     let body = fs::read_to_string(&skill_file)
         .with_context(|| format!("failed to read skill file {skill_file}"))?;
     let frontmatter = parse_frontmatter(&body);
@@ -81,18 +89,4 @@ fn entry_from_skill(
     entry.related_skills.sort();
     entry.related_skills.dedup();
     Ok(entry)
-}
-
-fn skill_dirs(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
-    let mut dirs = Vec::new();
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        let path = Utf8PathBuf::from_path_buf(entry.path())
-            .map_err(|p| anyhow::anyhow!("non-UTF-8 path in mirror: {}", p.display()))?;
-        if path.is_dir() && path.join("SKILL.md").is_file() {
-            dirs.push(path);
-        }
-    }
-    dirs.sort();
-    Ok(dirs)
 }

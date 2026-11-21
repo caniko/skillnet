@@ -6,6 +6,7 @@
 //! `.skillnet/deps` directory.
 
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     fs,
     os::{unix::fs as unix_fs, unix::fs::PermissionsExt},
@@ -15,7 +16,7 @@ use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use walkdir::WalkDir;
 
-use crate::{manifest, mirror::mirror_skill_dirs};
+use crate::{fs_ops::resolve_existing_ancestor, manifest, mirror::mirror_skill_dirs, templates};
 
 #[cfg(test)]
 mod exclusion_tests;
@@ -36,12 +37,14 @@ pub struct BundleSelection<'a> {
     pub host: Option<&'a str>,
     pub excluded_skills: &'a [String],
     pub excluded_provider_skills: &'a [String],
+    pub template_bindings: Option<&'a [Utf8PathBuf]>,
 }
 
 #[derive(Debug, Clone)]
 struct SkillBundle {
     source: Utf8PathBuf,
     source_is_file: bool,
+    rendered: Option<String>,
     role: String,
     dependencies: Vec<String>,
     users: Option<Vec<String>>,
@@ -135,6 +138,7 @@ pub fn plan_for_access_at(
             host,
             excluded_skills: &[],
             excluded_provider_skills: &[],
+            template_bindings: Some(&[]),
         },
     )
 }
@@ -151,6 +155,7 @@ pub fn plan_for_selection_at(
         host,
         excluded_skills,
         excluded_provider_skills,
+        template_bindings,
     } = selection;
     let excluded: BTreeSet<_> = excluded_skills.iter().collect();
     let excluded_provider: BTreeSet<_> = excluded_provider_skills.iter().collect();
@@ -170,15 +175,20 @@ pub fn plan_for_selection_at(
             .with_context(|| format!("external Skillnet manifest does not exist: {path}"))?;
         manifests.push((manifest, true));
     }
-    if manifests.is_empty() && provider_roots.is_empty() && excluded.is_empty() {
+    let needs_bundle = !manifests.is_empty() || !provider_roots.is_empty() || !excluded.is_empty();
+    if !needs_bundle && template_bindings.is_none() {
         return Ok(None);
     }
     if !canonical.is_dir() && manifests.iter().any(|(_, external)| !*external) {
         bail!("manifest canonical root does not exist or is not a directory: {canonical}");
     }
     let sources: BTreeMap<String, Utf8PathBuf> = if canonical.is_dir() {
-        mirror_skill_dirs(canonical)?
-            .into_iter()
+        let dirs = if template_bindings.is_some() {
+            templates::canonical_skill_dirs(canonical)?
+        } else {
+            mirror_skill_dirs(canonical)?
+        };
+        dirs.into_iter()
             .map(|path| {
                 let name = path
                     .file_name()
@@ -190,6 +200,16 @@ pub fn plan_for_selection_at(
     } else {
         BTreeMap::new()
     };
+    let has_templates = sources.values().any(|path| templates::is_template(path));
+    if !needs_bundle && !has_templates {
+        return Ok(None);
+    }
+    // Evaluate bindings only when a template needs them, so a broken binding
+    // file never affects template-free sync.
+    let bindings = template_bindings
+        .filter(|_| has_templates)
+        .map(templates::load_existing)
+        .transpose()?;
 
     let mut skills = BTreeMap::new();
     let canonical_manifest = manifests
@@ -228,6 +248,7 @@ pub fn plan_for_selection_at(
             SkillBundle {
                 source: source.clone(),
                 source_is_file: false,
+                rendered: None,
                 role,
                 dependencies,
                 users,
@@ -266,6 +287,7 @@ pub fn plan_for_selection_at(
                     SkillBundle {
                         source: source_path,
                         source_is_file,
+                        rendered: None,
                         role: spec.role.clone(),
                         users: spec
                             .users
@@ -315,6 +337,7 @@ pub fn plan_for_selection_at(
                 SkillBundle {
                     source,
                     source_is_file: false,
+                    rendered: None,
                     role: "entrypoint".to_string(),
                     dependencies: Vec::new(),
                     users: None,
@@ -389,6 +412,26 @@ pub fn plan_for_selection_at(
         skills.retain(|name, _| !denied.contains(name));
     }
 
+    if let Some((bindings, paths)) = bindings.as_ref().zip(template_bindings) {
+        for (name, skill) in &mut skills {
+            if let Some(source) = sources
+                .get(name)
+                .filter(|path| templates::is_template(path))
+            {
+                skill.rendered = Some(templates::render_dir(source, name, bindings, paths)?);
+            }
+        }
+    }
+    if skills.values().any(|skill| skill.rendered.is_some()) {
+        let resolved_bundle = resolve_existing_ancestor(&bundle_root)?;
+        let resolved_canonical = resolve_existing_ancestor(canonical)?;
+        if resolved_bundle.starts_with(&resolved_canonical)
+            || resolved_canonical.starts_with(&resolved_bundle)
+        {
+            bail!("template bundle {bundle_root} overlaps canonical source {canonical}");
+        }
+    }
+
     let expected = skills
         .iter()
         .filter(|(_, skill)| skill.role == "entrypoint")
@@ -442,6 +485,8 @@ impl BundlePlan {
         self.skills.get(skill).map(|skill| {
             if skill.source_is_file {
                 skill.source.clone()
+            } else if skill.rendered.is_some() {
+                skill.source.join(templates::TEMPLATE_FILE)
             } else {
                 skill.source.join("SKILL.md")
             }
@@ -501,7 +546,11 @@ impl BundlePlan {
             let source = self
                 .entrypoint_source(skill)
                 .expect("skill_names must come from the bundle plan");
-            match (fs::read(&entrypoint), fs::read(&source)) {
+            let expected = match &self.skills[skill].rendered {
+                Some(rendered) => Ok(Cow::Borrowed(rendered.as_bytes())),
+                None => fs::read(&source).map(Cow::Owned),
+            };
+            match (fs::read(&entrypoint), expected) {
                 (Ok(generated), Ok(canonical)) if generated == canonical => {}
                 (Ok(_), Ok(_)) => issues.push(format!(
                     "generated entrypoint for `{skill}` is stale at {entrypoint}; run `skillnet view sync`"
@@ -542,7 +591,12 @@ impl BundlePlan {
                 fs::copy(&skill.source, staging.join("SKILL.md"))
                     .with_context(|| format!("failed to copy source file {}", skill.source))?;
             } else {
-                link_tree_children(&skill.source, &staging)?;
+                if let Some(rendered) = &skill.rendered {
+                    fs::write(staging.join("SKILL.md"), rendered).with_context(|| {
+                        format!("failed to write rendered entrypoint for `{name}`")
+                    })?;
+                }
+                link_tree_children(&skill.source, &staging, skill.rendered.is_some())?;
             }
             let deps = staging.join(".skillnet/deps");
             if !skill.dependencies.is_empty() {
@@ -588,7 +642,7 @@ impl BundlePlan {
     }
 }
 
-fn link_tree_children(source: &Utf8Path, staging: &Utf8Path) -> Result<()> {
+fn link_tree_children(source: &Utf8Path, staging: &Utf8Path, rendered: bool) -> Result<()> {
     for entry in
         fs::read_dir(source).with_context(|| format!("failed to read canonical skill {source}"))?
     {
@@ -598,6 +652,14 @@ fn link_tree_children(source: &Utf8Path, staging: &Utf8Path) -> Result<()> {
         let name = child
             .file_name()
             .context("canonical skill child has no final component")?;
+        if rendered
+            && matches!(
+                name,
+                "SKILL.md" | templates::TEMPLATE_FILE | templates::META_FILE
+            )
+        {
+            continue;
+        }
         if name == "SKILL.md" {
             fs::copy(&child, staging.join(name))
                 .with_context(|| format!("failed to copy bundle entrypoint {child}"))?;
@@ -667,7 +729,7 @@ pub(crate) fn validate_scope_name(name: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate_skill_name(name: &str, kind: &str) -> Result<()> {
+pub(crate) fn validate_skill_name(name: &str, kind: &str) -> Result<()> {
     if name.is_empty() || name.starts_with('.') || name.contains('/') || name.contains('\\') {
         bail!("invalid {kind} name `{name}`; names must be single path components");
     }
