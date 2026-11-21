@@ -209,8 +209,6 @@ pub fn plan_for_selection_at(
     if !needs_bundle && !has_templates {
         return Ok(None);
     }
-    // Evaluate bindings only when a template needs them, so a broken binding
-    // file never affects template-free sync.
     let mut skills = BTreeMap::new();
     let canonical_manifest = manifests
         .iter()
@@ -437,14 +435,13 @@ pub fn plan_for_selection_at(
             }
         }
     }
-    if skills.values().any(|skill| skill.rendered.is_some()) {
-        let resolved_bundle = resolve_existing_ancestor(&bundle_root)?;
-        let resolved_canonical = resolve_existing_ancestor(canonical)?;
-        if resolved_bundle.starts_with(&resolved_canonical)
-            || resolved_canonical.starts_with(&resolved_bundle)
-        {
-            bail!("template bundle {bundle_root} overlaps canonical source {canonical}");
-        }
+    // Materializing prunes the bundle root, so it must never overlap sources.
+    let resolved_bundle = resolve_existing_ancestor(&bundle_root)?;
+    let resolved_canonical = resolve_existing_ancestor(canonical)?;
+    if resolved_bundle.starts_with(&resolved_canonical)
+        || resolved_canonical.starts_with(&resolved_bundle)
+    {
+        bail!("bundle {bundle_root} overlaps canonical source {canonical}");
     }
 
     let expected = skills

@@ -81,13 +81,18 @@ pub fn run(
             templates::load_existing(path.as_slice()).with_context(|| format!("reading {path:?}"))
         };
         let fresh_fleet = load(&fleet_path)?;
+        // Whatever binding the skill ends up with must render against the
+        // current template before any file is written.
         if scope == Apply::Drop {
-            // The fleet binding must render before the working override goes.
             let fallback = fresh_fleet.skills.get(skill).with_context(|| {
                 format!("no fleet binding for `{skill}` to fall back to; local override kept")
             })?;
             templates::render_skill(canonical, skill, fallback).with_context(|| {
                 format!("fleet binding for `{skill}` does not render; local override kept")
+            })?;
+        } else {
+            templates::render_skill(canonical, skill, binding).with_context(|| {
+                format!("binding for `{skill}` does not render; nothing written")
             })?;
         }
         let (fleet, local) = edit_docs(&fresh_fleet, &load(&local_path)?, scope, skill, binding);
