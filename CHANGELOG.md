@@ -14,7 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Render model-bound skill templates into global bundles without changing
   canonical skills. Preview them with `skillnet template render`.
 - Inspect cached T3 provider models and options with `skillnet models list`.
-- Add `skillnet-ui`, an iced editor for template model bindings (Linux).
+- Add `skillnet-ui`, an iced editor for template model bindings (Linux). The
+  `templates` and `models` modules are public only for it; no stable library
+  API is promised.
 
 ### Changed
 

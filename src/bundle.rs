@@ -443,9 +443,21 @@ pub fn plan_for_selection_at(
     {
         bail!("bundle {bundle_root} overlaps canonical source {canonical}");
     }
-    // Pruning would also delete a binding file kept inside the bundle.
-    for path in binding_paths.iter().flatten() {
-        if resolve_existing_ancestor(path)?.starts_with(&resolved_bundle) {
+    // Pruning would also delete a binding file (or a link to one) kept inside
+    // the bundle, whether or not a template survived the filters. An
+    // unexpandable path names no file pruning could reach.
+    let configured = template_config
+        .map(TemplatesConfig::binding_paths)
+        .and_then(Result::ok)
+        .unwrap_or_default();
+    for path in &configured {
+        let entry = match (path.parent(), path.file_name()) {
+            (Some(parent), Some(name)) => resolve_existing_ancestor(parent)?.join(name),
+            _ => resolve_existing_ancestor(path)?,
+        };
+        if entry.starts_with(&resolved_bundle)
+            || resolve_existing_ancestor(path)?.starts_with(&resolved_bundle)
+        {
             bail!("binding file {path} is inside bundle {bundle_root}");
         }
     }

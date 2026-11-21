@@ -323,4 +323,18 @@ fn binding_files_inside_the_bundle_are_refused() {
         .failure()
         .stderr(contains("inside bundle"));
     assert!(inside.is_file());
+
+    // A link inside the bundle to a file outside it would be unlinked too.
+    let outside = temp.path().join("outside.pkl");
+    fs::rename(&inside, &outside).unwrap();
+    std::os::unix::fs::symlink(&outside, &inside).unwrap();
+    Command::cargo_bin("skillnet")
+        .unwrap()
+        .arg("--config")
+        .arg(&config)
+        .args(["view", "sync", "--all"])
+        .assert()
+        .failure()
+        .stderr(contains("inside bundle"));
+    assert!(inside.is_symlink());
 }

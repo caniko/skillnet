@@ -184,22 +184,28 @@ impl App {
         self.selected = Some(index);
         self.menu_open = false;
         let (skill, _) = &self.templates[index];
-        self.drafts.entry(skill.clone()).or_insert_with(|| {
-            let mut draft = self
-                .local
-                .skills
-                .get(skill)
-                .or_else(|| self.fleet.skills.get(skill))
-                .cloned()
-                .unwrap_or(SkillBinding { seats: Vec::new() });
-            fill_defaults(&self.models, &mut draft);
-            for seat in &mut draft.seats {
-                if seat.label.is_some() && seat.label == auto_label(&self.models, &seat.route) {
-                    seat.label = None;
-                }
+        if !self.drafts.contains_key(skill) {
+            let draft = self.fresh_draft(skill);
+            self.drafts.insert(skill.clone(), draft);
+        }
+    }
+
+    /// The draft a skill starts from: its local, else fleet, binding on disk.
+    fn fresh_draft(&self, skill: &str) -> SkillBinding {
+        let mut draft = self
+            .local
+            .skills
+            .get(skill)
+            .or_else(|| self.fleet.skills.get(skill))
+            .cloned()
+            .unwrap_or(SkillBinding { seats: Vec::new() });
+        fill_defaults(&self.models, &mut draft);
+        for seat in &mut draft.seats {
+            if seat.label.is_some() && seat.label == auto_label(&self.models, &seat.route) {
+                seat.label = None;
             }
-            draft
-        });
+        }
+        draft
     }
 
     fn rendered_binding(&self, skill: &str) -> SkillBinding {
@@ -247,6 +253,16 @@ impl App {
                     hosts,
                     dropped,
                 } = *result;
+                // Unedited drafts reload from the refreshed files; edits stay.
+                let unedited: Vec<String> = app
+                    .drafts
+                    .iter()
+                    .filter(|(skill, draft)| **draft == app.fresh_draft(skill))
+                    .map(|(skill, _)| skill.clone())
+                    .collect();
+                for skill in unedited {
+                    app.drafts.remove(&skill);
+                }
                 if let Some(fleet) = fleet {
                     app.fleet = fleet;
                 }
@@ -256,11 +272,12 @@ impl App {
                 if let Some(hosts) = hosts {
                     app.hosts = Some(hosts);
                 }
-                if dropped {
-                    if let Some(index) = app.selected {
+                if let Some(index) = app.selected {
+                    if dropped {
                         app.drafts.remove(&app.templates[index].0);
-                        app.select(index);
                     }
+                    // Recreates the selected draft if it was reloaded above.
+                    app.select(index);
                 }
                 app.status = status;
                 app.busy = false;
