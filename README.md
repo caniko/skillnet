@@ -373,6 +373,9 @@ Both sections are optional. `local` loads after `fleet`: it replaces each skill
 it names, and replaces `ui` if it supplies that section. A configured file that
 does not exist is skipped. A template without a binding stops global sync.
 Global sync builds a bundle when a canonical template exists.
+Keep binding files outside Skillnet's data directory: sync prunes the bundle,
+so it refuses a binding path under the bundle as written or as resolved.
+Symlink chains that pass through the bundle are not supported.
 `ui.providers` can restrict the model list to named provider instance IDs.
 Omit it or set it to `null` to list all enabled providers.
 
