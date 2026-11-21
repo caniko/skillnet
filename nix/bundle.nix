@@ -35,7 +35,8 @@
     }
     // pkgs.lib.optionalAttrs (host != null) {inherit host;}
     // pkgs.lib.optionalAttrs (templateBindings != null) {
-      templates.fleet = toString templateBindings;
+      # Interpolate so a Nix path becomes a tracked store input.
+      templates.fleet = "${templateBindings}";
     });
 in
   pkgs.runCommandLocal "skillnet-bundle-${user}" {
