@@ -61,8 +61,10 @@ const SYNC_ARGS: [&str; 5] = [
     "--no-promote",
 ];
 
+#[allow(clippy::too_many_arguments)] // one call site; a struct would only rename these
 pub fn run(
     scope: Apply,
+    canonical: &Utf8Path,
     skill: &str,
     binding: &SkillBinding,
     fleet_path: Option<Utf8PathBuf>,
@@ -79,8 +81,14 @@ pub fn run(
             templates::load_existing(path.as_slice()).with_context(|| format!("reading {path:?}"))
         };
         let fresh_fleet = load(&fleet_path)?;
-        if scope == Apply::Drop && !fresh_fleet.skills.contains_key(skill) {
-            bail!("no fleet binding for `{skill}` to fall back to; local override kept");
+        if scope == Apply::Drop {
+            // The fleet binding must render before the working override goes.
+            let fallback = fresh_fleet.skills.get(skill).with_context(|| {
+                format!("no fleet binding for `{skill}` to fall back to; local override kept")
+            })?;
+            templates::render_skill(canonical, skill, fallback).with_context(|| {
+                format!("fleet binding for `{skill}` does not render; local override kept")
+            })?;
         }
         let (fleet, local) = edit_docs(&fresh_fleet, &load(&local_path)?, scope, skill, binding);
         let fleet = fleet_path.zip(fleet);

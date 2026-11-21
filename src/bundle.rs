@@ -211,15 +211,6 @@ pub fn plan_for_selection_at(
     }
     // Evaluate bindings only when a template needs them, so a broken binding
     // file never affects template-free sync.
-    let binding_paths = template_config
-        .filter(|_| has_templates)
-        .map(TemplatesConfig::binding_paths)
-        .transpose()?;
-    let bindings = binding_paths
-        .as_deref()
-        .map(templates::load_existing)
-        .transpose()?;
-
     let mut skills = BTreeMap::new();
     let canonical_manifest = manifests
         .iter()
@@ -421,6 +412,21 @@ pub fn plan_for_selection_at(
         skills.retain(|name, _| !denied.contains(name));
     }
 
+    // Evaluate bindings only when a template survives exclusions and the
+    // host/user filters, so an unused binding file never affects sync.
+    let templated = |name: &String| {
+        sources
+            .get(name)
+            .is_some_and(|path| templates::is_template(path))
+    };
+    let binding_paths = template_config
+        .filter(|_| skills.keys().any(templated))
+        .map(TemplatesConfig::binding_paths)
+        .transpose()?;
+    let bindings = binding_paths
+        .as_deref()
+        .map(templates::load_existing)
+        .transpose()?;
     if let Some((bindings, paths)) = bindings.as_ref().zip(binding_paths.as_deref()) {
         for (name, skill) in &mut skills {
             if let Some(source) = sources

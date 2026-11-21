@@ -286,6 +286,7 @@ impl App {
                     let explicit = app.explicit_config.clone();
                     let hosts_command = app.hosts_command().cloned();
                     let skill = skill.clone();
+                    let canonical = app.settings.canonical.clone();
                     app.busy = true;
                     app.menu_open = false;
                     app.status = "Applying…".into();
@@ -293,6 +294,7 @@ impl App {
                         async move {
                             apply::run(
                                 scope,
+                                &canonical,
                                 &skill,
                                 &binding,
                                 fleet,
@@ -375,7 +377,10 @@ impl App {
                     )
                     .height(120),
                 )
-                .push(text("Fleet-wide changes reach each host at its next switch.").size(13));
+                .push(
+                    text("Fleet-wide changes take effect when each host next runs global sync.")
+                        .size(13),
+                );
         }
         row![sidebar, app.editor()].spacing(16).padding(16).into()
     }
