@@ -112,13 +112,14 @@ pub fn run(
             if let Some(config) = config {
                 sync.arg("--config").arg(config);
             }
+            // No --allow-delete: a binding change never leaves stale view
+            // entries, and the UI must not prune anything authored by hand.
             sync.args([
                 "--allow-dirty-destination",
                 "sync",
                 "--scope",
                 "global",
                 "--no-promote",
-                "--allow-delete",
             ]);
             match run_command(&mut sync) {
                 Ok(output) => log.push(command_output(&output)),
