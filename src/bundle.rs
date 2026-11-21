@@ -203,7 +203,9 @@ pub fn plan_for_selection_at(
     } else {
         BTreeMap::new()
     };
-    let has_templates = sources.values().any(|path| templates::is_template(path));
+    let has_templates = sources
+        .iter()
+        .any(|(name, path)| !excluded.contains(name) && templates::is_template(path));
     if !needs_bundle && !has_templates {
         return Ok(None);
     }

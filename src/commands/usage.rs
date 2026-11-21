@@ -178,7 +178,9 @@ fn current_skills(context: &Context) -> Result<Vec<String>> {
         for entry in fs::read_dir(&target.canonical_path)? {
             let entry = entry?;
             let path = entry.path();
-            if path.is_dir() && path.join("SKILL.md").is_file() {
+            let template = target.name == "global"
+                && camino::Utf8Path::from_path(&path).is_some_and(crate::templates::is_template);
+            if path.is_dir() && (path.join("SKILL.md").is_file() || template) {
                 let name = path
                     .file_name()
                     .and_then(|name| name.to_str())

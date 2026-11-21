@@ -88,6 +88,8 @@ fn run_with_promotion(
                             view,
                             ViewSyncOptions {
                                 allow_delete: options.allow_delete,
+                                // Promotion is off in bundles; never delete authored dirs.
+                                preserve_authored: true,
                                 force: options.force_demote,
                                 link_strategy: LinkStrategy::Symlink,
                                 ..ViewSyncOptions::default()

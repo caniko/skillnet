@@ -245,3 +245,43 @@ fn global_sync_without_templates_keeps_direct_views() {
         canonical.join("plain")
     );
 }
+
+#[test]
+fn first_template_keeps_view_only_authored_skills() {
+    let temp = tempdir().unwrap();
+    let canonical = temp.path().join("canonical");
+    let view = temp.path().join("view");
+    let config = temp.path().join("skillnet.toml");
+    let bindings = temp.path().join("bindings.pkl");
+    fs::create_dir_all(canonical.join("review")).unwrap();
+    fs::write(
+        canonical.join("review/SKILL.md.tmpl"),
+        "---\nname: review\ndescription: Review.\n---\n{{seat_labels}}\n",
+    )
+    .unwrap();
+    fs::write(
+        &bindings,
+        r#"skills { ["review"] { seats { new { name = "r"; route { provider = "p"; model = "m" } } } } }"#,
+    )
+    .unwrap();
+    // Authored directly in the view; the canonical store does not have it.
+    fs::create_dir_all(view.join("authored")).unwrap();
+    fs::write(view.join("authored/SKILL.md"), "---\nname: authored\n---\n").unwrap();
+    fs::write(
+        &config,
+        format!(
+            "data_dir = {:?}\n[global]\ncanonical_path = {canonical:?}\n[[global.views]]\nlabel = \"test\"\npath = {view:?}\n[templates]\nfleet = {bindings:?}\n",
+            temp.path().join("data")
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("skillnet")
+        .unwrap()
+        .arg("--config")
+        .arg(&config)
+        .args(["view", "sync", "--all", "--allow-delete"])
+        .assert()
+        .success();
+    assert!(view.join("authored/SKILL.md").is_file());
+    assert!(view.join("review").is_symlink());
+}

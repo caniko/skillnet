@@ -92,6 +92,8 @@ pub fn sync_with_promotion(
                 view,
                 ViewSyncOptions {
                     allow_delete,
+                    // Promotion is off in bundles; never delete authored dirs.
+                    preserve_authored: true,
                     force,
                     link_strategy: LinkStrategy::Symlink,
                     ..ViewSyncOptions::default()

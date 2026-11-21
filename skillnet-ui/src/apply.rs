@@ -75,14 +75,22 @@ pub fn run(
         let (fleet, local) = edit_docs(&fresh_fleet, &load(&local_path)?, scope, skill, binding);
         let fleet = fleet_path.zip(fleet);
         let local = local_path.zip(local);
+        // Check every file this action replaces before writing any of them.
+        let permissions = |file: &Option<(Utf8PathBuf, BindingsDoc)>| {
+            file.as_ref()
+                .map(|(path, _)| managed_permissions(path))
+                .transpose()
+                .map(Option::flatten)
+        };
+        let (fleet_permissions, local_permissions) = (permissions(&fleet)?, permissions(&local)?);
         let mut fleet_path = None;
         if let Some((path, doc)) = fleet {
-            write_doc(&path, &doc).with_context(|| format!("writing {path}"))?;
+            write_doc(&path, &doc, fleet_permissions).with_context(|| format!("writing {path}"))?;
             applied.fleet = Some(doc);
             fleet_path = Some(path);
         }
         if let Some((path, doc)) = local {
-            write_doc(&path, &doc).with_context(|| format!("writing {path}"))?;
+            write_doc(&path, &doc, local_permissions).with_context(|| format!("writing {path}"))?;
             applied.local = Some(doc);
             applied.dropped = scope == Apply::Drop;
             if applied.dropped {
@@ -135,18 +143,26 @@ pub fn run(
     applied
 }
 
-fn write_doc(path: &Utf8Path, doc: &BindingsDoc) -> Result<()> {
-    let dir = parent_dir(path).context("bindings path has no parent")?;
-    let permissions = match fs::metadata(path) {
+/// Refuse files skillnet did not write; keep the permissions of ones it did.
+fn managed_permissions(path: &Utf8Path) -> Result<Option<fs::Permissions>> {
+    match fs::metadata(path) {
         Ok(meta) => {
             if !fs::read(path)?.starts_with(b"// Managed by skillnet; edits are overwritten.") {
                 bail!("{path} is not managed by skillnet; refusing to overwrite");
             }
-            Some(meta.permissions())
+            Ok(Some(meta.permissions()))
         }
-        Err(error) if error.kind() == ErrorKind::NotFound => None,
-        Err(error) => return Err(error.into()),
-    };
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn write_doc(
+    path: &Utf8Path,
+    doc: &BindingsDoc,
+    permissions: Option<fs::Permissions>,
+) -> Result<()> {
+    let dir = parent_dir(path).context("bindings path has no parent")?;
     fs::create_dir_all(dir)?;
     let mut file = tempfile::NamedTempFile::new_in(dir)?;
     file.write_all(templates::to_pkl(doc).as_bytes())?;
@@ -327,12 +343,12 @@ mod tests {
         let doc = BindingsDoc::default();
         fs::write(&path, "skills {}\n").unwrap();
         assert_eq!(
-            write_doc(&path, &doc).unwrap_err().to_string(),
+            managed_permissions(&path).unwrap_err().to_string(),
             format!("{path} is not managed by skillnet; refusing to overwrite")
         );
         assert_eq!(fs::read_to_string(&path).unwrap(), "skills {}\n");
         fs::write(&path, templates::to_pkl(&doc)).unwrap();
-        write_doc(&path, &doc).unwrap();
+        write_doc(&path, &doc, managed_permissions(&path).unwrap()).unwrap();
     }
 
     #[test]
