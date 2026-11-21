@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::Serialize;
 use std::io::Write;
 
-use super::Context;
+use super::{mirror::canonical_skill_dirs, Context};
 use crate::{
     cli::{args::StatusFormat, Scope},
     config::legacy_project_canonical_warning,
@@ -70,7 +70,7 @@ fn status_rows(ctx: &Context, scopes: &[Scope]) -> Result<Vec<StatusRow>> {
 
 fn status_row(ctx: &Context, target: Target) -> Result<StatusRow> {
     warn_legacy_project_layout(&target);
-    let skill_count = crate::mirror::mirror_skill_dirs(&target.canonical_path)
+    let skill_count = canonical_skill_dirs(&target)
         .map(|skills| skills.len())
         .unwrap_or(0);
     let bundle_issues = if target.scope == TargetScope::Global {
@@ -192,7 +192,7 @@ fn print_catalog_health(ctx: &Context) {
         .map(|targets| {
             targets
                 .iter()
-                .filter_map(|target| crate::mirror::mirror_skill_dirs(&target.canonical_path).ok())
+                .filter_map(|target| canonical_skill_dirs(target).ok())
                 .map(|skills| skills.len())
                 .sum::<usize>()
         })

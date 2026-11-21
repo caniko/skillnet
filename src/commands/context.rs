@@ -125,9 +125,6 @@ impl Context {
             Some(root) => crate::config::expand_path(root)?.join(&target.name),
             None => self.data_dir.join("bundles").join(&target.name),
         };
-        let binding_paths = (target.scope == TargetScope::Global)
-            .then(|| self.config.templates.binding_paths())
-            .transpose()?;
         crate::bundle::plan_for_selection_at(
             &target.canonical_path,
             bundle_root,
@@ -138,7 +135,8 @@ impl Context {
                 host: self.config.host.as_deref(),
                 excluded_skills: &self.config.excluded_skills,
                 excluded_provider_skills: &self.config.excluded_provider_skills,
-                template_bindings: binding_paths.as_deref(),
+                template_config: (target.scope == TargetScope::Global)
+                    .then_some(&self.config.templates),
             },
         )
     }

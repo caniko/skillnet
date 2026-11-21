@@ -52,6 +52,11 @@ fn global_bundle_renders_templates_without_a_manifest() {
         .assert()
         .success()
         .stdout(contains("passed for 1 skills"));
+    command()
+        .args(["skill", "list", "--scope", "global"])
+        .assert()
+        .success()
+        .stdout("# global\nreview\n");
     let sync = || {
         let mut command = command();
         command.args(["view", "sync", "--all", "--allow-delete"]);
@@ -87,6 +92,11 @@ fn global_bundle_renders_templates_without_a_manifest() {
         .success()
         .stdout(rendered.clone());
     sync().assert().success();
+    command()
+        .args(["status", "--scope", "global", "--format", "json"])
+        .assert()
+        .success()
+        .stdout(contains("\"skill_count\": 1"));
     let bundle = data.join("bundles/global/review");
     let generated = bundle.join("SKILL.md");
     assert!(generated.symlink_metadata().unwrap().file_type().is_file());
@@ -205,7 +215,7 @@ fn global_sync_without_templates_keeps_direct_views() {
     let canonical = temp.path().join("canonical");
     let view = temp.path().join("view");
     let config = temp.path().join("skillnet.toml");
-    // A broken binding file must not matter while no template exists.
+    // Neither an unexpandable path nor a broken binding file should matter.
     let broken = temp.path().join("broken.pkl");
     fs::write(&broken, "skills {").unwrap();
     fs::create_dir_all(canonical.join("plain")).unwrap();
@@ -217,9 +227,8 @@ fn global_sync_without_templates_keeps_direct_views() {
     fs::write(
         &config,
         format!(
-            "data_dir = {:?}\n[global]\ncanonical_path = {canonical:?}\n[[global.views]]\nlabel = \"test\"\npath = {view:?}\n[templates]\nfleet = {:?}\n",
+            "data_dir = {:?}\n[global]\ncanonical_path = {canonical:?}\n[[global.views]]\nlabel = \"test\"\npath = {view:?}\n[templates]\nfleet = \"${{SKILLNET_TEST_UNSET_VAR}}/x.pkl\"\nlocal = {broken:?}\n",
             temp.path().join("data"),
-            broken
         ),
     )
     .unwrap();
@@ -227,6 +236,7 @@ fn global_sync_without_templates_keeps_direct_views() {
         .unwrap()
         .arg("--config")
         .arg(&config)
+        .env_remove("SKILLNET_TEST_UNSET_VAR")
         .args(["view", "sync", "--all", "--allow-delete"])
         .assert()
         .success();

@@ -460,11 +460,7 @@ impl App {
     fn seat_view<'a>(&'a self, i: usize, seat: &'a Seat, can_remove: bool) -> Element<'a, Message> {
         let send = move |edit| Message::EditSeat(i, edit);
         let model = find_model(&self.models, &seat.route);
-        let label = seat
-            .label
-            .clone()
-            .or_else(|| auto_label(&self.models, &seat.route))
-            .unwrap_or_default();
+        let auto = auto_label(&self.models, &seat.route);
         let mut fields = column![
             row![
                 text(format!("Seat {}", i + 1)).width(Fill),
@@ -480,8 +476,11 @@ impl App {
                 ],
                 column![
                     text("Label"),
-                    text_input("Automatic label", &label)
-                        .on_input(move |v| send(SeatEdit::Label(v)))
+                    text_input(
+                        auto.as_deref().unwrap_or("Automatic label"),
+                        seat.label.as_deref().unwrap_or(""),
+                    )
+                    .on_input(move |v| send(SeatEdit::Label(v)))
                 ],
             ]
             .spacing(8),
@@ -723,7 +722,11 @@ fn auto_label(models: &Models, route: &Route) -> Option<String> {
 fn edit_seat(seat: &mut Seat, edit: SeatEdit, models: &Models) {
     match edit {
         SeatEdit::Name(name) => seat.name = name,
-        SeatEdit::Label(label) => seat.label = (!label.is_empty()).then_some(label),
+        SeatEdit::Label(label) => {
+            seat.label = (!label.is_empty()
+                && auto_label(models, &seat.route).as_deref() != Some(label.as_str()))
+            .then_some(label);
+        }
         SeatEdit::Model(name) => {
             if find_model(models, &seat.route).is_none_or(|model| model.name != name) {
                 if let Some((provider, model)) = models.get(&name).and_then(|routes| routes.first())

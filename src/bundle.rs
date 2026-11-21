@@ -16,7 +16,10 @@ use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use walkdir::WalkDir;
 
-use crate::{fs_ops::resolve_existing_ancestor, manifest, mirror::mirror_skill_dirs, templates};
+use crate::{
+    config::TemplatesConfig, fs_ops::resolve_existing_ancestor, manifest,
+    mirror::mirror_skill_dirs, templates,
+};
 
 #[cfg(test)]
 mod exclusion_tests;
@@ -37,7 +40,7 @@ pub struct BundleSelection<'a> {
     pub host: Option<&'a str>,
     pub excluded_skills: &'a [String],
     pub excluded_provider_skills: &'a [String],
-    pub template_bindings: Option<&'a [Utf8PathBuf]>,
+    pub template_config: Option<&'a TemplatesConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -138,7 +141,7 @@ pub fn plan_for_access_at(
             host,
             excluded_skills: &[],
             excluded_provider_skills: &[],
-            template_bindings: Some(&[]),
+            template_config: Some(&TemplatesConfig::default()),
         },
     )
 }
@@ -155,7 +158,7 @@ pub fn plan_for_selection_at(
         host,
         excluded_skills,
         excluded_provider_skills,
-        template_bindings,
+        template_config,
     } = selection;
     let excluded: BTreeSet<_> = excluded_skills.iter().collect();
     let excluded_provider: BTreeSet<_> = excluded_provider_skills.iter().collect();
@@ -176,14 +179,14 @@ pub fn plan_for_selection_at(
         manifests.push((manifest, true));
     }
     let needs_bundle = !manifests.is_empty() || !provider_roots.is_empty() || !excluded.is_empty();
-    if !needs_bundle && template_bindings.is_none() {
+    if !needs_bundle && template_config.is_none() {
         return Ok(None);
     }
     if !canonical.is_dir() && manifests.iter().any(|(_, external)| !*external) {
         bail!("manifest canonical root does not exist or is not a directory: {canonical}");
     }
     let sources: BTreeMap<String, Utf8PathBuf> = if canonical.is_dir() {
-        let dirs = if template_bindings.is_some() {
+        let dirs = if template_config.is_some() {
             templates::canonical_skill_dirs(canonical)?
         } else {
             mirror_skill_dirs(canonical)?
@@ -206,8 +209,12 @@ pub fn plan_for_selection_at(
     }
     // Evaluate bindings only when a template needs them, so a broken binding
     // file never affects template-free sync.
-    let bindings = template_bindings
+    let binding_paths = template_config
         .filter(|_| has_templates)
+        .map(TemplatesConfig::binding_paths)
+        .transpose()?;
+    let bindings = binding_paths
+        .as_deref()
         .map(templates::load_existing)
         .transpose()?;
 
@@ -412,7 +419,7 @@ pub fn plan_for_selection_at(
         skills.retain(|name, _| !denied.contains(name));
     }
 
-    if let Some((bindings, paths)) = bindings.as_ref().zip(template_bindings) {
+    if let Some((bindings, paths)) = bindings.as_ref().zip(binding_paths.as_deref()) {
         for (name, skill) in &mut skills {
             if let Some(source) = sources
                 .get(name)

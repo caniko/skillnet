@@ -8,7 +8,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use walkdir::WalkDir;
 
 use super::Context;
-use crate::{fs_ops::copy_dir, model::TargetScope};
+use crate::{fs_ops::copy_dir, model::TargetScope, templates};
 
 const DEFAULT_SOURCE: &str = "skills";
 
@@ -117,7 +117,7 @@ fn export_plan(source: &Utf8Path, skills: &[String]) -> Result<ExportPlan> {
             bail!("requested skill `{name}` does not exist as a directory under {source}");
         }
         let Some(skill) = by_name.get(name) else {
-            bail!("requested skill `{name}` is missing required SKILL.md under {path}");
+            bail!("requested skill `{name}` is missing SKILL.md or SKILL.md.tmpl under {path}");
         };
         planned.push(ExportSkill {
             name: skill.name.clone(),
@@ -181,7 +181,8 @@ fn validate_skill_name(name: &str) -> Result<()> {
 
 fn is_skill_dir(path: &Utf8Path) -> Result<bool> {
     let metadata = fs::symlink_metadata(path)?;
-    Ok(metadata.file_type().is_dir() && path.join("SKILL.md").is_file())
+    Ok(metadata.file_type().is_dir()
+        && (path.join("SKILL.md").is_file() || templates::is_template(path)))
 }
 
 fn stale_destination_skills(
@@ -204,7 +205,11 @@ fn stale_destination_skills(
         let Some(name) = path.file_name() else {
             continue;
         };
-        if name.starts_with('.') || source_names.contains(name) || !is_skill_dir(&path)? {
+        if name.starts_with('.')
+            || source_names.contains(name)
+            || !is_skill_dir(&path)?
+            || templates::is_template(&path)
+        {
             continue;
         }
         stale.push(path);

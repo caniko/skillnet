@@ -106,6 +106,7 @@
       guiPackage = craneLib.buildPackage (guiArgs
         // {
           cargoArtifacts = craneLib.buildDepsOnly guiArgs;
+          doCheck = true;
           nativeBuildInputs = guiArgs.nativeBuildInputs ++ [pkgs.makeWrapper];
           postInstall = ''
             wrapProgram "$out/bin/skillnet-ui" \
@@ -316,6 +317,9 @@
               fi
               touch $out
             '';
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          skillnet-ui = guiPackage;
         };
 
       devShells = {

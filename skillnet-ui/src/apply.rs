@@ -136,21 +136,34 @@ pub fn run(
 }
 
 fn write_doc(path: &Utf8Path, doc: &BindingsDoc) -> Result<()> {
-    let dir = path.parent().context("bindings path has no parent")?;
+    let dir = parent_dir(path).context("bindings path has no parent")?;
+    let permissions = match fs::metadata(path) {
+        Ok(meta) => {
+            if !fs::read(path)?.starts_with(b"// Managed by skillnet; edits are overwritten.") {
+                bail!("{path} is not managed by skillnet; refusing to overwrite");
+            }
+            Some(meta.permissions())
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
     fs::create_dir_all(dir)?;
     let mut file = tempfile::NamedTempFile::new_in(dir)?;
     file.write_all(templates::to_pkl(doc).as_bytes())?;
-    match fs::metadata(path) {
-        Ok(meta) => file.as_file().set_permissions(meta.permissions())?,
-        Err(error) if error.kind() == ErrorKind::NotFound => {}
-        Err(error) => return Err(error.into()),
+    if let Some(permissions) = permissions {
+        file.as_file().set_permissions(permissions)?;
     }
     file.persist(path)?;
     Ok(())
 }
 
+fn parent_dir(path: &Utf8Path) -> Option<&Utf8Path> {
+    path.parent()
+        .map(|dir| if dir == "" { Utf8Path::new(".") } else { dir })
+}
+
 fn publish(path: &Utf8Path, skill: &str) -> Result<()> {
-    let dir = path.parent().context("fleet bindings path has no parent")?;
+    let dir = parent_dir(path).context("fleet bindings path has no parent")?;
     let file = path
         .file_name()
         .context("fleet bindings path has no file name")?;
@@ -177,6 +190,13 @@ fn publish(path: &Utf8Path, skill: &str) -> Result<()> {
         )
         .context("git commit")?;
     }
+    let tracked = String::from_utf8(
+        run_command(git().args(["ls-files", "--full-name", "-z", "--", file]))?.stdout,
+    )?;
+    let tracked = tracked.trim_end_matches('\0');
+    if tracked.is_empty() {
+        bail!("bindings file is not tracked (gitignored?)");
+    }
     // Push only bindings commits: other unpushed work on the branch is not
     // ours to publish.
     let branch = stdout(git().args(["symbolic-ref", "HEAD"])).context("detached HEAD")?;
@@ -189,27 +209,47 @@ fn publish(path: &Utf8Path, skill: &str) -> Result<()> {
         .split_once(' ')
         .filter(|(remote, _)| !remote.is_empty())
         .with_context(|| format!("{branch} has no upstream; push skipped"))?;
-    let tracked = stdout(git().args(["ls-files", "--full-name", "--", file]))?;
     // Audit and push one pinned commit, so a concurrent commit cannot slip in.
     let head = stdout(git().args(["rev-parse", &branch]))?;
     let short = branch.strip_prefix("refs/heads/").unwrap_or(&branch);
     let upstream_sha = stdout(git().args(["rev-parse", &format!("{short}@{{u}}")]))?;
-    // -m lists merge changes per parent; --no-renames lists rename sources.
-    let outgoing = stdout(git().args([
-        "log",
-        "-m",
-        "--no-renames",
-        "--format=",
-        "--name-only",
-        &format!("{upstream_sha}..{head}"),
-    ]))?;
-    let mut touched: Vec<_> = outgoing.lines().filter(|line| !line.is_empty()).collect();
-    touched.sort_unstable();
-    touched.dedup();
-    if touched.is_empty() {
+    if !git()
+        .args(["merge-base", "--is-ancestor", &upstream_sha, &head])
+        .status()?
+        .success()
+    {
+        bail!("push skipped: branch diverged from upstream");
+    }
+    if head == upstream_sha {
         return Ok(());
     }
-    if touched != [tracked.as_str()] {
+    let range = format!("{upstream_sha}..{head}");
+    let root = stdout(git().args(["rev-parse", "--show-toplevel"]))?;
+    let total = stdout(git().args(["rev-list", "--count", &range]))?;
+    let bindings = stdout(git().args(["-C", &root, "rev-list", "--count", &range, "--", tracked]))?;
+    if total != bindings {
+        bail!("push skipped: unpushed commits other than bindings commits");
+    }
+    // -m lists merge changes per parent; --no-renames lists rename sources.
+    let outgoing = String::from_utf8(
+        run_command(git().args([
+            "log",
+            "-m",
+            "--no-renames",
+            "--format=",
+            "--name-only",
+            "-z",
+            &range,
+        ]))?
+        .stdout,
+    )?;
+    let mut touched: Vec<_> = outgoing
+        .split('\0')
+        .filter(|path| !path.is_empty())
+        .collect();
+    touched.sort_unstable();
+    touched.dedup();
+    if touched != [tracked] {
         bail!(
             "committed locally, push skipped: unpushed commits on {branch} also touch {}",
             touched
@@ -223,6 +263,7 @@ fn publish(path: &Utf8Path, skill: &str) -> Result<()> {
     run_command(git().args([
         "push",
         "--no-follow-tags",
+        &format!("--force-with-lease={remote_ref}:{upstream_sha}"),
         remote,
         &format!("{head}:{remote_ref}"),
     ]))
@@ -278,6 +319,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn write_doc_refuses_unmanaged_bindings() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = Utf8Path::from_path(temp.path())
+            .unwrap()
+            .join("bindings.pkl");
+        let doc = BindingsDoc::default();
+        fs::write(&path, "skills {}\n").unwrap();
+        assert_eq!(
+            write_doc(&path, &doc).unwrap_err().to_string(),
+            format!("{path} is not managed by skillnet; refusing to overwrite")
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), "skills {}\n");
+        fs::write(&path, templates::to_pkl(&doc)).unwrap();
+        write_doc(&path, &doc).unwrap();
+    }
+
+    #[test]
     fn publish_pushes_only_bindings_commits() {
         // Disposable fixture repos: no global config, hooks or signing.
         std::env::set_var("GIT_CONFIG_GLOBAL", "/dev/null");
@@ -319,16 +377,31 @@ mod tests {
             git(&work, &["rev-parse", "HEAD"])
         );
 
+        // Every outgoing commit must touch the bindings, even if it changes no paths.
+        let pushed = git(&remote, &["rev-parse", "trunk"]);
+        git(
+            &work,
+            &["switch", "-q", "-c", "empty", "--track", "origin/trunk"],
+        );
+        git(&work, &["commit", "-q", "--allow-empty", "-m", "empty"]);
+        fs::write(&file, "skills { [\"council\"] { seats = List() } }\n").unwrap();
+        let error = publish(&file, "council").unwrap_err().to_string();
+        assert_eq!(
+            error,
+            "push skipped: unpushed commits other than bindings commits"
+        );
+        assert_eq!(git(&remote, &["rev-parse", "trunk"]), pushed);
+        git(&work, &["switch", "-q", "trunk"]);
+
         // Unrelated unpushed work blocks publication; the bindings commit stays local.
         fs::write(work.join("other.txt"), "x").unwrap();
         git(&work, &["add", "other.txt"]);
         git(&work, &["commit", "-q", "-m", "other"]);
-        let pushed = git(&remote, &["rev-parse", "trunk"]);
         fs::write(&file, "skills { [\"council\"] { seats = List() } }\n").unwrap();
         let error = publish(&file, "council").unwrap_err().to_string();
-        assert!(
-            error.contains("push skipped") && error.contains("other.txt"),
-            "{error}"
+        assert_eq!(
+            error,
+            "push skipped: unpushed commits other than bindings commits"
         );
         assert_eq!(git(&remote, &["rev-parse", "trunk"]), pushed);
         assert!(git(&work, &["status", "--porcelain"]).is_empty());
