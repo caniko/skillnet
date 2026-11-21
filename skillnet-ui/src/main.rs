@@ -723,9 +723,8 @@ fn edit_seat(seat: &mut Seat, edit: SeatEdit, models: &Models) {
     match edit {
         SeatEdit::Name(name) => seat.name = name,
         SeatEdit::Label(label) => {
-            seat.label = (!label.is_empty()
-                && auto_label(models, &seat.route).as_deref() != Some(label.as_str()))
-            .then_some(label);
+            // Keep the raw text while typing; only an empty field means automatic.
+            seat.label = (!label.is_empty()).then_some(label);
         }
         SeatEdit::Model(name) => {
             if find_model(models, &seat.route).is_none_or(|model| model.name != name) {
