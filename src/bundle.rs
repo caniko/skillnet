@@ -443,21 +443,30 @@ pub fn plan_for_selection_at(
     {
         bail!("bundle {bundle_root} overlaps canonical source {canonical}");
     }
-    // Pruning would also delete a binding file (or a link to one) kept inside
-    // the bundle, whether or not a template survived the filters. An
-    // unexpandable path names no file pruning could reach.
-    let configured = template_config
-        .map(TemplatesConfig::binding_paths)
-        .and_then(Result::ok)
-        .unwrap_or_default();
-    for path in &configured {
-        let entry = match (path.parent(), path.file_name()) {
-            (Some(parent), Some(name)) => resolve_existing_ancestor(parent)?.join(name),
-            _ => resolve_existing_ancestor(path)?,
+    // Pruning would also delete a binding file, or any link on its way, kept
+    // under the bundle, whether or not a template survived the filters. Refuse
+    // a binding path under the bundle as written or as resolved. Each path is
+    // expanded on its own; an unexpandable one names no file pruning reaches.
+    // ponytail: the as-written check also refuses `bundle/../x`; refusing is safe.
+    let absolute = |path: &Utf8Path| -> Result<Utf8PathBuf> {
+        Ok(if path.is_relative() {
+            Utf8PathBuf::try_from(std::env::current_dir()?)?.join(path)
+        } else {
+            path.to_owned()
+        })
+    };
+    let written_bundle = absolute(&bundle_root)?;
+    let inside =
+        |path: &Utf8Path| path.starts_with(&written_bundle) || path.starts_with(&resolved_bundle);
+    for raw in template_config
+        .iter()
+        .flat_map(|config| [&config.fleet, &config.local])
+        .flatten()
+    {
+        let Ok(path) = crate::config::expand_path(raw) else {
+            continue;
         };
-        if entry.starts_with(&resolved_bundle)
-            || resolve_existing_ancestor(path)?.starts_with(&resolved_bundle)
-        {
+        if inside(&absolute(&path)?) || inside(&resolve_existing_ancestor(&path)?) {
             bail!("binding file {path} is inside bundle {bundle_root}");
         }
     }

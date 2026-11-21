@@ -78,6 +78,8 @@ struct App {
     models: Models,
     selected: Option<usize>,
     drafts: BTreeMap<String, SkillBinding>,
+    /// Skills whose draft the user changed; only these survive an Apply.
+    edited: std::collections::BTreeSet<String>,
     preview: Result<String>,
     menu_open: bool,
     busy: bool,
@@ -127,6 +129,7 @@ impl App {
                 models: Models::new(),
                 selected: None,
                 drafts: BTreeMap::new(),
+                edited: Default::default(),
                 preview: Ok(String::new()),
                 menu_open: false,
                 busy: false,
@@ -254,15 +257,8 @@ impl App {
                     dropped,
                 } = *result;
                 // Unedited drafts reload from the refreshed files; edits stay.
-                let unedited: Vec<String> = app
-                    .drafts
-                    .iter()
-                    .filter(|(skill, draft)| **draft == app.fresh_draft(skill))
-                    .map(|(skill, _)| skill.clone())
-                    .collect();
-                for skill in unedited {
-                    app.drafts.remove(&skill);
-                }
+                let edited = &app.edited;
+                app.drafts.retain(|skill, _| edited.contains(skill));
                 if let Some(fleet) = fleet {
                     app.fleet = fleet;
                 }
@@ -310,6 +306,12 @@ impl App {
                         },
                         |result| Message::Applied(Box::new(result)),
                     );
+                }
+                if matches!(
+                    message,
+                    Message::AddSeat | Message::RemoveSeat(_) | Message::EditSeat(..)
+                ) {
+                    app.edited.insert(skill.clone());
                 }
                 let seats = &mut app.drafts.get_mut(skill).expect("selected draft").seats;
                 match message {

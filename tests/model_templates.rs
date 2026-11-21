@@ -337,4 +337,29 @@ fn binding_files_inside_the_bundle_are_refused() {
         .failure()
         .stderr(contains("inside bundle"));
     assert!(inside.is_symlink());
+
+    // So would a linked folder on the way to it.
+    fs::remove_file(&inside).unwrap();
+    let outside_dir = temp.path().join("outside");
+    fs::create_dir_all(&outside_dir).unwrap();
+    fs::rename(&outside, outside_dir.join("overrides.pkl")).unwrap();
+    let hop = data.join("bundles/global/hop");
+    std::os::unix::fs::symlink(&outside_dir, &hop).unwrap();
+    let via_hop = hop.join("overrides.pkl");
+    fs::write(
+        &config,
+        fs::read_to_string(&config)
+            .unwrap()
+            .replace(&format!("{inside:?}"), &format!("{via_hop:?}")),
+    )
+    .unwrap();
+    Command::cargo_bin("skillnet")
+        .unwrap()
+        .arg("--config")
+        .arg(&config)
+        .args(["view", "sync", "--all"])
+        .assert()
+        .failure()
+        .stderr(contains("inside bundle"));
+    assert!(hop.is_symlink());
 }
