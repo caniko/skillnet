@@ -256,6 +256,13 @@ impl App {
                     hosts,
                     dropped,
                 } = *result;
+                // Documents come back only when the writes succeeded; then the
+                // applied (selected) skill is saved and no longer edited.
+                if fleet.is_some() || local.is_some() {
+                    if let Some(index) = app.selected {
+                        app.edited.remove(&app.templates[index].0);
+                    }
+                }
                 // Unedited drafts reload from the refreshed files; edits stay.
                 let edited = &app.edited;
                 app.drafts.retain(|skill, _| edited.contains(skill));
