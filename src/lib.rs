@@ -1,7 +1,8 @@
 //! `skillnet` is a CLI for managing canonical AI skill stores, materialising
 //! derived skill views, and recording calibration data for `multi-phase-plan`.
 //!
-//! The CLI and the `templates` and `models` modules are supported interfaces.
+//! The CLI is the supported interface. The `templates` and `models` modules are
+//! public for `skillnet-ui` only; no stable library API is promised.
 
 pub(crate) mod bundle;
 pub mod calibration;

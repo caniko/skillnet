@@ -443,6 +443,12 @@ pub fn plan_for_selection_at(
     {
         bail!("bundle {bundle_root} overlaps canonical source {canonical}");
     }
+    // Pruning would also delete a binding file kept inside the bundle.
+    for path in binding_paths.iter().flatten() {
+        if resolve_existing_ancestor(path)?.starts_with(&resolved_bundle) {
+            bail!("binding file {path} is inside bundle {bundle_root}");
+        }
+    }
 
     let expected = skills
         .iter()

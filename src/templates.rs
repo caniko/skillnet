@@ -27,7 +27,12 @@ impl Settings {
             expanded(&config.templates.fleet)?,
             expanded(&config.templates.local)?,
         );
-        if fleet.is_some() && fleet == local {
+        let resolved = |path: &Option<Utf8PathBuf>| {
+            path.as_deref()
+                .map(crate::fs_ops::resolve_existing_ancestor)
+                .transpose()
+        };
+        if fleet.is_some() && resolved(&fleet)? == resolved(&local)? {
             bail!("[templates] fleet and local must be different files");
         }
         // Same precedence as the CLI, so the editor and its sync agree.

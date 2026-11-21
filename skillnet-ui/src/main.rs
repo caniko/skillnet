@@ -36,7 +36,9 @@ fn group_models(providers: Vec<Provider>) -> Models {
 fn main() -> Result<()> {
     let mut args = env::args().skip(1);
     let explicit = match args.next() {
-        None => env::var("SKILLNET_CONFIG").ok(),
+        None => env::var("SKILLNET_CONFIG")
+            .ok()
+            .filter(|path| !path.trim().is_empty()),
         Some(arg) if arg == "--config" => Some(args.next().context("--config needs a path")?),
         Some(arg) if arg.starts_with("--config=") => Some(arg["--config=".len()..].to_owned()),
         Some(_) => bail!("usage: skillnet-ui [--config PATH]"),

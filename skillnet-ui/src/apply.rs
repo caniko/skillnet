@@ -104,7 +104,8 @@ pub fn run(
                 format!("binding for `{skill}` does not render; nothing written")
             })?;
         }
-        let (fleet, local) = edit_docs(&fresh_fleet, &load(&local_path)?, scope, skill, binding);
+        let fresh_local = load(&local_path)?;
+        let (fleet, local) = edit_docs(&fresh_fleet, &fresh_local, scope, skill, binding);
         let fleet = fleet_path.zip(fleet);
         let local = local_path.zip(local);
         // Check every file this action replaces before writing any of them.
@@ -124,12 +125,12 @@ pub fn run(
         if let Some((path, doc)) = local {
             write_doc(&path, &doc, local_permissions).with_context(|| format!("writing {path}"))?;
             applied.local = Some(doc);
-            applied.dropped = scope == Apply::Drop;
-            if applied.dropped {
-                // The preview falls back to the fleet binding sync just used.
-                applied.fleet = Some(fresh_fleet);
-            }
         }
+        // Refresh the editor from disk even when a file needed no write
+        // (for example an override already removed elsewhere).
+        applied.fleet.get_or_insert(fresh_fleet);
+        applied.local.get_or_insert(fresh_local);
+        applied.dropped = scope == Apply::Drop;
         Ok(fleet_path)
     })();
     match writes {
@@ -275,6 +276,7 @@ fn publish(path: &Utf8Path, skill: &str) -> Result<()> {
             "log",
             "-m",
             "--no-renames",
+            "--no-relative",
             "--format=",
             "--name-only",
             "-z",

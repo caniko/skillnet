@@ -285,3 +285,42 @@ fn first_template_keeps_view_only_authored_skills() {
     assert!(view.join("authored/SKILL.md").is_file());
     assert!(view.join("review").is_symlink());
 }
+
+#[test]
+fn binding_files_inside_the_bundle_are_refused() {
+    let temp = tempdir().unwrap();
+    let canonical = temp.path().join("canonical");
+    let data = temp.path().join("data");
+    let config = temp.path().join("skillnet.toml");
+    fs::create_dir_all(canonical.join("review")).unwrap();
+    fs::write(
+        canonical.join("review/SKILL.md.tmpl"),
+        "---\nname: review\ndescription: Review.\n---\n{{seat_labels}}\n",
+    )
+    .unwrap();
+    // Pruning the bundle would delete this override on the first sync.
+    let inside = data.join("bundles/global/overrides.pkl");
+    fs::create_dir_all(inside.parent().unwrap()).unwrap();
+    fs::write(
+        &inside,
+        r#"skills { ["review"] { seats { new { name = "r"; route { provider = "p"; model = "m" } } } } }"#,
+    )
+    .unwrap();
+    fs::write(
+        &config,
+        format!(
+            "data_dir = {data:?}\n[global]\ncanonical_path = {canonical:?}\n[[global.views]]\nlabel = \"test\"\npath = {:?}\n[templates]\nlocal = {inside:?}\n",
+            temp.path().join("view")
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("skillnet")
+        .unwrap()
+        .arg("--config")
+        .arg(&config)
+        .args(["view", "sync", "--all"])
+        .assert()
+        .failure()
+        .stderr(contains("inside bundle"));
+    assert!(inside.is_file());
+}
