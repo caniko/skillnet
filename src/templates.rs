@@ -36,13 +36,10 @@ impl Settings {
             .filter(|root| !root.is_empty())
             .map(Utf8PathBuf::from);
         let mirror_root = crate::cli::resolve_mirror_root(&config, env_root.as_ref())?;
-        let canonical = config.global_target(&mirror_root)?.canonical_path;
         Ok(Self {
-            canonical: if canonical.is_absolute() {
-                canonical
-            } else {
-                expand_path(canonical.as_str())?
-            },
+            // Exactly the CLI's root: global_target already expands a
+            // configured canonical_path and leaves the mirror fallback as is.
+            canonical: config.global_target(&mirror_root)?.canonical_path,
             fleet,
             local,
             t3_caches: expand_path(
