@@ -31,10 +31,11 @@ impl Settings {
             bail!("[templates] fleet and local must be different files");
         }
         // Same precedence as the CLI, so the editor and its sync agree.
-        let env_root = std::env::var("SKILLNET_MIRROR_ROOT")
-            .ok()
-            .filter(|root| !root.is_empty())
-            .map(Utf8PathBuf::from);
+        let env_root = match std::env::var("SKILLNET_MIRROR_ROOT") {
+            Ok(root) => Some(Utf8PathBuf::from(root)),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(error) => bail!("SKILLNET_MIRROR_ROOT: {error}"),
+        };
         let mirror_root = crate::cli::resolve_mirror_root(&config, env_root.as_ref())?;
         Ok(Self {
             // Exactly the CLI's root: global_target already expands a
