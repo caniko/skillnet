@@ -466,7 +466,13 @@ pub fn plan_for_selection_at(
         let Ok(path) = crate::config::expand_path(raw) else {
             continue;
         };
-        if inside(&absolute(&path)?) || inside(&resolve_existing_ancestor(&path)?) {
+        // An absent optional file that cannot be resolved names nothing to prune.
+        let resolved = match resolve_existing_ancestor(&path) {
+            Ok(resolved) => inside(&resolved),
+            Err(_) if !path.try_exists().unwrap_or(true) => false,
+            Err(error) => return Err(error),
+        };
+        if inside(&absolute(&path)?) || resolved {
             bail!("binding file {path} is inside bundle {bundle_root}");
         }
     }

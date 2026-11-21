@@ -255,10 +255,10 @@ impl App {
                     status,
                     hosts,
                     dropped,
+                    saved,
                 } = *result;
-                // Documents come back only when the writes succeeded; then the
-                // applied (selected) skill is saved and no longer edited.
-                if fleet.is_some() || local.is_some() {
+                // Only a fully completed Apply saves the selected skill's edits.
+                if saved {
                     if let Some(index) = app.selected {
                         app.edited.remove(&app.templates[index].0);
                     }
@@ -314,13 +314,8 @@ impl App {
                         |result| Message::Applied(Box::new(result)),
                     );
                 }
-                if matches!(
-                    message,
-                    Message::AddSeat | Message::RemoveSeat(_) | Message::EditSeat(..)
-                ) {
-                    app.edited.insert(skill.clone());
-                }
                 let seats = &mut app.drafts.get_mut(skill).expect("selected draft").seats;
+                let before = seats.clone();
                 match message {
                     Message::AddSeat if meta.max.is_none_or(|max| seats.len() < max) => {
                         seats.push(Seat {
@@ -343,6 +338,10 @@ impl App {
                         }
                     }
                     _ => {}
+                }
+                // Only an action that changed the draft marks it edited.
+                if *seats != before {
+                    app.edited.insert(skill.clone());
                 }
             }
         }

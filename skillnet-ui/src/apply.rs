@@ -49,6 +49,8 @@ pub struct Applied {
     pub status: String,
     pub hosts: Option<String>,
     pub dropped: bool,
+    /// Every write this action needed succeeded.
+    pub saved: bool,
 }
 
 // No --allow-delete: a binding change never leaves stale view entries, and
@@ -131,6 +133,7 @@ pub fn run(
         applied.fleet.get_or_insert(fresh_fleet);
         applied.local.get_or_insert(fresh_local);
         applied.dropped = scope == Apply::Drop;
+        applied.saved = true;
         Ok(fleet_path)
     })();
     match writes {
