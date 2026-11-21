@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- In bundle mode, `view sync` and promotion-mode `sync` keep real directories
+  found in symlink views, as promotion mode already promised, so adding the
+  first template never deletes a skill authored in a view. Real directories
+  left over from an earlier hardlink view now stay too; remove them once with
+  `skillnet sync --scope global --no-promote --allow-delete`, which still
+  prunes them.
 - The macOS release archive runs the test suite again: the macOS CLI tests
   pass now that the release build has `git` and `gnupg` (#11).
 

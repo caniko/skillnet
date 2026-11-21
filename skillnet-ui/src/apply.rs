@@ -51,6 +51,16 @@ pub struct Applied {
     pub dropped: bool,
 }
 
+// No --allow-delete: a binding change never leaves stale view entries, and
+// the UI must not prune anything authored by hand.
+const SYNC_ARGS: [&str; 5] = [
+    "--allow-dirty-destination",
+    "sync",
+    "--scope",
+    "global",
+    "--no-promote",
+];
+
 pub fn run(
     scope: Apply,
     skill: &str,
@@ -112,15 +122,7 @@ pub fn run(
             if let Some(config) = config {
                 sync.arg("--config").arg(config);
             }
-            // No --allow-delete: a binding change never leaves stale view
-            // entries, and the UI must not prune anything authored by hand.
-            sync.args([
-                "--allow-dirty-destination",
-                "sync",
-                "--scope",
-                "global",
-                "--no-promote",
-            ]);
+            sync.args(SYNC_ARGS);
             match run_command(&mut sync) {
                 Ok(output) => log.push(command_output(&output)),
                 Err(error) => log.push(format!("{error:#}")),
@@ -350,6 +352,11 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), "skills {}\n");
         fs::write(&path, templates::to_pkl(&doc)).unwrap();
         write_doc(&path, &doc, managed_permissions(&path).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn sync_never_prunes_views() {
+        assert!(!SYNC_ARGS.contains(&"--allow-delete"));
     }
 
     #[test]
