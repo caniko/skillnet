@@ -7,7 +7,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde_json::Value;
-use skillnet::templates::{self, BindingsDoc, SkillBinding};
+use skillnet::templates::{self, BindingsDoc, Settings, SkillBinding};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Apply {
@@ -61,20 +61,30 @@ const SYNC_ARGS: [&str; 5] = [
     "--no-promote",
 ];
 
-#[allow(clippy::too_many_arguments)] // one call site; a struct would only rename these
+/// Paths the editor opened with: fleet, local, canonical.
+pub type Opened = (Option<Utf8PathBuf>, Option<Utf8PathBuf>, Utf8PathBuf);
+
 pub fn run(
     scope: Apply,
-    canonical: &Utf8Path,
+    config_path: &Utf8Path,
+    opened: &Opened,
     skill: &str,
     binding: &SkillBinding,
-    fleet_path: Option<Utf8PathBuf>,
-    local_path: Option<Utf8PathBuf>,
     config: Option<Utf8PathBuf>,
     hosts_command: Option<Vec<String>>,
 ) -> Applied {
     let mut applied = Applied::default();
     let mut log = Vec::new();
     let writes = (|| -> Result<_> {
+        // The sync below rereads skillnet.toml; refuse if it now points
+        // elsewhere than the files this editor showed.
+        let settings = Settings::load(config_path)?;
+        let current: Opened = (settings.fleet, settings.local, settings.canonical);
+        if &current != opened {
+            bail!("{config_path} changed since the editor opened; reopen it before applying");
+        }
+        let (fleet_path, local_path, canonical) = current;
+        let canonical = canonical.as_path();
         // Re-read both files so edits made elsewhere since the window opened
         // survive; only the selected skill changes.
         let load = |path: &Option<Utf8PathBuf>| {

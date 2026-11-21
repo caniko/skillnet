@@ -293,6 +293,23 @@ pub fn render(
 ) -> Result<String> {
     const OPEN: &str = "{{#seats}}";
     const CLOSE: &str = "{{/seats}}";
+    // A blank provider or model renders an unusable dispatch target.
+    for seat in &binding.seats {
+        let routes = std::iter::once(&seat.route).chain(
+            seat.fallbacks
+                .iter()
+                .filter(|fallback| fallback.enabled)
+                .map(|fallback| &fallback.route),
+        );
+        for route in routes {
+            if route.provider.trim().is_empty() || route.model.trim().is_empty() {
+                bail!(
+                    "template `{skill}`: seat `{}` has a route with a blank provider or model",
+                    seat.name
+                );
+            }
+        }
+    }
     let count = binding.seats.len();
     if count < meta.min || meta.max.is_some_and(|max| count > max) {
         let max = meta.max.map_or("unbounded".into(), |max| max.to_string());
@@ -607,6 +624,20 @@ mod tests {
         binding.seats.push(reviewer());
         assert!(render_skill(root, "review", &binding).is_err());
         assert!(render_skill(root, "plain", &binding).is_err());
+    }
+
+    #[test]
+    fn rejects_blank_routes() {
+        let mut seat = reviewer();
+        seat.route.model = " ".into();
+        let binding = SkillBinding { seats: vec![seat] };
+        let error = render("x", TemplateMeta::default(), "review", &binding)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("review") && error.contains("reviewer"),
+            "{error}"
+        );
     }
 
     #[test]

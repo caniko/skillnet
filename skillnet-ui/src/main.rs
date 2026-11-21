@@ -72,6 +72,7 @@ fn main() -> Result<()> {
 }
 
 struct App {
+    config: Utf8PathBuf,
     settings: Settings,
     explicit_config: Option<Utf8PathBuf>,
     templates: Vec<(String, TemplateMeta)>,
@@ -124,6 +125,7 @@ impl App {
             let local = templates::load_existing(settings.local.as_slice())?;
             let templates = templates::list_templates(&settings.canonical)?;
             let mut app = Self {
+                config: config.to_owned(),
                 settings,
                 explicit_config,
                 templates,
@@ -281,12 +283,15 @@ impl App {
                 let (skill, meta) = &app.templates[index];
                 if let Message::Apply(scope) = message {
                     let binding = app.rendered_binding(skill);
-                    let fleet = app.settings.fleet.clone();
-                    let local = app.settings.local.clone();
+                    let opened = (
+                        app.settings.fleet.clone(),
+                        app.settings.local.clone(),
+                        app.settings.canonical.clone(),
+                    );
+                    let config = app.config.clone();
                     let explicit = app.explicit_config.clone();
                     let hosts_command = app.hosts_command().cloned();
                     let skill = skill.clone();
-                    let canonical = app.settings.canonical.clone();
                     app.busy = true;
                     app.menu_open = false;
                     app.status = "Applying…".into();
@@ -294,11 +299,10 @@ impl App {
                         async move {
                             apply::run(
                                 scope,
-                                &canonical,
+                                &config,
+                                &opened,
                                 &skill,
                                 &binding,
-                                fleet,
-                                local,
                                 explicit,
                                 hosts_command,
                             )
