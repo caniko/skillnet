@@ -30,7 +30,12 @@ impl Settings {
         if fleet.is_some() && fleet == local {
             bail!("[templates] fleet and local must be different files");
         }
-        let mirror_root = crate::cli::resolve_mirror_root(&config, None)?;
+        // Same precedence as the CLI, so the editor and its sync agree.
+        let env_root = std::env::var("SKILLNET_MIRROR_ROOT")
+            .ok()
+            .filter(|root| !root.is_empty())
+            .map(Utf8PathBuf::from);
+        let mirror_root = crate::cli::resolve_mirror_root(&config, env_root.as_ref())?;
         let canonical = config.global_target(&mirror_root)?.canonical_path;
         Ok(Self {
             canonical: if canonical.is_absolute() {

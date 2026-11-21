@@ -18,6 +18,14 @@ const EXDEV: i32 = 18;
 const STAGING_DIR: &str = ".skillnet-tmp";
 
 pub(crate) fn resolve_existing_ancestor(path: &Utf8Path) -> Result<Utf8PathBuf> {
+    // `missing` has the empty parent "", so walk relative paths from the cwd.
+    let absolute;
+    let path = if path.is_relative() {
+        absolute = Utf8PathBuf::try_from(std::env::current_dir()?)?.join(path);
+        &absolute
+    } else {
+        path
+    };
     let mut current = path;
     let mut missing = Vec::new();
     while !current.exists() {
