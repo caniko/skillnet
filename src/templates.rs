@@ -6,8 +6,50 @@ use anyhow::{bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 
+use crate::config::{expand_path, Config};
+
 pub(crate) const TEMPLATE_FILE: &str = "SKILL.md.tmpl";
 pub(crate) const META_FILE: &str = "skillnet-template.toml";
+
+/// Expanded paths for editing the global template bindings.
+pub struct Settings {
+    pub canonical: Utf8PathBuf,
+    pub fleet: Option<Utf8PathBuf>,
+    pub local: Option<Utf8PathBuf>,
+    pub t3_caches: Utf8PathBuf,
+}
+
+impl Settings {
+    pub fn load(config_path: &Utf8Path) -> Result<Self> {
+        let config = Config::load(config_path)?;
+        let expanded = |path: &Option<String>| path.as_deref().map(expand_path).transpose();
+        let (fleet, local) = (
+            expanded(&config.templates.fleet)?,
+            expanded(&config.templates.local)?,
+        );
+        if fleet.is_some() && fleet == local {
+            bail!("[templates] fleet and local must be different files");
+        }
+        let mirror_root = crate::cli::resolve_mirror_root(&config, None)?;
+        let canonical = config.global_target(&mirror_root)?.canonical_path;
+        Ok(Self {
+            canonical: if canonical.is_absolute() {
+                canonical
+            } else {
+                expand_path(canonical.as_str())?
+            },
+            fleet,
+            local,
+            t3_caches: expand_path(
+                config
+                    .models
+                    .t3_caches
+                    .as_deref()
+                    .unwrap_or("~/.local/share/t3code-native/caches"),
+            )?,
+        })
+    }
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct BindingsDoc {
@@ -53,6 +95,7 @@ fn enabled_by_default() -> bool {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct UiConfig {
     pub providers: Option<Vec<String>>,
+    pub hosts_command: Option<Vec<String>>,
 }
 
 /// Allowed seat count, defaulting to one or more seats.
@@ -138,18 +181,19 @@ pub fn to_pkl(doc: &BindingsDoc) -> String {
     }
     out.push_str("}\n");
     if let Some(ui) = &doc.ui {
-        let providers = match &ui.providers {
-            Some(providers) => format!(
-                "List({})",
-                providers
-                    .iter()
-                    .map(|id| pkl_string(id))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            None => "null".into(),
+        let list = |values: &[String]| {
+            let values = values
+                .iter()
+                .map(|value| pkl_string(value))
+                .collect::<Vec<_>>();
+            format!("List({})", values.join(", "))
         };
-        let _ = writeln!(out, "ui {{ providers = {providers} }}");
+        let providers = ui.providers.as_deref().map_or_else(|| "null".into(), list);
+        let _ = write!(out, "ui {{ providers = {providers}");
+        if let Some(command) = &ui.hosts_command {
+            let _ = write!(out, "; hosts_command = {}", list(command));
+        }
+        out.push_str(" }\n");
     }
     out
 }
@@ -357,6 +401,26 @@ pub(crate) fn canonical_skill_dirs(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>> 
     Ok(dirs)
 }
 
+pub fn list_templates(canonical: &Utf8Path) -> Result<Vec<(String, TemplateMeta)>> {
+    canonical_skill_dirs(canonical)?
+        .into_iter()
+        .filter(|path| is_template(path))
+        .map(|path| {
+            let skill = path.file_name().context("template directory has no name")?;
+            Ok((skill.to_owned(), read_meta(&path, skill)?))
+        })
+        .collect()
+}
+
+pub fn render_skill(canonical: &Utf8Path, skill: &str, binding: &SkillBinding) -> Result<String> {
+    crate::bundle::validate_skill_name(skill, "template skill")?;
+    let path = canonical.join(skill);
+    if !is_template(&path) {
+        bail!("`{skill}` is not a canonical template at {path}");
+    }
+    render_template(&path, skill, binding)
+}
+
 pub(crate) fn render_dir(
     path: &Utf8Path,
     skill: &str,
@@ -370,8 +434,20 @@ pub(crate) fn render_dir(
             format!("template `{skill}` has no binding in {binding_files:?} (absent files are skipped)")
         }
     })?;
+    render_template(path, skill, binding)
+}
+
+fn render_template(path: &Utf8Path, skill: &str, binding: &SkillBinding) -> Result<String> {
+    let meta = read_meta(path, skill)?;
+    let template_path = path.join(TEMPLATE_FILE);
+    let template = fs::read_to_string(&template_path)
+        .with_context(|| format!("failed to read template {template_path}"))?;
+    render(&template, meta, skill, binding)
+}
+
+fn read_meta(path: &Utf8Path, skill: &str) -> Result<TemplateMeta> {
     let meta_path = path.join(META_FILE);
-    let meta = match fs::read_to_string(&meta_path) {
+    match fs::read_to_string(&meta_path) {
         Ok(source) => {
             #[derive(Default, Deserialize)]
             #[serde(default)]
@@ -379,16 +455,12 @@ pub(crate) fn render_dir(
                 seats: TemplateMeta,
             }
             toml::from_str::<Meta>(&source)
-                .with_context(|| format!("invalid metadata for template `{skill}` at {meta_path}"))?
-                .seats
+                .map(|meta| meta.seats)
+                .with_context(|| format!("invalid metadata for template `{skill}` at {meta_path}"))
         }
-        Err(error) if error.kind() == ErrorKind::NotFound => TemplateMeta::default(),
-        Err(error) => return Err(error).with_context(|| format!("failed to read {meta_path}")),
-    };
-    let template_path = path.join(TEMPLATE_FILE);
-    let template = fs::read_to_string(&template_path)
-        .with_context(|| format!("failed to read template {template_path}"))?;
-    render(&template, meta, skill, binding)
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(TemplateMeta::default()),
+        Err(error) => Err(error).with_context(|| format!("failed to read {meta_path}")),
+    }
 }
 
 #[cfg(test)]
@@ -502,6 +574,34 @@ mod tests {
     }
 
     #[test]
+    fn lists_and_renders_canonical_templates() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(temp.path()).unwrap();
+        for skill in ["plain", "review"] {
+            fs::create_dir(root.join(skill)).unwrap();
+            fs::write(root.join(skill).join(TEMPLATE_FILE), "{{seat_count}} seats").unwrap();
+        }
+        fs::write(root.join("plain/SKILL.md"), "plain").unwrap();
+        fs::write(
+            root.join("review").join(META_FILE),
+            "[seats]\nmin = 1\nmax = 1",
+        )
+        .unwrap();
+        let meta = TemplateMeta {
+            min: 1,
+            max: Some(1),
+        };
+        assert_eq!(list_templates(root).unwrap(), vec![("review".into(), meta)]);
+        let mut binding = SkillBinding {
+            seats: vec![reviewer()],
+        };
+        assert_eq!(render_skill(root, "review", &binding).unwrap(), "1 seats");
+        binding.seats.push(reviewer());
+        assert!(render_skill(root, "review", &binding).is_err());
+        assert!(render_skill(root, "plain", &binding).is_err());
+    }
+
+    #[test]
     fn bindings_round_trip_and_merge_through_local_pkl() {
         let temp = tempfile::tempdir().unwrap();
         let root = Utf8Path::from_path(temp.path()).unwrap();
@@ -523,6 +623,7 @@ mod tests {
             ]),
             ui: Some(UiConfig {
                 providers: Some(vec!["opencode".into()]),
+                hosts_command: Some(vec!["canix".into(), "hosts".into(), "--json".into()]),
             }),
         };
         let pkl = to_pkl(&doc);
@@ -545,7 +646,13 @@ mod tests {
         )
         .unwrap();
         let merged = load_bindings(&[base, override_path]).unwrap();
-        assert_eq!(merged.ui, Some(UiConfig { providers: None }));
+        assert_eq!(
+            merged.ui,
+            Some(UiConfig {
+                providers: None,
+                hosts_command: None,
+            })
+        );
         assert_eq!(merged.skills["other"], doc.skills["other"]);
         let replacement = &merged.skills["review"].seats[0];
         assert_eq!(replacement.name, "replacement");

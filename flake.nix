@@ -83,6 +83,38 @@
           inherit cargoArtifacts;
         });
 
+      guiRuntimeLibs = with pkgs; [
+        fontconfig
+        freetype
+        libx11
+        libxcb
+        libxcursor
+        libxi
+        libxkbcommon
+        libxrandr
+        wayland
+      ];
+      guiArgs =
+        commonArgs
+        // {
+          pname = "skillnet-ui";
+          inherit (package) version;
+          cargoExtraArgs = "-p skillnet-ui";
+          nativeBuildInputs = [pkgs.pkg-config];
+          buildInputs = guiRuntimeLibs ++ [pkgs.wayland-protocols];
+        };
+      guiPackage = craneLib.buildPackage (guiArgs
+        // {
+          cargoArtifacts = craneLib.buildDepsOnly guiArgs;
+          nativeBuildInputs = guiArgs.nativeBuildInputs ++ [pkgs.makeWrapper];
+          postInstall = ''
+            wrapProgram "$out/bin/skillnet-ui" \
+              --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath guiRuntimeLibs} \
+              --prefix PATH : ${pkgs.lib.makeBinPath [package pkgs.git]}
+          '';
+          meta.mainProgram = "skillnet-ui";
+        });
+
       # Prebuilt release archives for `cargo binstall skillnet`: one static
       # archive per target, published by the generated release workflow.
       release = harbor-rs.lib.mkBinstallRelease {
@@ -202,6 +234,9 @@
         }
         // pkgs.lib.optionalAttrs (release.releaseBundle != null) {
           release-bundle = release.releaseBundle;
+        }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          skillnet-ui = guiPackage;
         };
 
       apps =
@@ -292,6 +327,7 @@
           RUSTC_WRAPPER = "";
         };
         default = craneLib.devShell {
+          buildInputs = pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux guiArgs.buildInputs;
           packages = with pkgs;
             [
               alejandra
@@ -305,7 +341,10 @@
               rust-analyzer
               taplo
             ]
-            ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux harbor-rs.packages.${system}.harbor-ci
+            ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+              harbor-rs.packages.${system}.harbor-ci
+              pkg-config
+            ]
             ++ pre-commit-check.enabledPackages;
           shellHook =
             pre-commit-check.shellHook

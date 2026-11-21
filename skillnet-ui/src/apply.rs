@@ -1,0 +1,336 @@
+use std::{
+    fs,
+    io::{ErrorKind, Write as _},
+    process::{Command, Output},
+};
+
+use anyhow::{bail, Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
+use serde_json::Value;
+use skillnet::templates::{self, BindingsDoc, SkillBinding};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Apply {
+    Fleet,
+    Local,
+    Drop,
+}
+
+pub fn edit_docs(
+    fleet: &BindingsDoc,
+    local: &BindingsDoc,
+    scope: Apply,
+    skill: &str,
+    binding: &SkillBinding,
+) -> (Option<BindingsDoc>, Option<BindingsDoc>) {
+    let fleet = (scope == Apply::Fleet).then(|| {
+        let mut doc = fleet.clone();
+        doc.skills.insert(skill.into(), binding.clone());
+        doc
+    });
+    let local = if scope == Apply::Local {
+        let mut doc = local.clone();
+        doc.skills.insert(skill.into(), binding.clone());
+        Some(doc)
+    } else if local.skills.contains_key(skill) {
+        let mut doc = local.clone();
+        doc.skills.remove(skill);
+        Some(doc)
+    } else {
+        None
+    };
+    (fleet, local)
+}
+
+#[derive(Clone, Default)]
+pub struct Applied {
+    pub fleet: Option<BindingsDoc>,
+    pub local: Option<BindingsDoc>,
+    pub status: String,
+    pub hosts: Option<String>,
+    pub dropped: bool,
+}
+
+pub fn run(
+    scope: Apply,
+    skill: &str,
+    binding: &SkillBinding,
+    fleet_path: Option<Utf8PathBuf>,
+    local_path: Option<Utf8PathBuf>,
+    config: Option<Utf8PathBuf>,
+    hosts_command: Option<Vec<String>>,
+) -> Applied {
+    let mut applied = Applied::default();
+    let mut log = Vec::new();
+    let writes = (|| -> Result<_> {
+        // Re-read both files so edits made elsewhere since the window opened
+        // survive; only the selected skill changes.
+        let load = |path: &Option<Utf8PathBuf>| {
+            templates::load_existing(path.as_slice()).with_context(|| format!("reading {path:?}"))
+        };
+        let fresh_fleet = load(&fleet_path)?;
+        if scope == Apply::Drop && !fresh_fleet.skills.contains_key(skill) {
+            bail!("no fleet binding for `{skill}` to fall back to; local override kept");
+        }
+        let (fleet, local) = edit_docs(&fresh_fleet, &load(&local_path)?, scope, skill, binding);
+        let fleet = fleet_path.zip(fleet);
+        let local = local_path.zip(local);
+        let mut fleet_path = None;
+        if let Some((path, doc)) = fleet {
+            write_doc(&path, &doc).with_context(|| format!("writing {path}"))?;
+            applied.fleet = Some(doc);
+            fleet_path = Some(path);
+        }
+        if let Some((path, doc)) = local {
+            write_doc(&path, &doc).with_context(|| format!("writing {path}"))?;
+            applied.local = Some(doc);
+            applied.dropped = scope == Apply::Drop;
+            if applied.dropped {
+                // The preview falls back to the fleet binding sync just used.
+                applied.fleet = Some(fresh_fleet);
+            }
+        }
+        Ok(fleet_path)
+    })();
+    match writes {
+        Err(error) => log.push(format!("{error:#}")),
+        Ok(fleet_path) => {
+            if let Some(path) = fleet_path {
+                if let Err(error) = publish(&path, skill) {
+                    log.push(format!("{error:#}"));
+                }
+            }
+            let mut sync = Command::new("skillnet");
+            if let Some(config) = config {
+                sync.arg("--config").arg(config);
+            }
+            sync.args([
+                "--allow-dirty-destination",
+                "sync",
+                "--scope",
+                "global",
+                "--no-promote",
+                "--allow-delete",
+            ]);
+            match run_command(&mut sync) {
+                Ok(output) => log.push(command_output(&output)),
+                Err(error) => log.push(format!("{error:#}")),
+            }
+        }
+    }
+    if scope == Apply::Fleet {
+        if let Some(command) = hosts_command {
+            match hosts(&command) {
+                Ok(hosts) => applied.hosts = Some(hosts),
+                Err(error) => log.push(error),
+            }
+        }
+    }
+    log.retain(|line| !line.is_empty());
+    applied.status = if log.is_empty() {
+        "Applied".into()
+    } else {
+        log.join("\n\n")
+    };
+    applied
+}
+
+fn write_doc(path: &Utf8Path, doc: &BindingsDoc) -> Result<()> {
+    let dir = path.parent().context("bindings path has no parent")?;
+    fs::create_dir_all(dir)?;
+    let mut file = tempfile::NamedTempFile::new_in(dir)?;
+    file.write_all(templates::to_pkl(doc).as_bytes())?;
+    match fs::metadata(path) {
+        Ok(meta) => file.as_file().set_permissions(meta.permissions())?,
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    file.persist(path)?;
+    Ok(())
+}
+
+fn publish(path: &Utf8Path, skill: &str) -> Result<()> {
+    let dir = path.parent().context("fleet bindings path has no parent")?;
+    let file = path
+        .file_name()
+        .context("fleet bindings path has no file name")?;
+    let git = || {
+        let mut git = Command::new("git");
+        git.arg("-C").arg(dir).env("GIT_LITERAL_PATHSPECS", "1");
+        git
+    };
+    let stdout = |command: &mut Command| -> Result<String> {
+        Ok(String::from_utf8(run_command(command)?.stdout)?
+            .trim()
+            .to_owned())
+    };
+    // Commit only when the file differs, so a retry after a failed push
+    // goes straight to publishing the earlier commit.
+    if !stdout(git().args(["status", "--porcelain", "--", file]))?.is_empty() {
+        // A path-limited commit needs an index entry if the binding file is new.
+        run_command(git().args(["add", "--intent-to-add", "--", file])).context("git add")?;
+        run_command(
+            git()
+                .args(["commit", "-m"])
+                .arg(format!("chore(ai): bind {skill} skill models"))
+                .args(["--", file]),
+        )
+        .context("git commit")?;
+    }
+    // Push only bindings commits: other unpushed work on the branch is not
+    // ours to publish.
+    let branch = stdout(git().args(["symbolic-ref", "HEAD"])).context("detached HEAD")?;
+    let upstream = stdout(git().args([
+        "for-each-ref",
+        "--format=%(upstream:remotename) %(upstream:remoteref)",
+        &branch,
+    ]))?;
+    let (remote, remote_ref) = upstream
+        .split_once(' ')
+        .filter(|(remote, _)| !remote.is_empty())
+        .with_context(|| format!("{branch} has no upstream; push skipped"))?;
+    let tracked = stdout(git().args(["ls-files", "--full-name", "--", file]))?;
+    // Audit and push one pinned commit, so a concurrent commit cannot slip in.
+    let head = stdout(git().args(["rev-parse", &branch]))?;
+    let short = branch.strip_prefix("refs/heads/").unwrap_or(&branch);
+    let upstream_sha = stdout(git().args(["rev-parse", &format!("{short}@{{u}}")]))?;
+    // -m lists merge changes per parent; --no-renames lists rename sources.
+    let outgoing = stdout(git().args([
+        "log",
+        "-m",
+        "--no-renames",
+        "--format=",
+        "--name-only",
+        &format!("{upstream_sha}..{head}"),
+    ]))?;
+    let mut touched: Vec<_> = outgoing.lines().filter(|line| !line.is_empty()).collect();
+    touched.sort_unstable();
+    touched.dedup();
+    if touched.is_empty() {
+        return Ok(());
+    }
+    if touched != [tracked.as_str()] {
+        bail!(
+            "committed locally, push skipped: unpushed commits on {branch} also touch {}",
+            touched
+                .iter()
+                .filter(|path| **path != tracked)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    run_command(git().args([
+        "push",
+        "--no-follow-tags",
+        remote,
+        &format!("{head}:{remote_ref}"),
+    ]))
+    .context("git push")?;
+    Ok(())
+}
+
+pub fn hosts(command: &[String]) -> Result<String, String> {
+    (|| -> Result<String> {
+        let (program, args) = command.split_first().context("ui.hosts_command is empty")?;
+        let output = run_command(Command::new(program).args(args))?;
+        let json: Value = serde_json::from_slice(&output.stdout)?;
+        let data = json["data"].as_array().context("expected a data array")?;
+        let hosts = data
+            .iter()
+            .map(|row| {
+                let host = row["host"].as_str().context("missing host")?;
+                let kind = row["deviceType"].as_str().context("missing deviceType")?;
+                Ok(format!("{host} — {kind}"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(hosts.join("\n"))
+    })()
+    .map_err(|error| format!("Fleet hosts: {error:#}"))
+}
+
+fn run_command(command: &mut Command) -> Result<Output> {
+    let output = command
+        .output()
+        .with_context(|| format!("could not start {command:?}"))?;
+    if !output.status.success() {
+        bail!(
+            "{command:?} exited {}:\n{}",
+            output.status,
+            command_output(&output)
+        );
+    }
+    Ok(output)
+}
+
+fn command_output(output: &Output) -> String {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    [stdout.trim(), stderr.trim()]
+        .into_iter()
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn publish_pushes_only_bindings_commits() {
+        // Disposable fixture repos: no global config, hooks or signing.
+        std::env::set_var("GIT_CONFIG_GLOBAL", "/dev/null");
+        std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(temp.path()).unwrap();
+        let git = |dir: &Utf8Path, args: &[&str]| {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{args:?}: {output:?}");
+            String::from_utf8(output.stdout).unwrap().trim().to_owned()
+        };
+        let remote = root.join("remote.git");
+        let work = root.join("work");
+        git(
+            root,
+            &["init", "-q", "--bare", "-b", "trunk", remote.as_str()],
+        );
+        git(root, &["clone", "-q", remote.as_str(), work.as_str()]);
+        for (key, value) in [
+            ("user.name", "Fixture"),
+            ("user.email", "fixture@example.invalid"),
+        ] {
+            git(&work, &["config", key, value]);
+        }
+        git(&work, &["commit", "-q", "--allow-empty", "-m", "base"]);
+        git(&work, &["push", "-q", "-u", "origin", "trunk"]);
+        let file = work.join("lib/SkillModels.pkl");
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+
+        fs::write(&file, "skills {}\n").unwrap();
+        publish(&file, "council").unwrap();
+        assert_eq!(
+            git(&remote, &["rev-parse", "trunk"]),
+            git(&work, &["rev-parse", "HEAD"])
+        );
+
+        // Unrelated unpushed work blocks publication; the bindings commit stays local.
+        fs::write(work.join("other.txt"), "x").unwrap();
+        git(&work, &["add", "other.txt"]);
+        git(&work, &["commit", "-q", "-m", "other"]);
+        let pushed = git(&remote, &["rev-parse", "trunk"]);
+        fs::write(&file, "skills { [\"council\"] { seats = List() } }\n").unwrap();
+        let error = publish(&file, "council").unwrap_err().to_string();
+        assert!(
+            error.contains("push skipped") && error.contains("other.txt"),
+            "{error}"
+        );
+        assert_eq!(git(&remote, &["rev-parse", "trunk"]), pushed);
+        assert!(git(&work, &["status", "--porcelain"]).is_empty());
+    }
+}

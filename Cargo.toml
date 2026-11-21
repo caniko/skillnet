@@ -1,3 +1,8 @@
+[workspace]
+members = [".", "skillnet-ui"]
+default-members = ["."]
+resolver = "2"
+
 [package]
 name = "skillnet"
 version = "0.7.0"
