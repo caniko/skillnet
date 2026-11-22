@@ -596,7 +596,7 @@ impl BundlePlan {
                 None => fs::read(&source).map(Cow::Owned),
             };
             match (fs::read(&entrypoint), expected) {
-                (Ok(generated), Ok(canonical)) if generated == canonical => {}
+                (Ok(generated), Ok(canonical)) if generated.as_slice() == canonical.as_ref() => {}
                 (Ok(_), Ok(_)) => issues.push(format!(
                     "generated entrypoint for `{skill}` is stale at {entrypoint}; run `skillnet view sync`"
                 )),
