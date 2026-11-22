@@ -1,6 +1,8 @@
 use std::{
+    ffi::CString,
     fs,
     io::{ErrorKind, Write as _},
+    os::unix::ffi::OsStrExt as _,
     process::{Command, Output},
 };
 
@@ -111,6 +113,9 @@ pub fn run(
         let fleet = fleet_path.zip(fleet);
         let local = local_path.zip(local);
         // Check every file this action replaces before writing any of them.
+        if let Some((path, _)) = &fleet {
+            ensure_clean_fleet_file(path)?;
+        }
         let permissions = |file: &Option<(Utf8PathBuf, BindingsDoc)>| {
             file.as_ref()
                 .map(|(path, _)| managed_permissions(path))
@@ -323,27 +328,103 @@ fn publish(path: &Utf8Path, skill: &str) -> Result<()> {
     Ok(())
 }
 
-/// Check whether `path` can be written by `skillnet-ui` (not in `/nix/store`,
-/// not a symlink, and not read-only).
+/// Refuse Fleet Apply when the fleet bindings file already has uncommitted
+/// changes in Git, so unrelated edits in the same file are never swept into
+/// the published bindings commit.
+fn ensure_clean_fleet_file(path: &Utf8Path) -> Result<()> {
+    let mut dir = parent_dir(path);
+    while let Some(candidate) = dir {
+        if candidate.exists() {
+            break;
+        }
+        dir = candidate
+            .parent()
+            .filter(|parent| !parent.as_str().is_empty());
+    }
+    let Some(dir) = dir else {
+        return Ok(());
+    };
+    let target = path.strip_prefix(dir).unwrap_or(path);
+    if target.as_str().is_empty() {
+        return Ok(());
+    }
+    let Ok(output) = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+    else {
+        return Ok(());
+    };
+    if !output.status.success() || String::from_utf8_lossy(&output.stdout).trim() != "true" {
+        return Ok(());
+    }
+    let status = run_command(
+        Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .env("GIT_LITERAL_PATHSPECS", "1")
+            .args(["status", "--porcelain", "--"])
+            .arg(target),
+    )
+    .context("checking fleet bindings git status")?;
+    if !String::from_utf8(status.stdout)?.trim().is_empty() {
+        bail!("{path} has uncommitted changes; commit or discard them before applying fleet-wide");
+    }
+    Ok(())
+}
+
+fn eaccess(path: &Utf8Path, mode: libc::c_int) -> bool {
+    let Ok(c_path) = CString::new(path.as_std_path().as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: `c_path` is a valid NUL-terminated path passed to `faccessat`.
+    unsafe { libc::faccessat(libc::AT_FDCWD, c_path.as_ptr(), mode, libc::AT_EACCESS) == 0 }
+}
+
+/// Check whether `path` can be atomically written by the current user
+/// (not in `/nix/store`, not a symlink, and effective write access to the
+/// target and its parent directory).
 pub fn is_writable_target(path: &Utf8Path) -> bool {
     if path == Utf8Path::new("/nix/store") || path.as_str().starts_with("/nix/store/") {
         return false;
     }
     match fs::symlink_metadata(path) {
         Ok(meta) => {
-            if meta.file_type().is_symlink() || meta.permissions().readonly() {
+            if meta.file_type().is_symlink()
+                || meta.permissions().readonly()
+                || !eaccess(path, libc::W_OK)
+            {
                 return false;
             }
             parent_dir(path)
-                .and_then(|dir| fs::metadata(dir).ok())
-                .is_some_and(|dir| !dir.permissions().readonly())
+                .and_then(|dir| fs::metadata(dir).ok().map(|meta| (dir, meta)))
+                .is_some_and(|(dir, meta)| {
+                    meta.is_dir()
+                        && !meta.permissions().readonly()
+                        && eaccess(dir, libc::W_OK | libc::X_OK)
+                })
         }
         Err(error) if error.kind() == ErrorKind::NotFound => {
             let mut cursor = parent_dir(path);
             while let Some(dir) = cursor {
-                match fs::metadata(dir) {
-                    Ok(meta) => return meta.is_dir() && !meta.permissions().readonly(),
-                    Err(err) if err.kind() == ErrorKind::NotFound => cursor = dir.parent(),
+                let probe = if dir.as_str().is_empty() {
+                    Utf8Path::new(".")
+                } else {
+                    dir
+                };
+                match fs::metadata(probe) {
+                    Ok(meta) => {
+                        return meta.is_dir()
+                            && !meta.permissions().readonly()
+                            && eaccess(probe, libc::W_OK | libc::X_OK);
+                    }
+                    Err(err) if err.kind() == ErrorKind::NotFound => {
+                        if probe == Utf8Path::new(".") {
+                            return false;
+                        }
+                        cursor = dir.parent();
+                    }
                     Err(_) => return false,
                 }
             }
@@ -446,6 +527,73 @@ mod tests {
         perms.set_readonly(true);
         fs::set_permissions(&writable, perms).unwrap();
         assert!(!is_writable_target(&writable));
+
+        // When not running as root, a root-owned 0755 dir/0644 file is not writable.
+        // SAFETY: `geteuid` has no preconditions.
+        if unsafe { libc::geteuid() } != 0 {
+            assert!(!is_writable_target(Utf8Path::new("/etc/hosts")));
+            assert!(!is_writable_target(Utf8Path::new(
+                "/etc/skillnet-nonexistent.pkl"
+            )));
+        }
+    }
+
+    #[test]
+    fn clean_fleet_check_refuses_uncommitted_edits() {
+        std::env::set_var("GIT_CONFIG_GLOBAL", "/dev/null");
+        std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(temp.path()).unwrap();
+        let git = |args: &[&str]| {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{args:?}: {output:?}");
+        };
+        git(&["init", "-q", "-b", "trunk"]);
+        git(&["config", "user.name", "Fixture"]);
+        git(&["config", "user.email", "fixture@example.invalid"]);
+        let file = root.join("lib/SkillModels.pkl");
+        // Missing file in a repo is clean (initial creation is allowed).
+        ensure_clean_fleet_file(&file).unwrap();
+
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(
+            &file,
+            "// Managed by skillnet; edits are overwritten.\nskills {}\n",
+        )
+        .unwrap();
+        // Untracked existing file on disk is refused.
+        assert!(ensure_clean_fleet_file(&file)
+            .unwrap_err()
+            .to_string()
+            .contains("uncommitted changes"));
+
+        git(&["add", "lib/SkillModels.pkl"]);
+        // Staged but uncommitted file is refused.
+        assert!(ensure_clean_fleet_file(&file)
+            .unwrap_err()
+            .to_string()
+            .contains("uncommitted changes"));
+
+        git(&["commit", "-q", "-m", "initial"]);
+        // Clean tracked file passes, even when another file in the repo is dirty.
+        fs::write(root.join("other.txt"), "dirty").unwrap();
+        ensure_clean_fleet_file(&file).unwrap();
+
+        // Unstaged edit to the bindings file itself is refused.
+        fs::write(
+            &file,
+            "// Managed by skillnet; edits are overwritten.\nskills { [\"b\"] { seats = List() } }\n",
+        )
+        .unwrap();
+        assert!(ensure_clean_fleet_file(&file)
+            .unwrap_err()
+            .to_string()
+            .contains("uncommitted changes"));
     }
 
     #[test]

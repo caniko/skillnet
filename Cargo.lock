@@ -2806,6 +2806,7 @@ dependencies = [
  "anyhow",
  "camino",
  "iced",
+ "libc",
  "serde_json",
  "skillnet",
  "tempfile",

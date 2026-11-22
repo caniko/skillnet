@@ -150,9 +150,12 @@ fn models_json_uses_enabled_provider_snapshots() {
     let snapshot = json!({
         "displayName": "OpenCode", "enabled": true, "status": "ready",
         "models": [{"slug": "org/model", "name": "Model", "subProvider": "OpenAI", "capabilities": {
-            "optionDescriptors": [{"id": "variant", "label": "Reasoning", "type": "select",
-                "currentValue": "high",
-                "options": [{"id": "high", "label": "High", "isDefault": true}] }]
+            "optionDescriptors": [
+                {"id": "variant", "label": "Reasoning", "type": "select",
+                 "currentValue": "high",
+                 "options": [{"id": "high", "label": "High", "isDefault": true}]},
+                {"id": "thinking", "label": "Thinking", "type": "boolean", "currentValue": true}
+            ]
         }}]
     });
     fs::write(temp.path().join("opencode.json"), snapshot.to_string()).unwrap();
@@ -185,6 +188,10 @@ fn models_json_uses_enabled_provider_snapshots() {
         "high"
     );
     assert_eq!(
+        providers[0]["models"][0]["capabilities"]["optionDescriptors"][1]["currentValue"],
+        true
+    );
+    assert_eq!(
         providers[0]["models"][0]["capabilities"]["optionDescriptors"][0]["options"][0]["id"],
         "high"
     );
@@ -210,7 +217,7 @@ fn models_json_uses_enabled_provider_snapshots() {
     list()
         .assert()
         .success()
-        .stdout("opencode org/model variant=high\n");
+        .stdout("opencode org/model variant=high thinking=true|false\n");
     fs::write(&bindings, r#"ui { providers = List("disabled") }"#).unwrap();
     list().assert().success().stdout("");
 }
@@ -286,6 +293,24 @@ fn first_template_keeps_view_only_authored_skills() {
         .arg("--config")
         .arg(&config)
         .args(["view", "sync", "--all", "--allow-delete"])
+        .assert()
+        .success();
+    assert!(view.join("authored/SKILL.md").is_file());
+    assert!(view.join("review").is_symlink());
+
+    // Templates-only HM activation uses `sync --scope global --no-promote`
+    // (without `--allow-delete`), which must also preserve view-authored skills.
+    Command::cargo_bin("skillnet")
+        .unwrap()
+        .arg("--config")
+        .arg(&config)
+        .args([
+            "--allow-dirty-destination",
+            "sync",
+            "--scope",
+            "global",
+            "--no-promote",
+        ])
         .assert()
         .success();
     assert!(view.join("authored/SKILL.md").is_file());

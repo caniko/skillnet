@@ -80,6 +80,7 @@ fn main() -> Result<()> {
 struct App {
     config: Utf8PathBuf,
     settings: Settings,
+    fleet_writable: bool,
     templates: Vec<(String, TemplateMeta)>,
     fleet: BindingsDoc,
     local: BindingsDoc,
@@ -130,9 +131,14 @@ impl App {
             let fleet = templates::load_existing(settings.fleet.as_slice())?;
             let local = templates::load_existing(settings.local.as_slice())?;
             let templates = templates::list_templates(&settings.canonical)?;
+            let fleet_writable = settings
+                .fleet
+                .as_deref()
+                .is_some_and(apply::is_writable_target);
             let mut app = Self {
                 config: config.to_owned(),
                 settings,
+                fleet_writable,
                 templates,
                 fleet,
                 local,
@@ -222,13 +228,6 @@ impl App {
         draft
     }
 
-    fn fleet_writable(&self) -> bool {
-        self.settings
-            .fleet
-            .as_deref()
-            .is_some_and(apply::is_writable_target)
-    }
-
     fn rendered_binding(&self, skill: &str) -> SkillBinding {
         let mut binding = self.drafts[skill].clone();
         for seat in &mut binding.seats {
@@ -304,6 +303,11 @@ impl App {
                     // Recreates the selected draft if it was reloaded above.
                     app.select(index);
                 }
+                app.fleet_writable = app
+                    .settings
+                    .fleet
+                    .as_deref()
+                    .is_some_and(apply::is_writable_target);
                 app.status = status;
                 app.busy = false;
             }
@@ -449,7 +453,7 @@ impl App {
             Err(error) => text(format!("{error:#}")),
         };
         let can_apply = !self.busy && self.preview.is_ok();
-        let fleet_writable = self.fleet_writable();
+        let fleet_writable = self.fleet_writable;
         let has_local_override = self.local.skills.contains_key(skill);
         let mut actions = if fleet_writable {
             row![
@@ -798,12 +802,16 @@ fn default_options(model: &Model, route: &mut Route) {
                 .find(|value| value.is_default == Some(true))
                 .map(|value| value.id.as_str())
                 .or_else(|| {
-                    descriptor.current_value.as_deref().filter(|current| {
-                        descriptor
-                            .options
-                            .iter()
-                            .any(|option| option.id == *current)
-                    })
+                    descriptor
+                        .current_value
+                        .as_ref()
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|current| {
+                            descriptor
+                                .options
+                                .iter()
+                                .any(|option| option.id == *current)
+                        })
                 });
             if let Some(value) = default {
                 route
@@ -1054,7 +1062,7 @@ mod tests {
                             is_default: None,
                         },
                     ],
-                    current_value: Some("high".into()),
+                    current_value: Some(serde_json::Value::String("high".into())),
                 }],
             },
         };

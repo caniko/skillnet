@@ -46,7 +46,7 @@ pub struct OptionDescriptor {
     #[serde(default)]
     pub options: Vec<ModelOption>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_value: Option<String>,
+    pub current_value: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
