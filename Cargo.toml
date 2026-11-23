@@ -1,6 +1,11 @@
+[workspace]
+members = [".", "skillnet-ui"]
+default-members = ["."]
+resolver = "2"
+
 [package]
 name = "skillnet"
-version = "0.6.4"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.89"
 description = "Manage canonical AI skill stores, derived views, and calibration data for multi-phase-plan."

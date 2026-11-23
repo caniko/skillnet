@@ -8,6 +8,8 @@
   externalManifests ? [],
   excludedSkills ? [],
   excludedProviderSkills ? [],
+  # Pkl bindings for SKILL.md.tmpl templates in `canonical`.
+  templateBindings ? null,
 }: let
   configTemplate = (pkgs.formats.toml {}).generate "skillnet-bundle.toml.in" ({
       data_dir = "@bundle@";
@@ -31,7 +33,11 @@
         ];
       };
     }
-    // pkgs.lib.optionalAttrs (host != null) {inherit host;});
+    // pkgs.lib.optionalAttrs (host != null) {inherit host;}
+    // pkgs.lib.optionalAttrs (templateBindings != null) {
+      # Interpolate so a Nix path becomes a tracked store input.
+      templates.fleet = "${templateBindings}";
+    });
 in
   pkgs.runCommandLocal "skillnet-bundle-${user}" {
     nativeBuildInputs = [package];

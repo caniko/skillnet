@@ -7,7 +7,7 @@ use walkdir::WalkDir;
 use crate::{
     commands::Context,
     config::{expand_path, SubscriptionConfig, SubscriptionDeletePolicy},
-    fs_ops::copy_dir,
+    fs_ops::{copy_dir, resolve_existing_ancestor},
 };
 
 pub fn sync(ctx: &Context, names: &[String], all: bool) -> Result<()> {
@@ -203,28 +203,6 @@ fn reject_canonical_overlap(ctx: &Context, name: &str, kind: &str, path: &Utf8Pa
         }
     }
     Ok(())
-}
-
-fn resolve_existing_ancestor(path: &Utf8Path) -> Result<Utf8PathBuf> {
-    let mut current = path.to_path_buf();
-    let mut missing = Vec::new();
-    while !current.exists() {
-        missing.push(
-            current
-                .file_name()
-                .with_context(|| format!("path has no existing ancestor: {path}"))?
-                .to_string(),
-        );
-        current = current
-            .parent()
-            .with_context(|| format!("path has no existing ancestor: {path}"))?
-            .to_path_buf();
-    }
-    let mut resolved = canonical_utf8(&current)?;
-    for component in missing.into_iter().rev() {
-        resolved.push(component);
-    }
-    Ok(resolved)
 }
 
 fn checkout_path(data_dir: &Utf8Path, name: &str) -> Utf8PathBuf {

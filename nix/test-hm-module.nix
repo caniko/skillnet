@@ -129,6 +129,16 @@
     host = "host-only-destination";
     database.backend = "sqlite";
   };
+  templatesOnlyConfig = mkHmConfig {
+    database.backend = "sqlite";
+    settings = {
+      templates.fleet = "/nix/store/skillnet-bindings/SkillModels.pkl";
+      global = {
+        canonical_path = "${skillsRoot}/global";
+        views = [];
+      };
+    };
+  };
   immutableConfig = mkHmConfig {
     host = "destination-not-builder";
     bundlesRoot = "/nix/store/skillnet-bundle/bundles";
@@ -187,6 +197,8 @@ in
       ! grep -F 'mirror not found at' ${sqliteConfig.activationPackage}/activate >/dev/null
       ! grep -F 'skipping for now.' ${sqliteConfig.activationPackage}/activate >/dev/null
       ! grep -F '${package}/bin/skillnet' ${immutableConfig.activationPackage}/activate >/dev/null
+      grep -F '${package}/bin/skillnet --allow-dirty-destination sync --scope global --no-promote' ${templatesOnlyConfig.activationPackage}/activate >/dev/null
+      ! grep -F -- '--allow-delete' ${templatesOnlyConfig.activationPackage}/activate >/dev/null
       grep -R -F 'bundles_root = "/nix/store/skillnet-bundle/bundles"' ${immutableConfig.activationPackage}/home-files >/dev/null
       grep -R -F 'host = "destination-not-builder"' ${immutableConfig.activationPackage}/home-files >/dev/null
       ! grep -R -F 'host = "wrong-builder"' ${immutableConfig.activationPackage}/home-files >/dev/null

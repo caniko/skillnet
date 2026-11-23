@@ -17,9 +17,15 @@ use crate::{
 pub fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
     let target = ctx.target(&skill_path.scope)?;
     let path = target.canonical_path.join(&skill_path.skill);
-    ensure_skill_exists(skill_path, &path)?;
-
-    let skill_file = path.join("SKILL.md");
+    // Global templates have no SKILL.md in the canonical store.
+    let skill_file = if target.scope == crate::model::TargetScope::Global
+        && crate::templates::is_template(&path)
+    {
+        path.join(crate::templates::TEMPLATE_FILE)
+    } else {
+        ensure_skill_exists(skill_path, &path)?;
+        path.join("SKILL.md")
+    };
     let body = fs::read_to_string(&skill_file)
         .with_context(|| format!("failed to read skill file {skill_file}"))?;
     let frontmatter = catalog::parse_frontmatter(&body);
@@ -297,6 +303,14 @@ fn ensure_skill_exists(skill_path: &SkillPath, path: &Utf8Path) -> Result<()> {
             "skill `{}` not found in scope `{}`",
             skill_path.skill,
             skill_path.scope
+        );
+    }
+    // Changing a template also means changing its bindings; refuse rather
+    // than leave a binding behind. `skill show` reads templates directly.
+    if crate::templates::is_template(path) {
+        bail!(
+            "`{}` is a model-bound template; edit {path} and its bindings directly",
+            skill_path.skill
         );
     }
     fs_ops::ensure_skill_dir(path)

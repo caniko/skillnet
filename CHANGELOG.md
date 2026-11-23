@@ -7,8 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-21
+
+### Added
+
+- Render model-bound skill templates into global bundles without changing
+  canonical skills. Preview them with `skillnet template render`.
+- Inspect cached T3 provider models and options with `skillnet models list`.
+- Add `skillnet-ui`, an iced editor for template model bindings (Linux). The
+  `templates` and `models` modules are public only for it; no stable library
+  API is promised.
+
 ### Changed
 
+- In bundle mode, `view sync` and promotion-mode `sync` keep real directories
+  found in symlink views, as promotion mode already promised, so adding the
+  first template never deletes a skill authored in a view. Real directories
+  left over from an earlier hardlink view now stay too; remove them once with
+  `skillnet sync --scope global --no-promote --allow-delete`, which still
+  prunes them. That command also deletes skills authored in a view, so move
+  or back those up first.
 - The macOS release archive runs the test suite again: the macOS CLI tests
   pass now that the release build has `git` and `gnupg` (#11).
 
@@ -294,7 +312,8 @@ Initial release.
 
 No stable Rust library API is committed in `0.1.0`; the supported surface is the `skillnet` binary.
 
-[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.6.4...HEAD
+[Unreleased]: https://codeberg.org/caniko/skillnet/compare/0.7.0...HEAD
+[0.7.0]: https://codeberg.org/caniko/skillnet/compare/0.6.4...0.7.0
 [0.6.4]: https://codeberg.org/caniko/skillnet/compare/0.6.3...0.6.4
 [0.6.3]: https://codeberg.org/caniko/skillnet/compare/0.6.2...0.6.3
 [0.6.2]: https://codeberg.org/caniko/skillnet/compare/0.6.1...0.6.2

@@ -58,6 +58,37 @@ pub struct Config {
     /// Names omitted only from subscription providers, leaving authored skills available.
     #[serde(default)]
     pub excluded_provider_skills: Vec<String>,
+    #[serde(default)]
+    pub templates: TemplatesConfig,
+    #[serde(default)]
+    pub models: ModelsConfig,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TemplatesConfig {
+    /// Shared, versioned bindings.
+    pub fleet: Option<String>,
+    /// Host-local overrides; replace fleet entries skill by skill.
+    pub local: Option<String>,
+}
+
+impl TemplatesConfig {
+    /// Configured binding files, fleet before local. Load them with
+    /// `templates::load_existing`, which skips absent files.
+    pub fn binding_paths(&self) -> Result<Vec<Utf8PathBuf>> {
+        [&self.fleet, &self.local]
+            .into_iter()
+            .flatten()
+            .map(|path| expand_path(path))
+            .collect()
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelsConfig {
+    pub t3_caches: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]

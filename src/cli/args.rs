@@ -143,12 +143,48 @@ pub(super) enum Command {
         #[command(subcommand)]
         command: CatalogCommand,
     },
+    /// Preview model-bound skill templates.
+    Template {
+        #[command(subcommand)]
+        command: TemplateCommand,
+    },
+    /// Inspect cached T3 provider models.
+    Models {
+        #[command(subcommand)]
+        command: ModelsCommand,
+    },
     /// Record and verify multi-phase-plan calibration data.
     Calibration(CalibrationArgs),
     /// Ingest shell hook payloads.
     Hook(HookArgs),
     /// Record and report normalized skill usage.
     Usage(UsageArgs),
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum TemplateCommand {
+    /// Render a canonical skill template to stdout.
+    Render {
+        skill: String,
+        /// Pkl binding file. Repeat to merge files in order.
+        #[arg(long, value_name = "PATH")]
+        bindings: Vec<Utf8PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(disable_help_subcommand = true)]
+pub(super) enum ModelsCommand {
+    /// List enabled provider models and their options.
+    List {
+        /// Print JSON instead of one line per provider/model.
+        #[arg(long)]
+        json: bool,
+        /// Override the T3 snapshot directory.
+        #[arg(long, value_name = "DIR")]
+        caches: Option<Utf8PathBuf>,
+    },
 }
 
 #[derive(Debug, Args)]

@@ -1006,6 +1006,15 @@ fn sync_help_lists_command() {
 
 #[test]
 fn sync_help_output_matches_snapshot() {
+    insta::assert_snapshot!(help_output(&["sync", "--help"]));
+}
+
+#[test]
+fn top_level_help_output_matches_snapshot() {
+    insta::assert_snapshot!(help_output(&["--help"]));
+}
+
+fn help_output(args: &[&str]) -> String {
     // clap inlines `[env: VAR=<value>]` in --help; isolate the env so the
     // snapshot is stable across shells that export skillnet's session vars
     // (the HM module sets SKILLNET_MIRROR_ROOT, for example).
@@ -1017,14 +1026,19 @@ fn sync_help_output_matches_snapshot() {
         .env_remove("SKILLNET_DATABASE_URL")
         .env_remove("SKILLNET_DB_URL")
         .env_remove("DATABASE_URL")
-        .args(["sync", "--help"])
+        .args(args)
         .assert()
         .success()
         .get_output()
         .stdout
         .clone();
-    let help = String::from_utf8(output).unwrap();
-    insta::assert_snapshot!(help);
+    // Clap indents otherwise blank lines in long help.
+    String::from_utf8(output)
+        .unwrap()
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[test]

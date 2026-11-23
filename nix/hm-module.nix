@@ -420,9 +420,9 @@ in {
       home.sessionVariables.AI_SKILLS_REPO = cfg.skillsRoot;
     })
 
-    (lib.mkIf (cfg.bundlesRoot == null && cfg.externalManifests != []) {
+    (lib.mkIf (cfg.bundlesRoot == null && (cfg.externalManifests != [] || (settings ? templates))) {
       home.activation.skillnetExternalBundles = lib.hm.dag.entryAfter ["linkGeneration"] ''
-        ${cfg.package}/bin/skillnet --allow-dirty-destination sync --scope global --no-promote --allow-delete
+        ${cfg.package}/bin/skillnet --allow-dirty-destination sync --scope global --no-promote${lib.optionalString (cfg.externalManifests != []) " --allow-delete"}
       '';
     })
 

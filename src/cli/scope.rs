@@ -208,6 +208,8 @@ mod tests {
             external_manifests: Default::default(),
             excluded_skills: Default::default(),
             excluded_provider_skills: Default::default(),
+            templates: Default::default(),
+            models: Default::default(),
             link_strategy: None,
             project_discovery: None,
             discovered_project_paths: Default::default(),

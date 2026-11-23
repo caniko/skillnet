@@ -1,13 +1,25 @@
 use anyhow::Result;
+use camino::Utf8PathBuf;
 
 use super::Context;
-use crate::cli::Scope;
-use crate::mirror::mirror_skill_dirs;
+use crate::{
+    cli::Scope,
+    mirror::mirror_skill_dirs,
+    model::{Target, TargetScope},
+    templates,
+};
+
+pub(super) fn canonical_skill_dirs(target: &Target) -> Result<Vec<Utf8PathBuf>> {
+    match target.scope {
+        TargetScope::Global => templates::canonical_skill_dirs(&target.canonical_path),
+        TargetScope::Project => mirror_skill_dirs(&target.canonical_path),
+    }
+}
 
 pub fn list(ctx: &Context, scopes: &[Scope]) -> Result<()> {
     for target in ctx.targets(scopes)? {
         println!("# {}", target.name);
-        for skill in mirror_skill_dirs(&target.canonical_path)? {
+        for skill in canonical_skill_dirs(&target)? {
             println!("{}", skill.file_name().unwrap_or_default());
         }
     }

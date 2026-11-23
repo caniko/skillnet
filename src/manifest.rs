@@ -66,19 +66,7 @@ pub fn load_path(path: &Utf8Path) -> Result<Option<Manifest>> {
     }
     let source = fs::read_to_string(path)
         .with_context(|| format!("failed to read Skillnet manifest {path}"))?;
-    let root = path
-        .parent()
-        .context("Skillnet manifest has no parent")?
-        .as_std_path()
-        .canonicalize()
-        .with_context(|| format!("failed to canonicalize manifest root {}", path))?;
-    let manifest_path = path.as_std_path();
-    let mut evaluator = pklr::Evaluator::with_capabilities(LocalCapabilities::new(root.clone()));
-    evaluator.set_base_path(&root);
-    let value = evaluator
-        .eval_source(&source, manifest_path)
-        .map_err(|error| anyhow::anyhow!("failed to evaluate {path}: {error}"))?;
-    let document: ManifestDocument = serde_json::from_value(value.to_json())
+    let document: ManifestDocument = serde_json::from_value(eval_local(path, &source)?)
         .with_context(|| format!("invalid evaluated Skillnet manifest {path}"))?;
     if !matches!(document.schema_version, 1..=3) {
         bail!(
@@ -118,6 +106,26 @@ pub fn load_path(path: &Utf8Path) -> Result<Option<Manifest>> {
         document,
         path: path.to_path_buf(),
     }))
+}
+
+pub(crate) fn eval_local(path: &Utf8Path, source: &str) -> Result<serde_json::Value> {
+    let parent = path.parent().context("Pkl file has no parent directory")?;
+    let parent = if parent.as_str().is_empty() {
+        Utf8Path::new(".")
+    } else {
+        parent
+    };
+    let root = parent
+        .as_std_path()
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize Pkl root for {path}"))?;
+    let entry = root.join(path.file_name().context("Pkl path has no file name")?);
+    let mut evaluator = pklr::Evaluator::with_capabilities(LocalCapabilities::new(root.clone()));
+    evaluator.set_base_path(&root);
+    let value = evaluator
+        .eval_source(source, &entry)
+        .map_err(|error| anyhow::anyhow!("failed to evaluate {path}: {error}"))?;
+    Ok(value.to_json())
 }
 
 fn validate_user_list(users: Option<&[String]>, field: &str, path: &Utf8Path) -> Result<()> {

@@ -135,6 +135,8 @@ impl Context {
                 host: self.config.host.as_deref(),
                 excluded_skills: &self.config.excluded_skills,
                 excluded_provider_skills: &self.config.excluded_provider_skills,
+                template_config: (target.scope == TargetScope::Global)
+                    .then_some(&self.config.templates),
             },
         )
     }

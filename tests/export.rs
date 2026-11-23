@@ -148,6 +148,9 @@ fn export_prune_removes_stale_skill_dirs_and_preserves_non_skills() {
     fixture.write_source_skill("alpha", "alpha v1");
     fixture.write_global_skill("alpha", "old alpha");
     fixture.write_global_skill("stale", "stale");
+    let template = fixture.path("mirror/global/local-template");
+    fs::create_dir_all(&template).unwrap();
+    fs::write(template.join("SKILL.md.tmpl"), "local template").unwrap();
     fs::create_dir_all(fixture.path("mirror/global/not-a-skill")).unwrap();
     fs::write(fixture.path("mirror/global/not-a-skill/README.md"), "keep").unwrap();
 
@@ -161,6 +164,7 @@ fn export_prune_removes_stale_skill_dirs_and_preserves_non_skills() {
 
     assert!(fixture.path("mirror/global/alpha/SKILL.md").is_file());
     assert!(!fixture.path("mirror/global/stale").exists());
+    assert!(template.join("SKILL.md.tmpl").is_file());
     assert!(fixture
         .path("mirror/global/not-a-skill/README.md")
         .is_file());
@@ -170,7 +174,9 @@ fn export_prune_removes_stale_skill_dirs_and_preserves_non_skills() {
 fn export_filtered_prune_keeps_unselected_skills_present_in_source() {
     let fixture = Fixture::new();
     let config = fixture.write_config();
-    fixture.write_source_skill("alpha", "alpha v1");
+    let alpha = fixture.path("repo/skills/alpha");
+    fs::create_dir_all(&alpha).unwrap();
+    fs::write(alpha.join("SKILL.md.tmpl"), "alpha template").unwrap();
     fixture.write_source_skill("beta", "beta v1");
     fixture.write_global_skill("alpha", "existing alpha");
     fixture.write_global_skill("stale", "stale");
