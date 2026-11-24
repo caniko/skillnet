@@ -6,6 +6,7 @@
 
 pub(crate) mod bundle;
 pub mod calibration;
+mod cards;
 mod catalog;
 pub mod cli;
 mod commands;

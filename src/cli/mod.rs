@@ -39,8 +39,6 @@ pub fn run() -> Result<()> {
         return commands::config::run(command, dry_run);
     }
 
-    let explicit_config = config.is_some();
-    let config = resolve_config_path(config)?;
     let command = command.unwrap_or(Command::Status {
         scope: Vec::new(),
         all: false,
@@ -54,6 +52,27 @@ pub fn run() -> Result<()> {
         return Ok(());
     }
 
+    if let Command::Fingerprint { cwd, json } = command {
+        return commands::cards::fingerprint(&cwd, json);
+    }
+
+    // Unlike legacy commands, cards must not discover a config (and packs) from the current repo.
+    if let Command::Trigger(args) = command {
+        let config = config.map_or_else(default_config_path, Ok)?;
+        return commands::cards::trigger(args, &config, mirror_root.as_ref());
+    }
+    if let Command::Card(args) = command {
+        let config = config.map_or_else(default_config_path, Ok)?;
+        return commands::cards::card(
+            args,
+            &config,
+            mirror_root.as_ref(),
+            &DbOverrides { database_url },
+        );
+    }
+
+    let explicit_config = config.is_some();
+    let config = resolve_config_path(config)?;
     if let Command::Calibration(args) = command {
         let database = Config::load_database_or_default(&config)?;
         return commands::calibration::run(
@@ -201,6 +220,9 @@ pub fn run() -> Result<()> {
         Command::Calibration(_) => unreachable!("handled before config loading"),
         Command::Hook(_) => unreachable!("handled before config loading"),
         Command::Usage(_) => unreachable!("handled before context loading"),
+        Command::Fingerprint { .. } | Command::Trigger(_) | Command::Card(_) => {
+            unreachable!("handled before context loading")
+        }
         Command::Completions { .. } => unreachable!("handled before config loading"),
     }
 }
