@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `skillnet fingerprint`, `skillnet trigger`, and `skillnet card` to profile
+  repositories and match, inspect, and validate code-triggered cards.
+
+### Fixed
+
+- Fix PostgreSQL usage date filtering and parameter binding.
+- Read harness and session metadata during hook ingest and merge unambiguous
+  historical project skill names in usage reports.
+
 ## [0.7.0] - 2026-11-21
 
 ### Added
