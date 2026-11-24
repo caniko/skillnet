@@ -451,11 +451,14 @@ pub(crate) struct HookArgs {
 #[derive(Debug, Subcommand)]
 #[command(disable_help_subcommand = true)]
 pub(crate) enum HookCommand {
-    /// Read one Claude Code hook payload and record it.
+    /// Read one hook payload and record it.
     Ingest {
         /// Hook event name as Claude Code passes it, such as PostToolUse or SessionEnd.
         #[arg(long, env = "CLAUDE_HOOK_EVENT")]
         event: String,
+        /// Harness producing the hook payload.
+        #[arg(long, default_value = "claude")]
+        harness: String,
         /// Read payload from this path instead of stdin.
         #[arg(long)]
         payload_file: Option<Utf8PathBuf>,

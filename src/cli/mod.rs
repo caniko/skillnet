@@ -14,7 +14,7 @@ use crate::{
     catalog, commands,
     config::{
         default_catalog_config_path, default_config_path, expand_path, legacy_catalog_config_path,
-        legacy_config_path, Config, DbOverrides,
+        legacy_config_path, Config, DatabaseConfig, DbOverrides,
     },
     link::LinkStrategy,
 };
@@ -41,7 +41,6 @@ pub fn run() -> Result<()> {
 
     let explicit_config = config.is_some();
     let config = resolve_config_path(config)?;
-    let catalog_config = resolve_catalog_config_path(catalog_config)?;
     let command = command.unwrap_or(Command::Status {
         scope: Vec::new(),
         all: false,
@@ -64,15 +63,22 @@ pub fn run() -> Result<()> {
     }
 
     if let Command::Hook(args) = command {
-        let target = if matches!(args.command, args::HookCommand::Ingest { .. }) {
-            let database = Config::load_database_or_default(&config)?;
-            Some(database.resolve_db_with_overrides(&DbOverrides { database_url })?)
-        } else {
-            None
-        };
-        return commands::hook::run(args, target);
+        if !matches!(args.command, args::HookCommand::Ingest { .. }) {
+            return commands::hook::run(args, None, None, &[]);
+        }
+        let config = config.exists().then(|| Config::read(&config)).transpose()?;
+        let default_db = DatabaseConfig::default();
+        let database = config.as_ref().map_or(&default_db, |c| &c.database);
+        let target = database.resolve_db_with_overrides(&DbOverrides { database_url })?;
+        let global = config.as_ref().and_then(|config| {
+            let mirror = resolve_mirror_root(config, mirror_root.as_ref()).ok()?;
+            config.global_canonical_path(&mirror).ok()
+        });
+        let projects = config.as_ref().map_or(&[][..], |c| c.projects.as_slice());
+        return commands::hook::run(args, Some(target), global.as_deref(), projects);
     }
 
+    let catalog_config = resolve_catalog_config_path(catalog_config)?;
     if let Command::Usage(args) = command {
         let database = Config::load_database_or_default(&config)?;
         let target = database.resolve_db_with_overrides(&DbOverrides { database_url })?;
