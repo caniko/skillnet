@@ -17,12 +17,11 @@ pub struct PostgresTransaction<'db> {
     tx: Transaction<'db>,
 }
 
-enum ParamValue {
+enum ParamValue<'a> {
     Null(PgNull),
     Integer(PgInteger),
     Real(f64),
-    Text(String),
-    Json(Json<JsonValue>),
+    Text(PgText<'a>),
     Bool(bool),
 }
 
@@ -31,6 +30,9 @@ struct PgNull;
 
 #[derive(Debug)]
 struct PgInteger(i64);
+
+#[derive(Debug)]
+struct PgText<'a>(&'a str);
 
 impl PostgresBackend {
     pub fn connect(url: &str) -> anyhow::Result<Self> {
@@ -252,23 +254,20 @@ fn query_all_client<T>(
         .collect()
 }
 
-fn pg_params(params: &[DbParam<'_>]) -> Vec<ParamValue> {
+fn pg_params<'a>(params: &[DbParam<'a>]) -> Vec<ParamValue<'a>> {
     params
         .iter()
         .map(|param| match param {
             DbParam::Null => ParamValue::Null(PgNull),
             DbParam::Integer(value) => ParamValue::Integer(PgInteger(*value)),
             DbParam::Real(value) => ParamValue::Real(*value),
-            DbParam::Text(value) => match serde_json::from_str::<JsonValue>(value) {
-                Ok(value) => ParamValue::Json(Json(value)),
-                Err(_) => ParamValue::Text((*value).to_string()),
-            },
+            DbParam::Text(value) => ParamValue::Text(PgText(value)),
             DbParam::Bool(value) => ParamValue::Bool(*value),
         })
         .collect()
 }
 
-fn pg_param_refs(params: &[ParamValue]) -> Vec<&(dyn ToSql + Sync)> {
+fn pg_param_refs<'a>(params: &'a [ParamValue<'_>]) -> Vec<&'a (dyn ToSql + Sync)> {
     params
         .iter()
         .map(|param| match param {
@@ -276,7 +275,6 @@ fn pg_param_refs(params: &[ParamValue]) -> Vec<&(dyn ToSql + Sync)> {
             ParamValue::Integer(value) => value as &(dyn ToSql + Sync),
             ParamValue::Real(value) => value as &(dyn ToSql + Sync),
             ParamValue::Text(value) => value as &(dyn ToSql + Sync),
-            ParamValue::Json(value) => value as &(dyn ToSql + Sync),
             ParamValue::Bool(value) => value as &(dyn ToSql + Sync),
         })
         .collect()
@@ -375,4 +373,39 @@ impl ToSql for PgInteger {
     }
 
     to_sql_checked!();
+}
+
+impl ToSql for PgText<'_> {
+    fn to_sql(
+        &self,
+        ty: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        match *ty {
+            Type::JSON | Type::JSONB => {
+                Json(serde_json::from_str::<JsonValue>(self.0)?).to_sql(ty, out)
+            }
+            _ => self.0.to_sql(ty, out),
+        }
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        matches!(*ty, Type::JSON | Type::JSONB) || <&str as ToSql>::accepts(ty)
+    }
+
+    to_sql_checked!();
+}
+
+#[test]
+fn text_parameters_use_the_server_type() {
+    let values = pg_params(&[DbParam::Text("1")]);
+    let refs = pg_param_refs(&values);
+    for (ty, expected) in [(Type::TEXT, &b"1"[..]), (Type::JSONB, &b"\x011"[..])] {
+        let mut out = BytesMut::new();
+        assert!(matches!(
+            refs[0].to_sql_checked(&ty, &mut out).unwrap(),
+            IsNull::No
+        ));
+        assert_eq!(&out[..], expected);
+    }
 }

@@ -368,12 +368,15 @@ fn collect_legacy_fields(
 }
 
 impl Config {
-    pub fn load(path: &Utf8Path) -> Result<Self> {
+    pub(crate) fn read(path: &Utf8Path) -> Result<Self> {
         let text = fs::read_to_string(path)
             .with_context(|| format!("failed to read config file {path}"))?;
         reject_legacy_schema(&text, path)?;
-        let mut config: Self =
-            toml::from_str(&text).with_context(|| format!("failed to parse config file {path}"))?;
+        toml::from_str(&text).with_context(|| format!("failed to parse config file {path}"))
+    }
+
+    pub fn load(path: &Utf8Path) -> Result<Self> {
+        let mut config = Self::read(path)?;
         let explicit_paths = config
             .projects
             .iter()
@@ -416,12 +419,7 @@ impl Config {
         if !path.exists() {
             return Ok(DatabaseConfig::default());
         }
-        let text = fs::read_to_string(path)
-            .with_context(|| format!("failed to read config file {path}"))?;
-        reject_legacy_schema(&text, path)?;
-        let config: Self =
-            toml::from_str(&text).with_context(|| format!("failed to parse config file {path}"))?;
-        Ok(config.database)
+        Ok(Self::read(path)?.database)
     }
 
     #[allow(dead_code)]
@@ -459,15 +457,19 @@ impl Config {
         self.global_target_with_link_override(mirror_root, None)
     }
 
+    pub(crate) fn global_canonical_path(&self, mirror_root: &Utf8Path) -> Result<Utf8PathBuf> {
+        match self.global.canonical_path.as_deref() {
+            Some(path) => expand_path(path),
+            None => Ok(mirror_root.join("global")),
+        }
+    }
+
     pub fn global_target_with_link_override(
         &self,
         mirror_root: &Utf8Path,
         cli_link_strategy: Option<LinkStrategy>,
     ) -> Result<Target> {
-        let canonical_path = match self.global.canonical_path.as_deref() {
-            Some(path) => expand_path(path)?,
-            None => mirror_root.join("global"),
-        };
+        let canonical_path = self.global_canonical_path(mirror_root)?;
         Ok(Target {
             name: "global".to_string(),
             scope: TargetScope::Global,

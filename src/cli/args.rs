@@ -159,6 +159,78 @@ pub(super) enum Command {
     Hook(HookArgs),
     /// Record and report normalized skill usage.
     Usage(UsageArgs),
+    /// Detect repository languages, tooling, and relevant skills.
+    Fingerprint {
+        #[arg(long, default_value = ".")]
+        cwd: Utf8PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Resolve cards for a repository event.
+    Trigger(TriggerArgs),
+    /// Inspect and validate code-triggered cards.
+    Card(CardArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct TriggerArgs {
+    #[arg(long, value_enum)]
+    pub event: crate::cards::Event,
+    #[arg(long, default_value = "claude")]
+    pub harness: String,
+    #[arg(long)]
+    pub session: Option<String>,
+    #[arg(long, default_value = ".")]
+    pub cwd: Utf8PathBuf,
+    #[arg(long)]
+    pub packs_dir: Option<Utf8PathBuf>,
+    #[arg(long)]
+    pub state_dir: Option<Utf8PathBuf>,
+    #[arg(long)]
+    pub payload_file: Option<Utf8PathBuf>,
+    /// Skip stdin and use an empty event payload.
+    #[arg(long, conflicts_with = "payload_file")]
+    pub no_stdin: bool,
+    /// Maximum cards to inject (default: 2, or 20 for an audit).
+    #[arg(long)]
+    pub max_cards: Option<usize>,
+    #[arg(long, default_value_t = 1_500)]
+    pub max_tokens: usize,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CardArgs {
+    #[arg(long, global = true)]
+    pub packs_dir: Option<Utf8PathBuf>,
+    #[command(subcommand)]
+    pub command: CardCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum CardCommand {
+    /// List cards in the available packs.
+    List {
+        #[arg(long)]
+        pack: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the compact card or its full reference.
+    Show {
+        id: String,
+        #[arg(long)]
+        full: bool,
+        #[arg(long, default_value = "claude")]
+        harness: String,
+        #[arg(long)]
+        session: Option<String>,
+        #[arg(long)]
+        no_record: bool,
+    },
+    /// Check card metadata, references, and positive/negative fixtures.
+    Validate,
 }
 
 #[derive(Debug, Subcommand)]
@@ -451,11 +523,14 @@ pub(crate) struct HookArgs {
 #[derive(Debug, Subcommand)]
 #[command(disable_help_subcommand = true)]
 pub(crate) enum HookCommand {
-    /// Read one Claude Code hook payload and record it.
+    /// Read one hook payload and record it.
     Ingest {
         /// Hook event name as Claude Code passes it, such as PostToolUse or SessionEnd.
         #[arg(long, env = "CLAUDE_HOOK_EVENT")]
         event: String,
+        /// Harness producing the hook payload.
+        #[arg(long, default_value = "claude")]
+        harness: String,
         /// Read payload from this path instead of stdin.
         #[arg(long)]
         payload_file: Option<Utf8PathBuf>,

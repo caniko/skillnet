@@ -24,6 +24,9 @@ Commands:
   calibration   Record and verify multi-phase-plan calibration data
   hook          Ingest shell hook payloads
   usage         Record and report normalized skill usage
+  fingerprint   Detect repository languages, tooling, and relevant skills
+  trigger       Resolve cards for a repository event
+  card          Inspect and validate code-triggered cards
 
 Options:
       --config <CONFIG>

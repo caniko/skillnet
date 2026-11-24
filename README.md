@@ -49,6 +49,36 @@ skillnet usage record --skill global/example --harness codex \
 skillnet usage report --since 90d --format table
 ```
 
+### Code-triggered cards
+
+```sh
+skillnet fingerprint --cwd . --json
+skillnet trigger --event post-edit --session "$SESSION_ID" --payload-file edit.json --json
+skillnet trigger --event audit --no-stdin --json
+skillnet card list --pack rust
+skillnet card show rust/unwrap-in-lib --full
+skillnet card validate
+```
+
+Cards are read from `--packs-dir`, `$AI_SKILLS_REPO/packs`, or the `packs/`
+directory next to the configured global skills source, in that order. The
+current repository's packs are not auto-discovered. `card show --full` reads
+only references that resolve to files inside the packs' source tree.
+
+`trigger` takes JSON on stdin or from `--payload-file`; for example,
+`{"file":"src/lib.rs","diff":"+load().unwrap()"}`. With no event details,
+`audit` selects advice from the fingerprint's recommended packs. Use
+`--no-stdin` to run an empty audit without reading stdin. The default maximum
+is 20 cards for audit and 2 otherwise; JSON reports budget omissions as
+`budget_dropped`. Globs match the whole
+repo-relative path using `globset` defaults (`*` can span `/`). Use `--session` to
+persist the advice budget and session cooldown across calls (defaults to
+`CLAUDE_SESSION_ID` if set). State lives in
+`${XDG_STATE_HOME:-$HOME/.local/state}/skillnet/trigger-state` unless
+`--state-dir` is set. Callers use the JSON `deny` field to block an action;
+it is not a command exit code. `card validate` checks positive and negative
+fixtures without consuming cooldowns or budget.
+
 Reports include every current catalog skill, including zero-use skills. A zero
 count is only evidence of non-use when the corresponding harness coverage has
 been healthy for the entire requested window. Events store metadata only;

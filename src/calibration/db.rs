@@ -229,40 +229,7 @@ impl Db {
     }
 
     pub fn usage_aggregate(&self, since_unix: Option<i64>) -> anyhow::Result<Vec<UsageAggregate>> {
-        let (sql, params) = match (self.backend_kind(), since_unix) {
-            (BackendKind::Sqlite, Some(since)) => (
-                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
-                        MIN(started_at), MAX(started_at) FROM skill_invocations \
-                 WHERE started_at >= datetime(?1, 'unixepoch') \
-                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
-                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
-                vec![DbParam::Integer(since)],
-            ),
-            (BackendKind::Sqlite, None) => (
-                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
-                        MIN(started_at), MAX(started_at) FROM skill_invocations \
-                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
-                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
-                Vec::new(),
-            ),
-            #[cfg(feature = "postgres")]
-            (BackendKind::Postgres, Some(since)) => (
-                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
-                        MIN(started_at)::text, MAX(started_at)::text FROM skill_invocations \
-                 WHERE started_at >= to_timestamp($1::double precision) \
-                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
-                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
-                vec![DbParam::Integer(since)],
-            ),
-            #[cfg(feature = "postgres")]
-            (BackendKind::Postgres, None) => (
-                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
-                        MIN(started_at)::text, MAX(started_at)::text FROM skill_invocations \
-                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
-                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
-                Vec::new(),
-            ),
-        };
+        let (sql, params) = Self::usage_query(self.backend_kind(), since_unix);
         self.query_all(sql, &params, |row| {
             Ok(UsageAggregate {
                 skill_name: row.get_string(0)?,
@@ -273,6 +240,48 @@ impl Db {
                 last_seen: row.get_string(5)?,
             })
         })
+    }
+
+    fn usage_query(
+        backend: BackendKind,
+        since_unix: Option<i64>,
+    ) -> (&'static str, Vec<DbParam<'static>>) {
+        match (backend, since_unix) {
+            (BackendKind::Sqlite, Some(since)) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
+                        MIN(started_at), MAX(started_at) FROM skill_invocations \
+                  WHERE started_at >= datetime(?1, 'unixepoch') AND hook_event <> 'CardRead' \
+                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
+                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
+                vec![DbParam::Integer(since)],
+            ),
+            (BackendKind::Sqlite, None) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
+                        MIN(started_at), MAX(started_at) FROM skill_invocations \
+                  WHERE hook_event <> 'CardRead' \
+                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
+                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
+                Vec::new(),
+            ),
+            #[cfg(feature = "postgres")]
+            (BackendKind::Postgres, Some(since)) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
+                        MIN(started_at)::text, MAX(started_at)::text FROM skill_invocations \
+                  WHERE started_at >= to_timestamp(($1::bigint)::double precision) AND hook_event <> 'CardRead' \
+                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
+                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
+                vec![DbParam::Integer(since)],
+            ),
+            #[cfg(feature = "postgres")]
+            (BackendKind::Postgres, None) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
+                        MIN(started_at)::text, MAX(started_at)::text FROM skill_invocations \
+                  WHERE hook_event <> 'CardRead' \
+                 GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
+                 ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
+                Vec::new(),
+            ),
+        }
     }
 
     pub fn transaction<T>(
@@ -782,4 +791,41 @@ fn unix_timestamp() -> anyhow::Result<i64> {
         .duration_since(UNIX_EPOCH)
         .context("system clock is before unix epoch")?;
     i64::try_from(duration.as_secs()).context("unix timestamp does not fit in i64")
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::*;
+
+    #[test]
+    fn sqlite_usage_filters_before_the_unix_cutoff_and_excludes_card_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(&dir.path().join("usage.sqlite")).unwrap();
+        db.execute_batch(
+            "INSERT INTO skill_invocations (session_id, skill_name, started_at, payload, hook_event)
+             VALUES ('old', 'alpha', '2023-12-31 23:59:59', '{}', 'SkillActivated'),
+                    ('new', 'alpha', '2024-01-01 00:00:00', '{}', 'SkillActivated'),
+                    ('card', 'rust/check', '2024-01-01 00:00:01', '{}', 'CardRead');",
+        ).unwrap();
+        let all = db.usage_aggregate(None).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].uses, 2);
+        assert_eq!(all[0].first_seen, "2023-12-31 23:59:59");
+        let recent = db.usage_aggregate(Some(1_704_067_200)).unwrap();
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].skill_name, "alpha");
+        assert_eq!(recent[0].uses, 1);
+        assert_eq!(recent[0].first_seen, "2024-01-01 00:00:00");
+    }
+
+    #[cfg(feature = "postgres")]
+    #[test]
+    fn postgres_usage_binds_unix_seconds_as_bigint() {
+        let (sql, params) = Db::usage_query(BackendKind::Postgres, Some(1_704_067_200));
+        assert!(sql.contains("started_at >= to_timestamp(($1::bigint)::double precision)"));
+        assert!(matches!(
+            params.as_slice(),
+            [DbParam::Integer(1_704_067_200)]
+        ));
+    }
 }
