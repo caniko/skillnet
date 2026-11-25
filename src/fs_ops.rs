@@ -45,9 +45,8 @@ pub(crate) fn resolve_existing_ancestor(path: &Utf8Path) -> Result<Utf8PathBuf> 
     Ok(resolved)
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HardlinkStatus {
+pub(crate) enum HardlinkStatus {
     Missing,
     Identical,
     Severed { files: Vec<Utf8PathBuf> },
@@ -55,7 +54,7 @@ pub enum HardlinkStatus {
     Foreign,
 }
 
-pub fn newest_mtime_nanos(path: &Utf8Path) -> Result<u128> {
+pub(crate) fn newest_mtime_nanos(path: &Utf8Path) -> Result<u128> {
     let mut newest = 0;
     for entry in WalkDir::new(path).follow_links(false) {
         let entry = entry?;
@@ -74,7 +73,7 @@ pub fn newest_mtime_nanos(path: &Utf8Path) -> Result<u128> {
     Ok(newest)
 }
 
-pub fn content_signature(path: &Utf8Path) -> Result<String> {
+pub(crate) fn content_signature(path: &Utf8Path) -> Result<String> {
     let mut files = Vec::new();
     for entry in WalkDir::new(path).follow_links(false) {
         let entry = entry?;
@@ -112,7 +111,7 @@ pub fn content_signature(path: &Utf8Path) -> Result<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-pub fn copy_dir(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
+pub(crate) fn copy_dir(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
     if dest.exists() {
         fs::remove_dir_all(dest).with_context(|| format!("failed to remove {dest}"))?;
     }
@@ -154,8 +153,7 @@ pub fn copy_dir(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-#[allow(dead_code)]
-pub fn hardlink_dir(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
+pub(crate) fn hardlink_dir(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
     let dest_parent = dest.parent().context("destination path has no parent")?;
     let name = dest
         .file_name()
@@ -223,8 +221,7 @@ fn build_hardlink_dir(src: &Utf8Path, staging: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-#[allow(dead_code)]
-pub fn hardlink_dir_status(canonical: &Utf8Path, dest: &Utf8Path) -> Result<HardlinkStatus> {
+pub(crate) fn hardlink_dir_status(canonical: &Utf8Path, dest: &Utf8Path) -> Result<HardlinkStatus> {
     let dest_metadata = match fs::symlink_metadata(dest) {
         Ok(metadata) => metadata,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(HardlinkStatus::Missing),
@@ -287,8 +284,11 @@ pub fn hardlink_dir_status(canonical: &Utf8Path, dest: &Utf8Path) -> Result<Hard
     }
 }
 
-#[allow(dead_code)]
-pub fn relink_files(canonical: &Utf8Path, dest: &Utf8Path, files: &[Utf8PathBuf]) -> Result<()> {
+pub(crate) fn relink_files(
+    canonical: &Utf8Path,
+    dest: &Utf8Path,
+    files: &[Utf8PathBuf],
+) -> Result<()> {
     for rel in files {
         let canonical_file = canonical.join(rel);
         let dest_file = dest.join(rel);
@@ -459,7 +459,7 @@ fn preserve_dir_times(src: &Utf8Path, dest: &Utf8Path) -> Result<()> {
 }
 
 #[cfg(test)]
-pub fn remove_codex_skills(skills_path: &Utf8Path) -> Result<()> {
+fn remove_codex_skills(skills_path: &Utf8Path) -> Result<()> {
     if skills_path.exists() {
         fs::remove_dir_all(skills_path)?;
     }
@@ -471,7 +471,7 @@ pub fn remove_codex_skills(skills_path: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-pub fn ensure_skill_dir(path: &Utf8Path) -> Result<()> {
+pub(crate) fn ensure_skill_dir(path: &Utf8Path) -> Result<()> {
     if !path.join("SKILL.md").is_file() {
         bail!("{path} is not a skill directory: missing SKILL.md");
     }

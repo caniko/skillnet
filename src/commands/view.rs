@@ -16,7 +16,7 @@ use crate::{
     },
 };
 
-pub fn sync(
+pub(crate) fn sync(
     ctx: &Context,
     allow_delete: bool,
     force: bool,
@@ -72,7 +72,7 @@ fn sync_with_preservation(
 /// into the canonical store (and back-synced to a symlink on the next pass)
 /// rather than wiped. `allow_delete` now only removes dangling view *symlinks*
 /// whose canonical skill is gone; authored directories are always preserved.
-pub fn sync_with_promotion(
+pub(crate) fn sync_with_promotion(
     ctx: &Context,
     allow_delete: bool,
     force: bool,
@@ -264,14 +264,12 @@ fn describe_dry_run_action(
     }
 }
 
-pub fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
+pub(crate) fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
     let target = ctx.config.global_target(&ctx.mirror_root)?;
     let bundle = ctx.bundle_plan(&target)?;
     let bundle_issues = bundle
         .as_ref()
-        .map(crate::bundle::BundlePlan::materialization_issues)
-        .transpose()?
-        .unwrap_or_default();
+        .map_or_else(Vec::new, crate::bundle::BundlePlan::materialization_issues);
     let mut rows = Vec::new();
     for view in &target.views {
         let drift = match &bundle {
@@ -313,7 +311,7 @@ pub fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
                         row.bundle_issues.len()
                     );
                     for issue in &row.bundle_issues {
-                        println!("{}", issue);
+                        println!("{issue}");
                     }
                 } else if row.drift.is_empty() {
                     println!("{}  clean", row.label);
@@ -333,7 +331,7 @@ pub fn status(ctx: &Context, format: StatusFormat) -> Result<()> {
     Ok(())
 }
 
-pub fn diff(ctx: &Context) -> Result<()> {
+pub(crate) fn diff(ctx: &Context) -> Result<()> {
     let target = ctx.config.global_target(&ctx.mirror_root)?;
     let bundle = ctx.bundle_plan(&target)?;
     for view in &target.views {

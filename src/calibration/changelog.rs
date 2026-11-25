@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use anyhow::{bail, Context};
 
@@ -26,7 +26,7 @@ pub fn run(db: &Db, since: Option<&str>) -> anyhow::Result<()> {
           AND decided_at IS NOT NULL"
     );
     if since.is_some() {
-        sql.push_str(&format!(" AND {decided_date_expr} >= $1"));
+        let _ = write!(sql, " AND {decided_date_expr} >= $1");
     }
     sql.push_str(" ORDER BY decided_at DESC, id DESC");
 

@@ -185,7 +185,7 @@ impl<'db> Walkthrough<'db> {
                 ProposalDecision::Accept {
                     rationale,
                     filter_tags,
-                } => self.apply_decision(proposal, rationale, filter_tags)?,
+                } => self.apply_decision(proposal, &rationale, &filter_tags)?,
                 ProposalDecision::Skip => {
                     eprintln!("skipped {}", proposal.trigger);
                 }
@@ -238,13 +238,15 @@ impl<'db> Walkthrough<'db> {
     fn apply_decision(
         &mut self,
         proposal: &ThresholdProposal,
-        rationale: String,
-        filter_tags: Vec<(String, String)>,
+        rationale: &str,
+        filter_tags: &[(String, String)],
     ) -> anyhow::Result<()> {
+        let refined;
         let proposal = if filter_tags.is_empty() {
-            proposal.clone()
+            proposal
         } else {
-            self.refined_proposal(&proposal.trigger, &filter_tags)?
+            refined = self.refined_proposal(&proposal.trigger, filter_tags)?;
+            &refined
         };
 
         if self.dry_run {
@@ -259,7 +261,7 @@ impl<'db> Walkthrough<'db> {
 
         let supporting_plan_ids = serde_json::to_string(&proposal.supporting_plan_ids)
             .context("failed to serialize supporting plan ids")?;
-        let filter_tags_json = filter_tags_json(&filter_tags)?;
+        let filter_tags_json = filter_tags_json(filter_tags)?;
         let now = unix_timestamp()?;
         let proposal_id = self.db.transaction(|tx| {
             let id = tx.query_one(
@@ -285,7 +287,7 @@ impl<'db> Walkthrough<'db> {
                     P::from(proposal.fire_rate),
                     P::from(proposal.signal_rate),
                     P::nullable_text(filter_tags_json.as_deref()),
-                    P::from(rationale.as_str()),
+                    P::from(rationale),
                 ],
                 |row| row.get_i64(0),
             )?;
@@ -294,7 +296,7 @@ impl<'db> Walkthrough<'db> {
                 "UPDATE calibration_proposals
                  SET decision = 'accepted', decided_at = $1, rationale = $2
                  WHERE id = $3 AND decision = 'pending'",
-                &[P::from(now), P::from(rationale.as_str()), P::from(id)],
+                &[P::from(now), P::from(rationale), P::from(id)],
             )?;
             tx.execute(
                 "INSERT INTO heuristic_thresholds (name, threshold, updated_by)

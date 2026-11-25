@@ -320,7 +320,6 @@ impl Db {
         }
     }
 
-    #[allow(dead_code)]
     pub fn sqlite_pragma_string(&self, name: &str) -> anyhow::Result<String> {
         match name {
             "journal_mode" | "foreign_keys" => {
@@ -412,7 +411,7 @@ pub struct UsageAggregate {
     pub last_seen: String,
 }
 
-impl<'db> Tx<'db> {
+impl Tx<'_> {
     pub fn execute(&mut self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<usize> {
         match &mut self.backend {
             TxBackend::Sqlite(tx) => sqlite_execute(
@@ -476,7 +475,6 @@ impl<'db> Tx<'db> {
         }
     }
 
-    #[allow(dead_code)]
     pub fn query_all<T>(
         &mut self,
         sql: &str,
@@ -531,6 +529,10 @@ impl DbRow {
         }
     }
 
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "The public floating-point accessor also accepts integer columns, with rounding"
+    )]
     pub fn get_f64(&self, index: usize) -> anyhow::Result<f64> {
         match self.value(index)? {
             DbValue::Real(value) => Ok(*value),
@@ -580,19 +582,19 @@ impl<'a> DbParam<'a> {
     }
 }
 
-impl<'a> From<i64> for DbParam<'a> {
+impl From<i64> for DbParam<'_> {
     fn from(value: i64) -> Self {
         Self::Integer(value)
     }
 }
 
-impl<'a> From<f64> for DbParam<'a> {
+impl From<f64> for DbParam<'_> {
     fn from(value: f64) -> Self {
         Self::Real(value)
     }
 }
 
-impl<'a> From<bool> for DbParam<'a> {
+impl From<bool> for DbParam<'_> {
     fn from(value: bool) -> Self {
         Self::Bool(value)
     }
@@ -756,6 +758,10 @@ fn load_migrations(backend: BackendKind) -> anyhow::Result<Vec<Migration>> {
         .collect()
 }
 
+#[expect(
+    clippy::case_sensitive_file_extension_comparisons,
+    reason = "Embedded migration filenames require the exact lowercase .sql suffix"
+)]
 fn parse_migration_version(name: &str) -> anyhow::Result<i64> {
     if name.len() < "001-a.sql".len()
         || !name.ends_with(".sql")
@@ -780,10 +786,10 @@ fn xdg_data_home() -> PathBuf {
         return PathBuf::from(dir);
     }
 
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .map(|home| home.join(".local/share"))
-        .unwrap_or_else(|| PathBuf::from(".local/share"))
+    std::env::var_os("HOME").map(PathBuf::from).map_or_else(
+        || PathBuf::from(".local/share"),
+        |home| home.join(".local/share"),
+    )
 }
 
 fn unix_timestamp() -> anyhow::Result<i64> {

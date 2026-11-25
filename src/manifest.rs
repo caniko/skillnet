@@ -15,11 +15,11 @@ use camino::Utf8Path;
 use pklr::capabilities::EvalCapabilities;
 use serde::Deserialize;
 
-pub const MANIFEST_FILE: &str = "Skillnet.pkl";
+pub(crate) const MANIFEST_FILE: &str = "Skillnet.pkl";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ManifestDocument {
+pub(crate) struct ManifestDocument {
     #[serde(rename = "schemaVersion")]
     pub schema_version: u64,
     #[serde(rename = "defaultDependencies", default)]
@@ -34,7 +34,7 @@ pub struct ManifestDocument {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SkillSpec {
+pub(crate) struct SkillSpec {
     #[serde(default = "default_role")]
     pub role: String,
     #[serde(default)]
@@ -48,19 +48,19 @@ pub struct SkillSpec {
 }
 
 #[derive(Debug, Clone)]
-pub struct Manifest {
+pub(crate) struct Manifest {
     pub document: ManifestDocument,
     pub path: camino::Utf8PathBuf,
 }
 
-pub fn load(canonical: &Utf8Path) -> Result<Option<Manifest>> {
+pub(crate) fn load(canonical: &Utf8Path) -> Result<Option<Manifest>> {
     load_path(&canonical.join(MANIFEST_FILE))
 }
 
 /// Load a manifest from an explicit immutable bundle path. Evaluation is
 /// confined to the directory containing that manifest, so Pkl imports cannot
 /// reach the user's writable canonical mirror or the network.
-pub fn load_path(path: &Utf8Path) -> Result<Option<Manifest>> {
+pub(crate) fn load_path(path: &Utf8Path) -> Result<Option<Manifest>> {
     if !path.exists() {
         return Ok(None);
     }
@@ -306,7 +306,7 @@ skills: Mapping<String, Skill> = new {
         let manifest = load(&root).unwrap().unwrap();
         assert_eq!(manifest.document.schema_version, 1);
         assert_eq!(manifest.document.default_users, None);
-        assert!(manifest.document.default_dependencies.is_empty());
+        assert_eq!(manifest.document.default_dependencies, [] as [String; 0]);
         assert_eq!(
             manifest.document.skills["fix-loop"].dependencies,
             vec!["fix-loop-ref"]

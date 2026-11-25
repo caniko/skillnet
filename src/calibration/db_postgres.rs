@@ -9,11 +9,11 @@ use serde_json::Value as JsonValue;
 
 use super::{DbParam, DbRow, DbValue};
 
-pub struct PostgresBackend {
+pub(super) struct PostgresBackend {
     client: RefCell<Client>,
 }
 
-pub struct PostgresTransaction<'db> {
+pub(super) struct PostgresTransaction<'db> {
     tx: Transaction<'db>,
 }
 
@@ -35,18 +35,22 @@ struct PgInteger(i64);
 struct PgText<'a>(&'a str);
 
 impl PostgresBackend {
-    pub fn connect(url: &str) -> anyhow::Result<Self> {
+    pub(super) fn connect(url: &str) -> anyhow::Result<Self> {
         let client = Client::connect(url, NoTls).context("failed to connect to postgres")?;
         Ok(Self {
             client: RefCell::new(client),
         })
     }
 
-    pub fn execute(&self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<usize> {
+    pub(super) fn execute(&self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<usize> {
         execute_client(&mut *self.client.borrow_mut(), sql, params)
     }
 
-    pub fn execute_returning_id(&self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<i64> {
+    pub(super) fn execute_returning_id(
+        &self,
+        sql: &str,
+        params: &[DbParam<'_>],
+    ) -> anyhow::Result<i64> {
         let sql = format!("{} RETURNING id", sql.trim_end().trim_end_matches(';'));
         let values = pg_params(params);
         let refs = pg_param_refs(&values);
@@ -58,14 +62,14 @@ impl PostgresBackend {
         row_i64(&row, 0)
     }
 
-    pub fn execute_batch(&self, sql: &str) -> anyhow::Result<()> {
+    pub(super) fn execute_batch(&self, sql: &str) -> anyhow::Result<()> {
         self.client
             .borrow_mut()
             .batch_execute(sql)
             .context("failed to execute postgres SQL batch")
     }
 
-    pub fn query_optional<T>(
+    pub(super) fn query_optional<T>(
         &self,
         sql: &str,
         params: &[DbParam<'_>],
@@ -74,7 +78,7 @@ impl PostgresBackend {
         query_optional_client(&mut *self.client.borrow_mut(), sql, params, map)
     }
 
-    pub fn query_all<T>(
+    pub(super) fn query_all<T>(
         &self,
         sql: &str,
         params: &[DbParam<'_>],
@@ -83,7 +87,7 @@ impl PostgresBackend {
         query_all_client(&mut *self.client.borrow_mut(), sql, params, map)
     }
 
-    pub fn transaction<T>(
+    pub(super) fn transaction<T>(
         &mut self,
         f: impl FnOnce(PostgresTransaction<'_>) -> anyhow::Result<T>,
     ) -> anyhow::Result<T> {
@@ -97,17 +101,17 @@ impl PostgresBackend {
 }
 
 impl PostgresTransaction<'_> {
-    pub fn execute(&mut self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<usize> {
+    pub(super) fn execute(&mut self, sql: &str, params: &[DbParam<'_>]) -> anyhow::Result<usize> {
         execute_client(&mut self.tx, sql, params)
     }
 
-    pub fn execute_batch(&mut self, sql: &str) -> anyhow::Result<()> {
+    pub(super) fn execute_batch(&mut self, sql: &str) -> anyhow::Result<()> {
         self.tx
             .batch_execute(sql)
             .context("failed to execute postgres SQL batch")
     }
 
-    pub fn query_optional<T>(
+    pub(super) fn query_optional<T>(
         &mut self,
         sql: &str,
         params: &[DbParam<'_>],
@@ -116,7 +120,7 @@ impl PostgresTransaction<'_> {
         query_optional_client(&mut self.tx, sql, params, map)
     }
 
-    pub fn query_all<T>(
+    pub(super) fn query_all<T>(
         &mut self,
         sql: &str,
         params: &[DbParam<'_>],
@@ -125,7 +129,7 @@ impl PostgresTransaction<'_> {
         query_all_client(&mut self.tx, sql, params, map)
     }
 
-    pub fn commit(self) -> anyhow::Result<()> {
+    pub(super) fn commit(self) -> anyhow::Result<()> {
         self.tx
             .commit()
             .context("failed to commit postgres transaction")

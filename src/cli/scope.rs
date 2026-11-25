@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{env, fmt, path::PathBuf, str::FromStr};
 
 use anyhow::{anyhow, bail, Result};
@@ -66,7 +64,7 @@ pub fn configured_scopes(config: &Config) -> Vec<Scope> {
         .collect()
 }
 
-pub fn resolve_scope(config: &Config, raw: &str) -> Result<Scope> {
+pub(super) fn resolve_scope(config: &Config, raw: &str) -> Result<Scope> {
     let scope = Scope::from_str(raw)?;
     let valid_scopes = configured_scopes(config);
     if valid_scopes.contains(&scope) {
@@ -83,7 +81,11 @@ pub fn resolve_scope(config: &Config, raw: &str) -> Result<Scope> {
     );
 }
 
-pub fn resolve_scopes(config: &Config, scope_args: &[String], all: bool) -> Result<Vec<Scope>> {
+pub(super) fn resolve_scopes(
+    config: &Config,
+    scope_args: &[String],
+    all: bool,
+) -> Result<Vec<Scope>> {
     if all && !scope_args.is_empty() {
         bail!("use either --all or --scope, not both");
     }
@@ -189,7 +191,10 @@ impl SkillPath {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{DatabaseConfig, GlobalConfig};
+    use crate::config::{
+        DatabaseConfig, GlobalConfig, ModelsConfig, ProjectConfig, TemplatesConfig,
+    };
+    use std::collections::{BTreeMap, BTreeSet};
 
     fn test_config(project_names: &[&str]) -> Config {
         Config {
@@ -204,18 +209,18 @@ mod tests {
             skills_root: None,
             mirror_root: None,
             database: DatabaseConfig::default(),
-            subscriptions: Default::default(),
-            external_manifests: Default::default(),
-            excluded_skills: Default::default(),
-            excluded_provider_skills: Default::default(),
-            templates: Default::default(),
-            models: Default::default(),
+            subscriptions: BTreeMap::new(),
+            external_manifests: Vec::new(),
+            excluded_skills: Vec::new(),
+            excluded_provider_skills: Vec::new(),
+            templates: TemplatesConfig::default(),
+            models: ModelsConfig::default(),
             link_strategy: None,
             project_discovery: None,
-            discovered_project_paths: Default::default(),
+            discovered_project_paths: BTreeSet::new(),
             projects: project_names
                 .iter()
-                .map(|name| crate::config::ProjectConfig {
+                .map(|name| ProjectConfig {
                     name: (*name).to_string(),
                     path: format!("/tmp/{name}"),
                     origin: None,

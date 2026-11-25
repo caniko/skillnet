@@ -123,10 +123,10 @@ impl CatalogRule {
             entry.category = Some(category.clone());
         }
         if let Some(scope) = &self.scope {
-            entry.scope = scope.clone();
+            entry.scope.clone_from(scope);
         }
         if let Some(status) = &self.status {
-            entry.status = status.clone();
+            entry.status.clone_from(status);
         }
         if let Some(collision_note) = &self.collision_note {
             entry.collision_note = Some(collision_note.clone());

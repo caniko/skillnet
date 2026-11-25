@@ -66,7 +66,7 @@ fn analyze_reports_lower_raise_and_min_n_guard() {
     for i in 0..15 {
         seed_row(
             &conn,
-            SeedRow {
+            &SeedRow {
                 plan_id: format!("t1-fire-{i}"),
                 trigger: "T1",
                 fired: true,
@@ -82,7 +82,7 @@ fn analyze_reports_lower_raise_and_min_n_guard() {
     for i in 0..2 {
         seed_row(
             &conn,
-            SeedRow {
+            &SeedRow {
                 plan_id: format!("t1-miss-{i}"),
                 trigger: "T1",
                 fired: false,
@@ -99,7 +99,7 @@ fn analyze_reports_lower_raise_and_min_n_guard() {
     for i in 0..20 {
         seed_row(
             &conn,
-            SeedRow {
+            &SeedRow {
                 plan_id: format!("t2-fire-{i}"),
                 trigger: "T2",
                 fired: true,
@@ -116,7 +116,7 @@ fn analyze_reports_lower_raise_and_min_n_guard() {
     for i in 0..5 {
         seed_row(
             &conn,
-            SeedRow {
+            &SeedRow {
                 plan_id: format!("t3-fire-{i}"),
                 trigger: "T3",
                 fired: true,
@@ -152,7 +152,7 @@ fn analyze_json_and_filter_tags_restrict_dataset() {
     for i in 0..30 {
         seed_row(
             &conn,
-            SeedRow {
+            &SeedRow {
                 plan_id: format!("codex-{i}"),
                 trigger: "T4",
                 fired: true,
@@ -166,7 +166,7 @@ fn analyze_json_and_filter_tags_restrict_dataset() {
         );
         seed_row(
             &conn,
-            SeedRow {
+            &SeedRow {
                 plan_id: format!("claude-{i}"),
                 trigger: "T4",
                 fired: true,
@@ -211,7 +211,7 @@ fn analyze_skew_warning_runs_without_filter_tags() {
     for i in 0..30 {
         seed_row(
             &conn,
-            SeedRow {
+            &SeedRow {
                 plan_id: format!("codex-{i}"),
                 trigger: "T4",
                 fired: true,
@@ -225,7 +225,7 @@ fn analyze_skew_warning_runs_without_filter_tags() {
         );
         seed_row(
             &conn,
-            SeedRow {
+            &SeedRow {
                 plan_id: format!("claude-{i}"),
                 trigger: "T4",
                 fired: true,
@@ -256,7 +256,7 @@ fn proposal_decision_and_changelog_flow() {
     let conn = fixture.conn();
     seed_row(
         &conn,
-        SeedRow {
+        &SeedRow {
             plan_id: "support-1".to_string(),
             trigger: "long-serial-chain",
             fired: true,
@@ -410,7 +410,7 @@ struct SeedRow<'a> {
     emergency_changes: Option<&'a str>,
 }
 
-fn seed_row(conn: &Connection, row: SeedRow<'_>) {
+fn seed_row(conn: &Connection, row: &SeedRow<'_>) {
     conn.execute(
         "INSERT INTO plans (
             id,

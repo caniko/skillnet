@@ -27,7 +27,7 @@ mod exclusion_tests;
 mod host_tests;
 
 #[derive(Debug, Clone)]
-pub struct BundlePlan {
+pub(crate) struct BundlePlan {
     pub bundle_root: Utf8PathBuf,
     skills: BTreeMap<String, SkillBundle>,
     expected: BTreeMap<String, Utf8PathBuf>,
@@ -35,7 +35,7 @@ pub struct BundlePlan {
 
 /// Destination policy applied equally to canonical, manifest and provider skills.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct BundleSelection<'a> {
+pub(crate) struct BundleSelection<'a> {
     pub user: Option<&'a str>,
     pub host: Option<&'a str>,
     pub excluded_skills: &'a [String],
@@ -55,7 +55,7 @@ struct SkillBundle {
 }
 
 #[cfg(test)]
-pub fn plan(
+fn plan(
     canonical: &Utf8Path,
     scope_name: &str,
     data_dir: &Utf8Path,
@@ -73,7 +73,7 @@ pub fn plan(
 }
 
 #[cfg(test)]
-pub fn plan_for_user(
+fn plan_for_user(
     canonical: &Utf8Path,
     scope_name: &str,
     data_dir: &Utf8Path,
@@ -92,7 +92,7 @@ pub fn plan_for_user(
 }
 
 #[cfg(test)]
-pub fn plan_for_user_at(
+fn plan_for_user_at(
     canonical: &Utf8Path,
     bundle_root: Utf8PathBuf,
     external_manifests: &[Utf8PathBuf],
@@ -102,7 +102,7 @@ pub fn plan_for_user_at(
 }
 
 #[cfg(test)]
-pub fn plan_for_access(
+fn plan_for_access(
     canonical: &Utf8Path,
     scope_name: &str,
     data_dir: &Utf8Path,
@@ -123,7 +123,7 @@ pub fn plan_for_access(
 }
 
 #[cfg(test)]
-pub fn plan_for_access_at(
+fn plan_for_access_at(
     canonical: &Utf8Path,
     bundle_root: Utf8PathBuf,
     external_manifests: &[Utf8PathBuf],
@@ -146,7 +146,7 @@ pub fn plan_for_access_at(
     )
 }
 
-pub fn plan_for_selection_at(
+pub(crate) fn plan_for_selection_at(
     canonical: &Utf8Path,
     bundle_root: Utf8PathBuf,
     external_manifests: &[Utf8PathBuf],
@@ -219,9 +219,7 @@ pub fn plan_for_selection_at(
             continue;
         }
         let spec = canonical_manifest.and_then(|manifest| manifest.document.skills.get(name));
-        let role = spec
-            .map(|spec| spec.role.clone())
-            .unwrap_or_else(|| "entrypoint".to_string());
+        let role = spec.map_or_else(|| "entrypoint".to_string(), |spec| spec.role.clone());
         let mut dependencies = if role == "reference" {
             Vec::new()
         } else {
@@ -511,22 +509,22 @@ fn validate_provider_tree(root: &Utf8Path) -> Result<()> {
 }
 
 impl BundlePlan {
-    pub fn expected_links(&self) -> &BTreeMap<String, Utf8PathBuf> {
+    pub(crate) fn expected_links(&self) -> &BTreeMap<String, Utf8PathBuf> {
         &self.expected
     }
 
-    pub fn skill_names(&self) -> impl Iterator<Item = &str> {
+    pub(crate) fn skill_names(&self) -> impl Iterator<Item = &str> {
         self.skills.keys().map(String::as_str)
     }
 
-    pub fn dependencies(&self, skill: &str) -> Option<&[String]> {
+    pub(crate) fn dependencies(&self, skill: &str) -> Option<&[String]> {
         self.skills
             .get(skill)
             .map(|skill| skill.dependencies.as_slice())
     }
 
     /// Return the canonical source file for a generated skill entrypoint.
-    pub fn entrypoint_source(&self, skill: &str) -> Option<Utf8PathBuf> {
+    pub(crate) fn entrypoint_source(&self, skill: &str) -> Option<Utf8PathBuf> {
         self.skills.get(skill).map(|skill| {
             if skill.source_is_file {
                 skill.source.clone()
@@ -543,14 +541,14 @@ impl BundlePlan {
     /// Entry-point files must be regular files. In particular, Codex ignores
     /// a symlinked `SKILL.md`, even when the symlink resolves to valid content.
     /// Dependency links remain symlinks and are checked separately below.
-    pub fn materialization_issues(&self) -> Result<Vec<String>> {
+    pub(crate) fn materialization_issues(&self) -> Vec<String> {
         let mut issues = Vec::new();
         if !self.bundle_root.is_dir() {
             issues.push(format!(
                 "generated bundle root {} is missing; run `skillnet view sync`",
                 self.bundle_root
             ));
-            return Ok(issues);
+            return issues;
         }
 
         for skill in self.skill_names() {
@@ -617,10 +615,10 @@ impl BundlePlan {
                 }
             }
         }
-        Ok(issues)
+        issues
     }
 
-    pub fn materialize(&self) -> Result<()> {
+    pub(crate) fn materialize(&self) -> Result<()> {
         fs::create_dir_all(&self.bundle_root)
             .with_context(|| format!("failed to create bundle root {}", self.bundle_root))?;
         for (name, skill) in &self.skills {
@@ -980,7 +978,7 @@ skills: Mapping<String, Skill> = new {
         .unwrap();
 
         let plan = plan(&root, "global", &data, &[]).unwrap().unwrap();
-        assert!(plan.dependencies("hidden-ref").unwrap().is_empty());
+        assert_eq!(plan.dependencies("hidden-ref").unwrap(), &[] as &[String]);
         assert_eq!(
             plan.dependencies("entry").unwrap(),
             &["hidden-ref".to_string()]
@@ -1014,7 +1012,7 @@ skills: Mapping<String, Skill> = new {
         .unwrap();
 
         let plan = plan(&root, "global", &data, &[]).unwrap().unwrap();
-        assert!(plan.dependencies("hidden-ref").unwrap().is_empty());
+        assert_eq!(plan.dependencies("hidden-ref").unwrap(), &[] as &[String]);
         assert_eq!(
             plan.dependencies("entry").unwrap(),
             &["hidden-ref".to_string()]

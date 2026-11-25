@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -16,7 +16,7 @@ use crate::{
     config::{expand_path, DbTarget, ProjectConfig},
 };
 
-pub fn run(
+pub(crate) fn run(
     args: HookArgs,
     target: Option<DbTarget>,
     global_skills: Option<&Utf8Path>,
@@ -35,7 +35,7 @@ pub fn run(
                 target,
                 &event,
                 harness.trim(),
-                payload_file,
+                payload_file.as_deref(),
                 global_skills,
                 projects,
             );
@@ -71,14 +71,14 @@ fn ingest(
     target: DbTarget,
     event: &str,
     harness: &str,
-    payload_file: Option<Utf8PathBuf>,
+    payload_file: Option<&Utf8Path>,
     global_skills: Option<&Utf8Path>,
     projects: &[ProjectConfig],
 ) -> Result<()> {
     if harness.is_empty() {
         bail!("harness must not be empty");
     }
-    let payload = read_payload(payload_file.as_ref())?;
+    let payload = read_payload(payload_file)?;
     let parsed: Value =
         serde_json::from_str(&payload).context("failed to parse hook payload JSON")?;
     let extracted = ExtractedHookPayload::from_json(&parsed, event);
@@ -87,13 +87,15 @@ fn ingest(
         .iter()
         .find_map(|key| string_at(&parsed, &[*key]))
         .or_else(|| session_env.as_deref().and_then(non_empty))
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| {
-            eprintln!(
-                "warning: no session ID in hook payload or CLAUDE_SESSION_ID; using nil UUID"
-            );
-            Uuid::nil().to_string()
-        });
+        .map_or_else(
+            || {
+                eprintln!(
+                    "warning: no session ID in hook payload or CLAUDE_SESSION_ID; using nil UUID"
+                );
+                Uuid::nil().to_string()
+            },
+            ToOwned::to_owned,
+        );
     let project_env = env::var("CLAUDE_PROJECT_DIR").ok();
     let project_dir = ["project_dir", "projectDir"]
         .iter()
@@ -162,22 +164,21 @@ fn ingest(
     Ok(())
 }
 
-fn read_payload(payload_file: Option<&Utf8PathBuf>) -> Result<String> {
-    match payload_file {
-        Some(path) => fs::read_to_string(path.as_std_path())
-            .with_context(|| format!("failed to read hook payload file {path}")),
-        None => {
-            let stdin = io::stdin();
-            if stdin.is_terminal() {
-                bail!("refusing to read hook payload from an interactive terminal; pipe JSON on stdin or use --payload-file");
-            }
-            let mut payload = String::new();
-            stdin
-                .lock()
-                .read_to_string(&mut payload)
-                .context("failed to read hook payload from stdin")?;
-            Ok(payload)
+fn read_payload(payload_file: Option<&Utf8Path>) -> Result<String> {
+    if let Some(path) = payload_file {
+        fs::read_to_string(path.as_std_path())
+            .with_context(|| format!("failed to read hook payload file {path}"))
+    } else {
+        let stdin = io::stdin();
+        if stdin.is_terminal() {
+            bail!("refusing to read hook payload from an interactive terminal; pipe JSON on stdin or use --payload-file");
         }
+        let mut payload = String::new();
+        stdin
+            .lock()
+            .read_to_string(&mut payload)
+            .context("failed to read hook payload from stdin")?;
+        Ok(payload)
     }
 }
 
@@ -258,18 +259,12 @@ fn canonical_skill_name(
 fn open_db(target: DbTarget) -> Result<Db> {
     match target {
         DbTarget::Sqlite(path) => Db::open(&path),
-        DbTarget::Postgres(_url) => {
-            #[cfg(feature = "postgres")]
-            {
-                Db::open_postgres(&_url)
-            }
-            #[cfg(not(feature = "postgres"))]
-            {
-                anyhow::bail!(
-                    "Postgres hook database requested, but this skillnet binary was built without \
-                     the `postgres` feature; rebuild with `--features postgres` or select sqlite"
-                )
-            }
-        }
+        #[cfg(feature = "postgres")]
+        DbTarget::Postgres(url) => Db::open_postgres(&url),
+        #[cfg(not(feature = "postgres"))]
+        DbTarget::Postgres(_) => anyhow::bail!(
+            "Postgres hook database requested, but this skillnet binary was built without \
+             the `postgres` feature; rebuild with `--features postgres` or select sqlite"
+        ),
     }
 }

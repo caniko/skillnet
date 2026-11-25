@@ -11,6 +11,10 @@ use walkdir::WalkDir;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Fingerprint attributes are independent predicates in the JSON schema"
+)]
 pub(crate) struct RepoFingerprint {
     pub root: Utf8PathBuf,
     pub languages: Vec<String>,

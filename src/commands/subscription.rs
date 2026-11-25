@@ -10,7 +10,7 @@ use crate::{
     fs_ops::{copy_dir, resolve_existing_ancestor},
 };
 
-pub fn sync(ctx: &Context, names: &[String], all: bool) -> Result<()> {
+pub(crate) fn sync(ctx: &Context, names: &[String], all: bool) -> Result<()> {
     let selected = selected_subscriptions(ctx, names, all)?;
     for (name, subscription) in selected {
         sync_one(ctx, name, subscription)?;

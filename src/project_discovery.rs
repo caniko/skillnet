@@ -46,7 +46,7 @@ fn default_marker() -> String {
     ".skills".into()
 }
 
-pub fn discover(config: &ProjectDiscoveryConfig) -> Result<Vec<DiscoveredProject>> {
+pub(crate) fn discover(config: &ProjectDiscoveryConfig) -> Result<Vec<DiscoveredProject>> {
     if config.classes.is_empty() {
         bail!("project_discovery.classes must contain at least one class");
     }
@@ -54,9 +54,9 @@ pub fn discover(config: &ProjectDiscoveryConfig) -> Result<Vec<DiscoveredProject
     let project_tree_path = crate::config::expand_path(&config.project_tree)
         .with_context(|| format!("resolve project tree config `{}`", config.project_tree))?;
     let text = fs::read_to_string(project_tree_path.as_std_path())
-        .with_context(|| format!("read project tree config `{}`", project_tree_path))?;
+        .with_context(|| format!("read project tree config `{project_tree_path}`"))?;
     let tree: ProjectTreeDocument = serde_json::from_str(&text)
-        .with_context(|| format!("parse project tree config `{}`", project_tree_path))?;
+        .with_context(|| format!("parse project tree config `{project_tree_path}`"))?;
     if !matches!(tree.schema_version, 1 | 2) {
         bail!(
             "unsupported project tree schema version {} in `{}` (expected 1 or 2)",
@@ -107,7 +107,7 @@ pub fn discover(config: &ProjectDiscoveryConfig) -> Result<Vec<DiscoveredProject
             .with_context(|| format!("read project class `{class}` at `{class_root}`"))?
             .collect::<std::result::Result<Vec<_>, _>>()
             .with_context(|| format!("read project class `{class}` at `{class_root}`"))?;
-        entries.sort_by_key(|entry| entry.file_name());
+        entries.sort_by_key(fs::DirEntry::file_name);
         for entry in entries {
             let path = entry.path();
             let metadata = fs::symlink_metadata(&path)
@@ -367,6 +367,6 @@ mod tests {
         )
         .unwrap();
 
-        assert!(discover(&tree_config(temp.path())).unwrap().is_empty());
+        assert_eq!(discover(&tree_config(temp.path())).unwrap(), []);
     }
 }

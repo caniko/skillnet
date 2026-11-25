@@ -362,18 +362,15 @@ pub fn render(
         .seats
         .iter()
         .map(|seat| {
-            seat.label
-                .as_deref()
-                .map(str::trim)
-                .filter(|label| !label.is_empty())
-                .map(str::to_owned)
-                .unwrap_or_else(|| {
-                    std::iter::once(&seat.route.model)
-                        .chain(seat.route.options.values())
-                        .map(String::as_str)
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                })
+            let label = seat.label.as_deref().unwrap_or_default().trim();
+            if !label.is_empty() {
+                return label.to_owned();
+            }
+            std::iter::once(&seat.route.model)
+                .chain(seat.route.options.values())
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(" ")
         })
         .collect::<Vec<_>>();
     let seat_labels = labels.join(", ");

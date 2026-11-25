@@ -20,8 +20,8 @@ enum MigrateAction {
     ForceOverwrite,
 }
 
-pub(crate) fn run(command: ConfigCommand, global_dry_run: bool) -> Result<()> {
-    match command {
+pub(crate) fn run(command: &ConfigCommand, global_dry_run: bool) -> Result<()> {
+    match *command {
         ConfigCommand::Migrate {
             dry_run,
             force,

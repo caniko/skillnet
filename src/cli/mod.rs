@@ -1,11 +1,10 @@
 pub(crate) mod args;
 mod scope;
 
-#[allow(unused_imports)]
 pub use scope::{configured_scopes, detect_from_cwd, scope_value_parser, Scope, SkillPath};
 
 use anyhow::{Context as AnyhowContext, Result};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 
@@ -36,7 +35,7 @@ pub fn run() -> Result<()> {
         command,
     } = Cli::parse();
     if let Some(Command::Config { command }) = command {
-        return commands::config::run(command, dry_run);
+        return commands::config::run(&command, dry_run);
     }
 
     let command = command.unwrap_or(Command::Status {
@@ -122,7 +121,7 @@ pub fn run() -> Result<()> {
         let config = (explicit_config || config.exists())
             .then(|| Config::load(&config))
             .transpose()?;
-        return list_models(config.as_ref(), json, caches);
+        return list_models(config.as_ref(), json, caches.as_deref());
     }
 
     let ctx = Context::load(
@@ -171,7 +170,8 @@ pub fn run() -> Result<()> {
                 project_root: None,
                 link_root: None,
             };
-            let exit_code = commands::sync::run(&ctx, &scopes, options, no_promote, link_strategy)?;
+            let exit_code =
+                commands::sync::run(&ctx, &scopes, &options, no_promote, link_strategy)?;
             if exit_code != 0 {
                 std::process::exit(exit_code);
             }
@@ -184,7 +184,9 @@ pub fn run() -> Result<()> {
             no_view_sync,
         } => commands::export::run(&ctx, Some(&source), &skill, prune, !no_view_sync),
         Command::Skill { command } => run_skill_command(&ctx, command),
-        Command::Scope { command } => run_scope_command(&ctx, command),
+        Command::Scope {
+            command: ScopeCommand::List,
+        } => commands::targets(&ctx),
         Command::Project { command } => run_project_command(&ctx, command),
         Command::Subscription { command } => run_subscription_command(&ctx, command),
         Command::Catalog { command } => run_catalog_command(&ctx, command),
@@ -215,19 +217,19 @@ pub fn run() -> Result<()> {
             );
             Ok(())
         }
-        Command::Models { .. } => unreachable!("handled before context loading"),
-        Command::Config { .. } => unreachable!("handled before config loading"),
-        Command::Calibration(_) => unreachable!("handled before config loading"),
-        Command::Hook(_) => unreachable!("handled before config loading"),
-        Command::Usage(_) => unreachable!("handled before context loading"),
-        Command::Fingerprint { .. } | Command::Trigger(_) | Command::Card(_) => {
-            unreachable!("handled before context loading")
-        }
-        Command::Completions { .. } => unreachable!("handled before config loading"),
+        Command::Models { .. }
+        | Command::Usage(_)
+        | Command::Fingerprint { .. }
+        | Command::Trigger(_)
+        | Command::Card(_) => unreachable!("handled before context loading"),
+        Command::Config { .. }
+        | Command::Calibration(_)
+        | Command::Hook(_)
+        | Command::Completions { .. } => unreachable!("handled before config loading"),
     }
 }
 
-fn list_models(config: Option<&Config>, json: bool, caches: Option<Utf8PathBuf>) -> Result<()> {
+fn list_models(config: Option<&Config>, json: bool, caches: Option<&Utf8Path>) -> Result<()> {
     let paths = config
         .map(|config| config.templates.binding_paths())
         .transpose()?
@@ -236,8 +238,7 @@ fn list_models(config: Option<&Config>, json: bool, caches: Option<Utf8PathBuf>)
         .ui
         .and_then(|ui| ui.providers);
     let caches = caches
-        .as_deref()
-        .map(|path| path.as_str())
+        .map(Utf8Path::as_str)
         .or_else(|| config.and_then(|config| config.models.t3_caches.as_deref()))
         .unwrap_or("~/.local/share/t3code-native/caches");
     let mut providers = crate::models::load_t3_caches(&expand_path(caches)?)?;
@@ -272,43 +273,39 @@ fn list_models(config: Option<&Config>, json: bool, caches: Option<Utf8PathBuf>)
 }
 
 fn resolve_config_path(flag_or_env: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> {
-    match flag_or_env {
-        Some(path) => Ok(path),
-        None => {
-            let xdg = default_config_path()?;
-            if xdg.exists() {
-                return Ok(xdg);
-            }
-
-            let legacy = legacy_config_path();
-            if legacy.exists() {
-                warn_legacy_config_path(&legacy);
-                return Ok(legacy);
-            }
-
-            Ok(xdg)
-        }
+    if let Some(path) = flag_or_env {
+        return Ok(path);
     }
+    let xdg = default_config_path()?;
+    if xdg.exists() {
+        return Ok(xdg);
+    }
+
+    let legacy = legacy_config_path();
+    if legacy.exists() {
+        warn_legacy_config_path(&legacy);
+        return Ok(legacy);
+    }
+
+    Ok(xdg)
 }
 
 fn resolve_catalog_config_path(flag_or_env: Option<Utf8PathBuf>) -> Result<Utf8PathBuf> {
-    match flag_or_env {
-        Some(path) => Ok(path),
-        None => {
-            let xdg = default_catalog_config_path()?;
-            if xdg.exists() {
-                return Ok(xdg);
-            }
-
-            let legacy = legacy_catalog_config_path();
-            if legacy.exists() {
-                warn_legacy_config_path(&legacy);
-                return Ok(legacy);
-            }
-
-            Ok(xdg)
-        }
+    if let Some(path) = flag_or_env {
+        return Ok(path);
     }
+    let xdg = default_catalog_config_path()?;
+    if xdg.exists() {
+        return Ok(xdg);
+    }
+
+    let legacy = legacy_catalog_config_path();
+    if legacy.exists() {
+        warn_legacy_config_path(&legacy);
+        return Ok(legacy);
+    }
+
+    Ok(xdg)
 }
 
 fn warn_legacy_config_path(path: &Utf8PathBuf) {
@@ -434,17 +431,9 @@ fn run_skill_command(ctx: &Context, command: SkillCommand) -> Result<()> {
                 &from_path,
                 &to_scope,
                 as_name.as_deref(),
-                false,
-                false,
                 !no_view_sync,
             )
         }
-    }
-}
-
-fn run_scope_command(ctx: &Context, command: ScopeCommand) -> Result<()> {
-    match command {
-        ScopeCommand::List => commands::targets(ctx),
     }
 }
 

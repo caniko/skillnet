@@ -6,11 +6,7 @@ use serde_json::json;
 use tempfile::tempdir;
 use uuid::Uuid;
 
-#[path = "../src/calibration/db.rs"]
-#[allow(dead_code)]
-mod db;
-
-use db::{Db, DbParam as P};
+use skillnet::calibration::db::{Db, DbParam as P};
 
 enum BackendFixture {
     Sqlite {
@@ -223,13 +219,8 @@ fn transaction_rolls_back_on_panic_inside_closure() {
 #[test]
 fn open_postgres_with_invalid_url_returns_actionable_error() {
     let result = Db::open_postgres("not://a/url");
-    assert!(
-        result.is_err(),
-        "open_postgres unexpectedly accepted an invalid URL"
-    );
-    let err = match result {
-        Ok(_) => panic!("open_postgres unexpectedly accepted an invalid URL"),
-        Err(err) => err,
+    let Err(err) = result else {
+        panic!("open_postgres unexpectedly accepted an invalid URL");
     };
     let message = err.to_string();
     assert!(
@@ -252,17 +243,11 @@ fn open_sqlite_in_unwritable_dir_returns_actionable_error() {
     let db_path = notadir.join("x.sqlite");
 
     let result = Db::open(&db_path);
-    assert!(
-        result.is_err(),
-        "Db::open unexpectedly created sqlite database under {}",
-        notadir.display()
-    );
-    let err = match result {
-        Ok(_) => panic!(
+    let Err(err) = result else {
+        panic!(
             "Db::open unexpectedly created sqlite database under {}",
             notadir.display()
-        ),
-        Err(err) => err,
+        );
     };
     let message = err.to_string();
     assert!(

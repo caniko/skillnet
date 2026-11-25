@@ -12,16 +12,14 @@ use crate::{fs_ops::copy_dir, model::TargetScope, templates};
 
 const DEFAULT_SOURCE: &str = "skills";
 
-pub fn run(
+pub(crate) fn run(
     ctx: &Context,
     source: Option<&Utf8Path>,
     skills: &[String],
     prune: bool,
     view_sync: bool,
 ) -> Result<()> {
-    let source = source
-        .map(Utf8Path::to_path_buf)
-        .unwrap_or_else(|| Utf8PathBuf::from(DEFAULT_SOURCE));
+    let source = source.map_or_else(|| Utf8PathBuf::from(DEFAULT_SOURCE), Utf8Path::to_path_buf);
     let source = crate::config::expand_path(source.as_str())
         .with_context(|| format!("failed to resolve source directory `{source}`"))?;
     if !source.is_dir() {
@@ -152,11 +150,8 @@ fn discover_source_skills(source: &Utf8Path) -> Result<ExportPlan> {
             continue;
         }
         validate_skill_name(&name)?;
-        source_names.insert(name.to_owned());
-        planned.push(ExportSkill {
-            name: name.to_owned(),
-            source: path,
-        });
+        source_names.insert(name.clone());
+        planned.push(ExportSkill { name, source: path });
     }
     planned.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(ExportPlan {

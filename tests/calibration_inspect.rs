@@ -275,7 +275,7 @@ fn sidecar(id: &str, flavor: &str, worktype: &str, chain_fired: bool, repo_sprea
             "name": format!("Synthetic {id}"),
             "flavor": flavor,
             "worktype": worktype,
-            "created_at": 1717171717,
+            "created_at": 1_717_171_717,
             "phase_count": 2,
             "wave_count": 1,
             "max_chain_depth": if chain_fired { 3 } else { 1 },

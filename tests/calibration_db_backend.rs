@@ -4,13 +4,9 @@ use tempfile::tempdir;
 #[cfg(feature = "postgres")]
 use uuid::Uuid;
 
-#[path = "../src/calibration/db.rs"]
-#[allow(dead_code)]
-mod db;
-
-use db::Db;
+use skillnet::calibration::db::Db;
 #[cfg(feature = "postgres")]
-use db::DbParam as P;
+use skillnet::calibration::db::DbParam as P;
 
 #[test]
 fn sqlite_enforces_wal_journal_mode() {
@@ -179,12 +175,11 @@ fn postgres_jsonb_rejects_invalid_json() {
 
 #[cfg(feature = "postgres")]
 fn postgres_schema_fixture() -> Option<PgTestSchema> {
-    match std::env::var("SKILLNET_TEST_PG_URL") {
-        Ok(url) => Some(PgTestSchema::create(&url)),
-        Err(_) => {
-            log_postgres_skip_once();
-            None
-        }
+    if let Ok(url) = std::env::var("SKILLNET_TEST_PG_URL") {
+        Some(PgTestSchema::create(&url))
+    } else {
+        log_postgres_skip_once();
+        None
     }
 }
 

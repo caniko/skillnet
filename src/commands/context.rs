@@ -7,7 +7,7 @@ use crate::{
     model::{Target, TargetScope},
 };
 
-pub struct Context {
+pub(crate) struct Context {
     pub config_path: Utf8PathBuf,
     pub catalog_config_path: Utf8PathBuf,
     pub config: Config,
@@ -18,7 +18,11 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn load(
+    #[expect(
+        clippy::unnecessary_debug_formatting,
+        reason = "Debug escapes the non-UTF-8 bytes that caused path conversion to fail"
+    )]
+    pub(crate) fn load(
         config_path: &Utf8Path,
         mirror_root: Option<&Utf8PathBuf>,
         catalog_config_path: &Utf8Path,
@@ -45,7 +49,7 @@ impl Context {
         })
     }
 
-    pub fn ensure_target_clean(&self, target: &Utf8Path) -> Result<()> {
+    pub(crate) fn ensure_target_clean(&self, target: &Utf8Path) -> Result<()> {
         if self.dry_run || self.allow_dirty_destination {
             return Ok(());
         }

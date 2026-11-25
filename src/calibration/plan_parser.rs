@@ -17,6 +17,10 @@ struct PhaseRow {
     touched_files: Vec<String>,
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Plan summaries retain the existing u32 representation for wave and phase counts"
+)]
 pub fn parse(plan_dir: &Path) -> anyhow::Result<PlanInputs> {
     let readme_path = plan_dir.join("README.md");
     let readme = fs::read_to_string(&readme_path)
@@ -100,8 +104,8 @@ fn parse_phase_rows(readme: &str) -> anyhow::Result<Vec<PhaseRow>> {
             continue;
         }
         let headers = split_table_row(header)
-            .into_iter()
-            .map(normalize_header)
+            .iter()
+            .map(|header| normalize_header(header))
             .collect::<Vec<_>>();
         let Some(phase_idx) = find_col(&headers, &["phase"]) else {
             continue;
@@ -133,8 +137,7 @@ fn parse_phase_rows(readme: &str) -> anyhow::Result<Vec<PhaseRow>> {
             let slug = Path::new(&file)
                 .file_stem()
                 .and_then(|stem| stem.to_str())
-                .map(strip_ordinal_prefix)
-                .unwrap_or_else(|| format!("phase-{ordinal}"));
+                .map_or_else(|| format!("phase-{ordinal}"), strip_ordinal_prefix);
             let touched_files = touches_idx
                 .and_then(|index| cells.get(index))
                 .map(|cell| parse_file_list(cell))
@@ -175,10 +178,10 @@ fn split_table_row(line: &str) -> Vec<String> {
         .collect()
 }
 
-fn normalize_header(header: String) -> String {
+fn normalize_header(header: &str) -> String {
     header
         .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
+        .filter(char::is_ascii_alphanumeric)
         .flat_map(char::to_lowercase)
         .collect()
 }
@@ -203,7 +206,7 @@ fn parse_first_u32(value: &str) -> Option<u32> {
     let digits = value
         .chars()
         .skip_while(|ch| !ch.is_ascii_digit())
-        .take_while(|ch| ch.is_ascii_digit())
+        .take_while(char::is_ascii_digit)
         .collect::<String>();
     (!digits.is_empty()).then(|| digits.parse().ok()).flatten()
 }
@@ -324,11 +327,15 @@ fn routing_dist(phases: &[PhaseInputs]) -> BTreeMap<String, u32> {
     dist
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Plan summaries retain the existing u32 representation for repository counts"
+)]
 fn repo_spread(phases: &[PhaseInputs]) -> u32 {
-    let mut repos = BTreeSet::from(["primary".to_string()]);
+    let mut repos = BTreeSet::from(["primary"]);
     for phase in phases {
         if let Some(tree) = &phase.working_tree {
-            repos.insert(tree.clone());
+            repos.insert(tree.as_str());
         }
     }
     repos.len() as u32

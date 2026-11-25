@@ -4,21 +4,17 @@ use serde_json::json;
 use tempfile::tempdir;
 use uuid::Uuid;
 
-#[path = "../src/calibration/db.rs"]
-#[allow(dead_code)]
-mod db;
-
-use db::{Db, DbParam as P};
+use skillnet::calibration::db::{Db, DbParam as P};
 
 enum BackendFixture {
     Sqlite {
         db: Db,
-        _temp: tempfile::TempDir,
+        temp: tempfile::TempDir,
     },
     #[cfg(feature = "postgres")]
     Postgres {
         db: Db,
-        _schema: PgTestSchema,
+        schema: PgTestSchema,
     },
 }
 
@@ -33,13 +29,13 @@ impl BackendFixture {
 
     fn reopen(&mut self) {
         match self {
-            Self::Sqlite { db, _temp } => {
-                let db_path = _temp.path().join("nested/calibration.sqlite");
+            Self::Sqlite { db, temp } => {
+                let db_path = temp.path().join("nested/calibration.sqlite");
                 *db = Db::open(&db_path).unwrap();
             }
             #[cfg(feature = "postgres")]
-            Self::Postgres { db, _schema } => {
-                *db = Db::open_postgres(&_schema.connection_url()).unwrap();
+            Self::Postgres { db, schema } => {
+                *db = Db::open_postgres(&schema.connection_url()).unwrap();
             }
         }
     }
@@ -50,13 +46,13 @@ fn backends() -> Vec<(&'static str, BackendFixture)> {
     let db_path = temp.path().join("nested/calibration.sqlite");
     let sqlite = BackendFixture::Sqlite {
         db: Db::open(&db_path).unwrap(),
-        _temp: temp,
+        temp,
     };
-    #[cfg_attr(not(feature = "postgres"), allow(unused_mut))]
-    let mut backends = vec![("sqlite", sqlite)];
+    let backends = vec![("sqlite", sqlite)];
 
     #[cfg(feature = "postgres")]
-    {
+    let backends = {
+        let mut backends = backends;
         if let Ok(url) = std::env::var("SKILLNET_TEST_PG_URL") {
             let schema = PgTestSchema::create(&url);
             let schema_url = schema.connection_url();
@@ -64,13 +60,14 @@ fn backends() -> Vec<(&'static str, BackendFixture)> {
                 "postgres",
                 BackendFixture::Postgres {
                     db: Db::open_postgres(&schema_url).unwrap(),
-                    _schema: schema,
+                    schema,
                 },
             ));
         } else {
             log_postgres_skip_once();
         }
-    }
+        backends
+    };
 
     backends
 }

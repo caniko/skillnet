@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-pub fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
+pub(crate) fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
     let target = ctx.target(&skill_path.scope)?;
     let path = target.canonical_path.join(&skill_path.skill);
     // Global templates have no SKILL.md in the canonical store.
@@ -77,7 +77,7 @@ pub fn show(ctx: &Context, skill_path: &SkillPath) -> Result<()> {
     Ok(())
 }
 
-pub fn new(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()> {
+pub(crate) fn new(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()> {
     let target = ctx.target(&skill_path.scope)?;
     ensure_canonical_clean(ctx, &target)?;
     ensure_manifest_mutation_allowed(&target, &skill_path.skill, "create")?;
@@ -99,7 +99,7 @@ pub fn new(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()>
     Ok(())
 }
 
-pub fn delete(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()> {
+pub(crate) fn delete(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<()> {
     let target = ctx.target(&skill_path.scope)?;
     ensure_canonical_clean(ctx, &target)?;
     ensure_manifest_mutation_allowed(&target, &skill_path.skill, "delete")?;
@@ -116,7 +116,7 @@ pub fn delete(ctx: &Context, skill_path: &SkillPath, view_sync: bool) -> Result<
     Ok(())
 }
 
-pub fn rename(
+pub(crate) fn rename(
     ctx: &Context,
     skill_path: &SkillPath,
     new: &str,
@@ -145,14 +145,11 @@ pub fn rename(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn move_skill(
+pub(crate) fn move_skill(
     ctx: &Context,
     from_path: &SkillPath,
     to_scope: &Scope,
     as_name: Option<&str>,
-    copy: bool,
-    force: bool,
     view_sync: bool,
 ) -> Result<()> {
     let from = ctx.target(&from_path.scope)?;
@@ -164,25 +161,20 @@ pub fn move_skill(
     let src = from.canonical_path.join(&from_path.skill);
     let dest = to.canonical_path.join(as_name.unwrap_or(&from_path.skill));
     ensure_skill_exists(from_path, &src)?;
-    prepare_dest(&src, &dest, force)?;
+    prepare_dest(&src, &dest, false)?;
 
     if ctx.dry_run {
-        let action = if copy { "copy" } else { "move" };
-        println!("{action} {src} {dest}");
+        println!("move {src} {dest}");
     } else {
         if dest.exists() {
             fs::remove_dir_all(&dest)?;
         }
-        if copy {
-            fs_ops::copy_dir(&src, &dest)?;
-        } else {
-            fs::create_dir_all(dest.parent().context("destination has no parent")?)?;
-            fs::rename(&src, &dest)?;
-        }
+        fs::create_dir_all(dest.parent().context("destination has no parent")?)?;
+        fs::rename(&src, &dest)?;
     }
     if view_sync {
         sync_after_mutation(ctx, &from_path.scope, true)?;
-        if &from_path.scope != to_scope || copy {
+        if &from_path.scope != to_scope {
             sync_after_mutation(ctx, to_scope, false)?;
         }
     }
@@ -265,13 +257,13 @@ fn ensure_manifest_mutation_allowed(
 
 fn skill_template(name: &str) -> String {
     format!(
-        r#"---
+        r"---
 name: {name}
 description: TODO
 ---
 
 # {name}
-"#
+"
     )
 }
 

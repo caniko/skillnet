@@ -20,7 +20,7 @@ use validate::validate_entries;
 
 pub(crate) use frontmatter::parse_frontmatter;
 
-pub fn generate(ctx: &Context) -> Result<()> {
+pub(crate) fn generate(ctx: &Context) -> Result<()> {
     ctx.ensure_destination_clean()?;
     let config = CatalogConfig::load(&ctx.catalog_config_path)?;
     let entries = load_entries(ctx, &config)?;
@@ -29,8 +29,8 @@ pub fn generate(ctx: &Context) -> Result<()> {
         bail!("catalog metadata is invalid:\n{}", lint_errors.join("\n"));
     }
 
-    let catalog = normalize_generated_doc(&render_catalog(&entries)?);
-    let routing = normalize_generated_doc(&render_routing(&entries)?);
+    let catalog = normalize_generated_doc(&render_catalog(&entries));
+    let routing = normalize_generated_doc(&render_routing(&entries));
     let conflicts = normalize_generated_doc(&render_conflicts(&entries));
 
     if !ctx.dry_run {
@@ -42,7 +42,7 @@ pub fn generate(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-pub fn lint(ctx: &Context) -> Result<()> {
+pub(crate) fn lint(ctx: &Context) -> Result<()> {
     let config = CatalogConfig::load(&ctx.catalog_config_path)?;
     let entries = load_entries(ctx, &config)?;
     let errors = validate_entries(&entries, &config);
@@ -63,7 +63,7 @@ pub(crate) fn entry_for(ctx: &Context, path: &SkillPath) -> Result<Option<SkillE
         .find(|entry| entry.qualified_name == qualified_name))
 }
 
-pub fn search(ctx: &Context, query: &str) -> Result<()> {
+pub(crate) fn search(ctx: &Context, query: &str) -> Result<()> {
     let config = CatalogConfig::load(&ctx.catalog_config_path)?;
     let query = query.to_lowercase();
     let entries = load_entries(ctx, &config)?;

@@ -22,6 +22,10 @@ pub struct InitOptions {
     pub force: bool,
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Keep the public owned-options API"
+)]
 pub fn run(db: &Db, plan_dir: &Path, options: InitOptions) -> anyhow::Result<()> {
     let sidecar = build_sidecar(db, plan_dir, options.force)?;
     let rendered = serde_json::to_string_pretty(&sidecar).context("failed to serialize sidecar")?;
@@ -65,10 +69,10 @@ pub fn build_sidecar(db: &Db, plan_dir: &Path, force: bool) -> anyhow::Result<Si
     let sidecar = Sidecar {
         schema_version: 1,
         plan: PlanRecord {
-            id: previous
-                .as_ref()
-                .map(|sidecar| sidecar.plan.id.clone())
-                .unwrap_or_else(|| Uuid::new_v4().to_string()),
+            id: previous.as_ref().map_or_else(
+                || Uuid::new_v4().to_string(),
+                |sidecar| sidecar.plan.id.clone(),
+            ),
             name: plan.name.clone(),
             flavor: plan.flavor.clone(),
             worktype: plan.worktype.clone(),

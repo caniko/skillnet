@@ -78,7 +78,10 @@ fn materialize_project_preserves_symlink_aggregator_for_symlink_strategy() {
     let summary = materialize_project(&target).unwrap();
     assert_eq!(summary.views.len(), 1);
     assert_eq!(summary.aggregator, Some(AggregatorStatus::Created));
-    assert!(summary.aggregator_pending.is_empty());
+    assert_eq!(
+        summary.aggregator_pending,
+        [] as [skillnet::view::AggregatorPending; 0]
+    );
     assert_relative_project_views(&target);
 
     let aggregator = target.aggregator_path.as_ref().unwrap();
@@ -92,7 +95,10 @@ fn materialize_project_preserves_symlink_aggregator_for_symlink_strategy() {
         .iter()
         .all(|view| view.summary.created == 0 && view.summary.updated == 0));
     assert_eq!(second.aggregator, Some(AggregatorStatus::Unchanged));
-    assert!(second.aggregator_pending.is_empty());
+    assert_eq!(
+        second.aggregator_pending,
+        [] as [skillnet::view::AggregatorPending; 0]
+    );
 }
 
 #[test]
@@ -125,7 +131,10 @@ fn materialize_project_hardlinks_aggregator_and_repairs_severed_files() {
     let summary = materialize_project(&target).unwrap();
     assert_eq!(summary.views.len(), 1);
     assert_eq!(summary.aggregator, Some(AggregatorStatus::Created));
-    assert!(summary.aggregator_pending.is_empty());
+    assert_eq!(
+        summary.aggregator_pending,
+        [] as [skillnet::view::AggregatorPending; 0]
+    );
     assert_relative_project_views(&target);
 
     let aggregator = target.aggregator_path.as_ref().unwrap();
@@ -142,7 +151,10 @@ fn materialize_project_hardlinks_aggregator_and_repairs_severed_files() {
         .iter()
         .all(|view| view.summary.created == 0 && view.summary.updated == 0));
     assert_eq!(second.aggregator, Some(AggregatorStatus::Unchanged));
-    assert!(second.aggregator_pending.is_empty());
+    assert_eq!(
+        second.aggregator_pending,
+        [] as [skillnet::view::AggregatorPending; 0]
+    );
 
     fs::remove_file(&aggregator_skill).unwrap();
     fs::copy(&canonical_skill, &aggregator_skill).unwrap();
@@ -150,7 +162,10 @@ fn materialize_project_hardlinks_aggregator_and_repairs_severed_files() {
 
     let repaired = materialize_project(&target).unwrap();
     assert_eq!(repaired.aggregator, Some(AggregatorStatus::Updated));
-    assert!(repaired.aggregator_pending.is_empty());
+    assert_eq!(
+        repaired.aggregator_pending,
+        [] as [skillnet::view::AggregatorPending; 0]
+    );
     assert_same_inode(&canonical_skill, &aggregator_skill);
 }
 
@@ -175,15 +190,18 @@ fn materialize_project_repairs_diverged_hardlink_working_copy_files() {
 
     let repaired = materialize_project(&target).unwrap();
     assert_eq!(repaired.aggregator, Some(AggregatorStatus::Updated));
-    assert!(repaired.aggregator_pending.is_empty());
+    assert_eq!(
+        repaired.aggregator_pending,
+        [] as [skillnet::view::AggregatorPending; 0]
+    );
     assert_eq!(fs::read_to_string(&aggregator_skill).unwrap(), "alpha");
     assert_eq!(fs::read_to_string(&canonical_skill).unwrap(), "alpha");
     assert_same_inode(&canonical_skill, &aggregator_skill);
 
     let drift = project_status(&target).unwrap();
-    assert!(drift.is_empty());
+    assert_eq!(drift, [] as [skillnet::view::DriftEntry; 0]);
     let diff = project_diff(&target).unwrap();
-    assert!(diff.is_empty());
+    assert_eq!(diff, [] as [skillnet::view::FileDelta; 0]);
 }
 
 #[test]

@@ -3,11 +3,7 @@ use std::{sync::mpsc, thread, time::Duration};
 use tempfile::tempdir;
 use uuid::Uuid;
 
-#[path = "../src/calibration/db.rs"]
-#[allow(dead_code)]
-mod db;
-
-use db::{Db, DbParam as P};
+use skillnet::calibration::db::{Db, DbParam as P};
 
 #[test]
 #[ignore = "timing-sensitive SQLite WAL smoke test; run explicitly with --ignored"]

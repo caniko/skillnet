@@ -266,7 +266,7 @@ pub(crate) fn resolve<'a>(
     root: &Utf8Path,
     harness: &str,
     session: Option<&str>,
-    limits: Limits,
+    limits: &Limits,
 ) -> Result<Resolution<'a>> {
     let mut out = Resolution {
         event: input.event,
