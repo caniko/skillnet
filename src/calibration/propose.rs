@@ -50,6 +50,10 @@ impl ProposalFilter {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Keep the public owned-input API"
+)]
 pub fn run(db: &mut Db, input: ProposeInput) -> anyhow::Result<()> {
     let current_threshold = analyze::latest_threshold(db, &input.trigger, &input.filter_tags)?
         .ok_or_else(|| {

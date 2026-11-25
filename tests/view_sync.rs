@@ -162,7 +162,7 @@ fn identical_demotes_to_symlink() {
 
     let summary = default_summary(&fixture);
 
-    assert!(summary.promoted.is_empty());
+    assert_eq!(summary.promoted, [] as [String; 0]);
     assert_eq!(summary.view.updated, 1);
     assert!(is_symlink(&fixture.view_path.join("identical")));
 }
@@ -189,7 +189,7 @@ fn view_newer_apply_promote_pulls_and_demotes() {
     let fixture = Fixture::new();
     let canonical = write_skill(&fixture.canonical, "apply-promote", "canonical", 100);
     let view = write_skill(&fixture.view_path, "apply-promote", "view", 200);
-    let view_mtime = skillnet::view::compare_view_entry(&canonical, &view).unwrap();
+    let view_mtime = compare_view_entry(&canonical, &view).unwrap();
 
     let summary = materialize_view_with_promotion(
         &fixture.canonical,
@@ -346,7 +346,7 @@ fn adopt_candidate_default_noops() {
 
     let summary = default_summary(&fixture);
 
-    assert!(summary.adopted.is_empty());
+    assert_eq!(summary.adopted, [] as [String; 0]);
     assert!(!fixture.canonical.join("orphan").exists());
     assert!(!is_symlink(&fixture.view_path.join("orphan")));
     let status = skillnet::view::view_status(&fixture.canonical, &fixture.view).unwrap();

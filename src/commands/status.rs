@@ -10,7 +10,7 @@ use crate::{
     view::{DriftEntry, ReconcileOutcome},
 };
 
-pub fn run(ctx: &Context, scopes: &[Scope], format: StatusFormat) -> Result<()> {
+pub(crate) fn run(ctx: &Context, scopes: &[Scope], format: StatusFormat) -> Result<()> {
     let rows = status_rows(ctx, scopes)?;
 
     if format == StatusFormat::Json {
@@ -70,16 +70,12 @@ fn status_rows(ctx: &Context, scopes: &[Scope]) -> Result<Vec<StatusRow>> {
 
 fn status_row(ctx: &Context, target: Target) -> Result<StatusRow> {
     warn_legacy_project_layout(&target);
-    let skill_count = canonical_skill_dirs(&target)
-        .map(|skills| skills.len())
-        .unwrap_or(0);
+    let skill_count = canonical_skill_dirs(&target).map_or(0, |skills| skills.len());
     let bundle_issues = if target.scope == TargetScope::Global {
         let bundle = ctx.bundle_plan(&target)?;
         bundle
             .as_ref()
-            .map(crate::bundle::BundlePlan::materialization_issues)
-            .transpose()?
-            .unwrap_or_default()
+            .map_or_else(Vec::new, crate::bundle::BundlePlan::materialization_issues)
     } else {
         Vec::new()
     };
@@ -187,16 +183,13 @@ fn print_destination_health(ctx: &Context) {
 }
 
 fn print_catalog_health(ctx: &Context) {
-    let skill_count = ctx
-        .all_targets()
-        .map(|targets| {
-            targets
-                .iter()
-                .filter_map(|target| canonical_skill_dirs(target).ok())
-                .map(|skills| skills.len())
-                .sum::<usize>()
-        })
-        .unwrap_or(0);
+    let skill_count = ctx.all_targets().map_or(0, |targets| {
+        targets
+            .iter()
+            .filter_map(|target| canonical_skill_dirs(target).ok())
+            .map(|skills| skills.len())
+            .sum::<usize>()
+    });
 
     match crate::catalog::lint(ctx) {
         Ok(()) => println!("catalog: {skill_count} skills, clean"),

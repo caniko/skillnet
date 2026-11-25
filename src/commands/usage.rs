@@ -24,7 +24,7 @@ struct UsageReportRow {
     harnesses: BTreeMap<String, i64>,
 }
 
-pub fn run(args: UsageArgs, target: DbTarget, context: Option<&Context>) -> Result<()> {
+pub(crate) fn run(args: UsageArgs, target: DbTarget, context: Option<&Context>) -> Result<()> {
     match args.command {
         UsageCommand::Record {
             skill,
@@ -37,7 +37,7 @@ pub fn run(args: UsageArgs, target: DbTarget, context: Option<&Context>) -> Resu
         } => {
             record(
                 target,
-                UsageEvent {
+                &UsageEvent {
                     skill,
                     harness,
                     session,
@@ -78,7 +78,7 @@ pub(super) fn record_card_read(
 ) -> Result<()> {
     record(
         target,
-        UsageEvent {
+        &UsageEvent {
             skill: card.to_owned(),
             harness: harness.to_owned(),
             session: session.map_or_else(|| uuid::Uuid::nil().to_string(), str::to_owned),
@@ -92,7 +92,7 @@ pub(super) fn record_card_read(
     )
 }
 
-fn record(target: DbTarget, event: UsageEvent, hook_event: &str, tool: &str) -> Result<()> {
+fn record(target: DbTarget, event: &UsageEvent, hook_event: &str, tool: &str) -> Result<()> {
     for (label, value) in [
         ("skill", event.skill.as_str()),
         ("harness", event.harness.as_str()),
@@ -272,15 +272,13 @@ fn parse_duration(value: &str) -> Result<i64> {
 
 fn min_seen(current: Option<String>, candidate: Option<String>) -> Option<String> {
     match (current, candidate) {
-        (None, value) => value,
-        (value, None) => value,
+        (None, value) | (value, None) => value,
         (Some(a), Some(b)) => Some(a.min(b)),
     }
 }
 fn max_seen(current: Option<String>, candidate: Option<String>) -> Option<String> {
     match (current, candidate) {
-        (None, value) => value,
-        (value, None) => value,
+        (None, value) | (value, None) => value,
         (Some(a), Some(b)) => Some(a.max(b)),
     }
 }
@@ -288,16 +286,13 @@ fn max_seen(current: Option<String>, candidate: Option<String>) -> Option<String
 fn open_db(target: DbTarget) -> Result<Db> {
     match target {
         DbTarget::Sqlite(path) => Db::open(&path),
-        DbTarget::Postgres(_url) => {
-            #[cfg(feature = "postgres")]
-            {
-                Db::open_postgres(&_url)
-            }
-            #[cfg(not(feature = "postgres"))]
-            {
-                bail!("Postgres usage database requested, but this skillnet binary was built without the `postgres` feature; rebuild with `--features postgres` or select the sqlite backend")
-            }
-        }
+        #[cfg(feature = "postgres")]
+        DbTarget::Postgres(url) => Db::open_postgres(&url),
+        #[cfg(not(feature = "postgres"))]
+        DbTarget::Postgres(_) => bail!(
+            "Postgres usage database requested, but this skillnet binary was built without the \
+             `postgres` feature; rebuild with `--features postgres` or select the sqlite backend"
+        ),
     }
 }
 

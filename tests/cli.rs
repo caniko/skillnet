@@ -1,6 +1,8 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    env, fs,
+    env,
+    fmt::Write as _,
+    fs,
     io::Read,
     os::unix::fs as unix_fs,
     path::Path,
@@ -61,12 +63,6 @@ impl Fixture {
     fn command_with_catalog(&self, config: &Path, catalog_config: &Path) -> Command {
         let mut command = self.command(config);
         command.args(["--catalog-config", catalog_config.to_str().unwrap()]);
-        command
-    }
-
-    fn raw_command(&self, config: &Path) -> Command {
-        let mut command = Command::cargo_bin("skillnet").unwrap();
-        command.args(["--config", config.to_str().unwrap()]);
         command
     }
 }
@@ -135,14 +131,14 @@ fn sync_paths_config(
         .join(", ");
 
     format!(
-        r#"
+        r"
 [global]
 sources = [
 {source_lines}
 ]
 sync_paths = [{sync_paths}]
 stale_codex_skill_paths = [{stale}]
-"#
+"
     )
 }
 
@@ -165,11 +161,12 @@ fn assert_sync_paths_parity(paths: &[&Path]) -> BTreeMap<String, String> {
     if !mismatches.is_empty() {
         let mut message = String::from("sync path parity mismatch\n");
         for (path, entries) in &maps {
-            message.push_str(&format!(
+            let _ = write!(
+                message,
                 "\n{}:\n{}",
                 path.display(),
                 parity_difference(expected, entries)
-            ));
+            );
         }
         panic!("{message}");
     }
@@ -354,7 +351,6 @@ fn commit_paths(path: &Path, paths: &[&str], message: &str) {
         .unwrap();
 }
 
-#[allow(dead_code)]
 fn auto_commit_config(
     agents: &Path,
     claude: &Path,
@@ -388,13 +384,12 @@ stale_codex_skill_paths = ["{}"]
     )
 }
 
-#[allow(dead_code)]
 fn install_codex_stub(
     fixture: &Fixture,
     script_body: &str,
     log_name: &str,
 ) -> (std::path::PathBuf, String) {
-    let bin_dir = tempfile::tempdir().unwrap().keep();
+    let bin_dir = tempdir().unwrap().keep();
     fs::create_dir_all(&bin_dir).unwrap();
     let script = bin_dir.join("codex");
     let log = fixture.path(log_name);
@@ -414,10 +409,9 @@ fn install_codex_stub(
         perms.set_mode(0o755);
         fs::set_permissions(&script, perms).unwrap();
     }
-    (log.clone(), prepend_path(&bin_dir))
+    (log, prepend_path(&bin_dir))
 }
 
-#[allow(dead_code)]
 fn prepend_path(bin_dir: &Path) -> String {
     let current = env::var_os("PATH").unwrap_or_default();
     let mut paths = vec![bin_dir.to_path_buf()];
@@ -425,7 +419,6 @@ fn prepend_path(bin_dir: &Path) -> String {
     env::join_paths(paths).unwrap().into_string().unwrap()
 }
 
-#[allow(dead_code)]
 fn path_without_codex() -> String {
     let current = env::var_os("PATH").unwrap_or_default();
     let filtered = env::split_paths(&current)
@@ -526,7 +519,7 @@ path = "{}"
         command
     }
 
-    fn project_view(&self, project: &Path) -> std::path::PathBuf {
+    fn project_view(project: &Path) -> std::path::PathBuf {
         project.join(".claude/skills")
     }
 
@@ -680,7 +673,7 @@ fn sync_creates_global_and_project_symlinks() {
         ("first", &sync.first_project),
         ("second", &sync.second_project),
     ] {
-        let view = sync.project_view(project);
+        let view = SyncFixture::project_view(project);
         assert_relative_symlink_points_to(&view.join("alpha"), "../../.agents/skills/alpha");
         assert_relative_symlink_points_to(&view.join("beta"), "../../.agents/skills/beta");
         assert!(sync.aggregator(name).exists());
@@ -706,7 +699,7 @@ fn sync_scope_projects_materializes_only_project_targets() {
         ("first", &sync.first_project),
         ("second", &sync.second_project),
     ] {
-        let view = sync.project_view(project);
+        let view = SyncFixture::project_view(project);
         assert_relative_symlink_points_to(&view.join("alpha"), "../../.agents/skills/alpha");
         assert!(sync.aggregator(name).exists());
     }
@@ -730,8 +723,8 @@ fn sync_scope_global_materializes_only_global_target() {
         &sync.global_view.join("alpha"),
         &sync.fixture.path("global/alpha"),
     );
-    assert!(!sync.project_view(&sync.first_project).exists());
-    assert!(!sync.project_view(&sync.second_project).exists());
+    assert!(!SyncFixture::project_view(&sync.first_project).exists());
+    assert!(!SyncFixture::project_view(&sync.second_project).exists());
     assert!(!sync.aggregator("first").exists());
     assert!(!sync.aggregator("second").exists());
 }
@@ -794,26 +787,30 @@ fn sync_forwards_allow_delete_and_force() {
     symlink_file("/missing/global", &sync.global_view.join("stale"));
     symlink_file(
         "/missing/first",
-        &sync.project_view(&sync.first_project).join("stale"),
+        &SyncFixture::project_view(&sync.first_project).join("stale"),
     );
 
     sync.command().arg("sync").assert().success();
     assert!(fs::symlink_metadata(sync.global_view.join("stale")).is_ok());
-    assert!(fs::symlink_metadata(sync.project_view(&sync.first_project).join("stale")).is_ok());
+    assert!(
+        fs::symlink_metadata(SyncFixture::project_view(&sync.first_project).join("stale")).is_ok()
+    );
 
     sync.command()
         .args(["sync", "--allow-delete"])
         .assert()
         .success();
     assert!(fs::symlink_metadata(sync.global_view.join("stale")).is_err());
-    assert!(fs::symlink_metadata(sync.project_view(&sync.first_project).join("stale")).is_err());
+    assert!(
+        fs::symlink_metadata(SyncFixture::project_view(&sync.first_project).join("stale")).is_err()
+    );
 
     let sync = SyncFixture::new();
     fs::create_dir_all(&sync.global_view).unwrap();
     fs::write(sync.global_view.join("alpha"), "not a symlink").unwrap();
-    fs::create_dir_all(sync.project_view(&sync.first_project)).unwrap();
+    fs::create_dir_all(SyncFixture::project_view(&sync.first_project)).unwrap();
     fs::write(
-        sync.project_view(&sync.first_project).join("alpha"),
+        SyncFixture::project_view(&sync.first_project).join("alpha"),
         "not a symlink",
     )
     .unwrap();
@@ -828,10 +825,10 @@ fn sync_forwards_allow_delete_and_force() {
         );
 
     fs::remove_file(sync.global_view.join("alpha")).unwrap();
-    fs::remove_file(sync.project_view(&sync.first_project).join("alpha")).unwrap();
+    fs::remove_file(SyncFixture::project_view(&sync.first_project).join("alpha")).unwrap();
     write_skill(&sync.global_view, "alpha", "old view alpha");
     write_skill(
-        &sync.project_view(&sync.first_project),
+        &SyncFixture::project_view(&sync.first_project),
         "alpha",
         "old view alpha",
     );
@@ -846,7 +843,7 @@ fn sync_forwards_allow_delete_and_force() {
         FileTime::from_unix_time(1_700_003_600, 0),
     );
     set_skill_file_times(
-        &sync.project_view(&sync.first_project),
+        &SyncFixture::project_view(&sync.first_project),
         "alpha",
         FileTime::from_unix_time(1_700_000_000, 0),
     );
@@ -862,7 +859,7 @@ fn sync_forwards_allow_delete_and_force() {
         &sync.fixture.path("global/alpha"),
     );
     assert_relative_symlink_points_to(
-        &sync.project_view(&sync.first_project).join("alpha"),
+        &SyncFixture::project_view(&sync.first_project).join("alpha"),
         "../../.agents/skills/alpha",
     );
 }
@@ -914,7 +911,7 @@ fn sync_dry_run_does_not_mutate() {
         "dry-run changed: {changed:?}"
     );
     assert!(!sync.global_view.exists());
-    assert!(!sync.project_view(&sync.first_project).exists());
+    assert!(!SyncFixture::project_view(&sync.first_project).exists());
     assert!(!sync.aggregator("first").exists());
 }
 
@@ -976,8 +973,8 @@ fn sync_short_circuits_on_view_failure() {
 
     assert_eq!(tree_digest(&sync.first_project), first_project_before);
     assert_eq!(tree_digest(&sync.second_project), second_project_before);
-    assert!(!sync.project_view(&sync.first_project).exists());
-    assert!(!sync.project_view(&sync.second_project).exists());
+    assert!(!SyncFixture::project_view(&sync.first_project).exists());
+    assert!(!SyncFixture::project_view(&sync.second_project).exists());
     assert!(!sync.aggregator("first").exists());
     assert!(!sync.aggregator("second").exists());
 }
@@ -2671,8 +2668,9 @@ fn status_reports_git_destination_from_skills_root() {
     init_git_repo(fixture.root());
     let config = fixture.write_config(minimal_config_with_skills_root(fixture.root()));
 
-    fixture
-        .raw_command(&config)
+    Command::cargo_bin("skillnet")
+        .unwrap()
+        .args(["--config", config.to_str().unwrap()])
         .args(["status", "--all"])
         .assert()
         .success()

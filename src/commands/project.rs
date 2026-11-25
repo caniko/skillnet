@@ -26,7 +26,7 @@ struct ProjectListRow {
     relative_path: Option<String>,
 }
 
-pub fn project_list(ctx: &Context, format: StatusFormat) -> Result<()> {
+pub(crate) fn project_list(ctx: &Context, format: StatusFormat) -> Result<()> {
     let discovered = ctx.config.discovered_projects()?;
     let discovered_by_path = discovered
         .into_iter()
@@ -67,7 +67,12 @@ pub fn project_list(ctx: &Context, format: StatusFormat) -> Result<()> {
     Ok(())
 }
 
-pub fn project_add(ctx: &Context, name: &str, path: &Utf8Path, allow_missing: bool) -> Result<()> {
+pub(crate) fn project_add(
+    ctx: &Context,
+    name: &str,
+    path: &Utf8Path,
+    allow_missing: bool,
+) -> Result<()> {
     if config_is_hm_managed(&ctx.config_path) {
         bail!(hm_managed_error_message(&ctx.config_path, "skillnet.toml"));
     }
@@ -103,7 +108,7 @@ pub fn project_add(ctx: &Context, name: &str, path: &Utf8Path, allow_missing: bo
     Ok(())
 }
 
-pub fn project_remove(ctx: &Context, name: &str, prune_mirror: bool) -> Result<()> {
+pub(crate) fn project_remove(ctx: &Context, name: &str, prune_mirror: bool) -> Result<()> {
     if config_is_hm_managed(&ctx.config_path) {
         bail!(hm_managed_error_message(&ctx.config_path, "skillnet.toml"));
     }
@@ -148,7 +153,7 @@ pub fn project_remove(ctx: &Context, name: &str, prune_mirror: bool) -> Result<(
     Ok(())
 }
 
-pub fn project_sync(
+pub(crate) fn project_sync(
     ctx: &Context,
     names: &[String],
     all: bool,
@@ -216,7 +221,12 @@ pub fn project_sync(
     Ok(())
 }
 
-pub fn project_clone_all(ctx: &Context, all: bool, dry_run: bool, ssh_strict: bool) -> Result<()> {
+pub(crate) fn project_clone_all(
+    ctx: &Context,
+    all: bool,
+    dry_run: bool,
+    ssh_strict: bool,
+) -> Result<()> {
     if !all {
         bail!("must pass --all");
     }
@@ -277,7 +287,7 @@ pub fn project_clone_all(ctx: &Context, all: bool, dry_run: bool, ssh_strict: bo
     Ok(())
 }
 
-pub fn project_status_command(
+pub(crate) fn project_status_command(
     ctx: &Context,
     names: &[String],
     all: bool,
@@ -289,7 +299,7 @@ pub fn project_status_command(
         let drift = project_status(&target)?;
         let promotion_status = promotion_status_counts(&drift);
         rows.push(ProjectStatusRow {
-            name: target.name.clone(),
+            name: target.name,
             would_promote: promotion_status.would_promote,
             needs_tie_break: promotion_status.needs_tie_break,
             drift,
@@ -317,7 +327,7 @@ pub fn project_status_command(
     Ok(())
 }
 
-pub fn project_diff_command(ctx: &Context, names: &[String], all: bool) -> Result<()> {
+pub(crate) fn project_diff_command(ctx: &Context, names: &[String], all: bool) -> Result<()> {
     for target in project_targets(ctx, names, all, None)? {
         println!("# {}", target.name);
         let deltas = project_diff(&target)?;

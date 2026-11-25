@@ -241,7 +241,7 @@ fn valid_sidecar(with_verify: bool) -> Value {
             "name": "Synthetic plan",
             "flavor": "codex",
             "worktype": "refactor",
-            "created_at": 1717171717,
+            "created_at": 1_717_171_717,
             "phase_count": 2,
             "wave_count": 1,
             "max_chain_depth": 1,
@@ -290,7 +290,7 @@ fn valid_sidecar(with_verify: bool) -> Value {
 
     if with_verify {
         sidecar["verify"] = json!({
-            "verified_at": 1717171818,
+            "verified_at": 1_717_171_818,
             "elapsed_seconds": 42,
             "outcome": "shipped",
             "phase_outcomes": {

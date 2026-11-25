@@ -289,7 +289,7 @@ fn seed_candidate(conn: &Connection) {
     for i in 0..10 {
         seed_row(
             conn,
-            SeedRow {
+            &SeedRow {
                 plan_id: format!("long-fire-{i}"),
                 trigger: "long-serial-chain",
                 fired: true,
@@ -330,7 +330,7 @@ struct SeedRow<'a> {
     surprises: Option<&'a str>,
 }
 
-fn seed_row(conn: &Connection, row: SeedRow<'_>) {
+fn seed_row(conn: &Connection, row: &SeedRow<'_>) {
     conn.execute(
         "INSERT INTO plans (
             id,

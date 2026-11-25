@@ -14,15 +14,15 @@ use crate::{
     },
 };
 
-pub fn run(
+pub(crate) fn run(
     ctx: &Context,
     scopes: &[Scope],
-    options: PromotionOptions,
+    options: &PromotionOptions,
     no_promote: bool,
     link_strategy: Option<LinkStrategy>,
 ) -> Result<i32> {
     if no_promote {
-        return run_no_promote(ctx, scopes, &options, link_strategy);
+        return run_no_promote(ctx, scopes, options, link_strategy);
     }
     run_with_promotion(ctx, scopes, options, link_strategy)
 }
@@ -59,7 +59,7 @@ fn run_no_promote(
 fn run_with_promotion(
     ctx: &Context,
     scopes: &[Scope],
-    options: PromotionOptions,
+    options: &PromotionOptions,
     link_strategy: Option<LinkStrategy>,
 ) -> Result<i32> {
     let mut report = OverallReport::default();
@@ -67,7 +67,7 @@ fn run_with_promotion(
     for target in scoped_targets(ctx, scopes, link_strategy)? {
         warn_legacy_project_layout(&target);
         if ctx.dry_run {
-            dry_run_target(ctx, &target, &options, &mut report)?;
+            dry_run_target(ctx, &target, options, &mut report)?;
             continue;
         }
 
@@ -325,8 +325,8 @@ fn dry_run_target(
 
 fn target_kind(target: &Target) -> &'static str {
     match target.scope {
-        crate::model::TargetScope::Global => "view",
-        crate::model::TargetScope::Project => "project",
+        TargetScope::Global => "view",
+        TargetScope::Project => "project",
     }
 }
 

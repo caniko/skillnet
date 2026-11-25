@@ -40,31 +40,31 @@ fn meta_heuristics_fire_and_miss_on_synthetic_inputs() {
     let plan = plan_with(vec![phase(1, "01-setup", "medium", &["src/lib.rs"])]);
     let near = vec![outcome(9.0, 10.0, false)];
     let far = vec![outcome(1.0, 10.0, false)];
-    assert_meta("threshold-proximity", inputs(&plan, &near), true);
-    assert_meta("threshold-proximity", inputs(&plan, &far), false);
+    assert_meta("threshold-proximity", &inputs(&plan, &near), true);
+    assert_meta("threshold-proximity", &inputs(&plan, &far), false);
 
     let mut risky = plan.clone();
     risky.routing_dist.insert("max".to_string(), 1);
     assert_meta(
         "trigger-absence-with-risk-shape",
-        inputs(&risky, &[outcome(0.0, 1.0, false)]),
+        &inputs(&risky, &[outcome(0.0, 1.0, false)]),
         true,
     );
     assert_meta(
         "trigger-absence-with-risk-shape",
-        inputs(&risky, &[outcome(1.0, 1.0, true)]),
+        &inputs(&risky, &[outcome(1.0, 1.0, true)]),
         false,
     );
 
     let mut novel = inputs(&plan, &far);
     novel.novel_shape_signature = true;
-    assert_meta("novel-shape-signature", novel, true);
-    assert_meta("novel-shape-signature", inputs(&plan, &far), false);
+    assert_meta("novel-shape-signature", &novel, true);
+    assert_meta("novel-shape-signature", &inputs(&plan, &far), false);
 
     let mut outlier = inputs(&plan, &far);
     outlier.routing_tier_outlier_count = 1;
-    assert_meta("routing-tier-outlier", outlier, true);
-    assert_meta("routing-tier-outlier", inputs(&plan, &far), false);
+    assert_meta("routing-tier-outlier", &outlier, true);
+    assert_meta("routing-tier-outlier", &inputs(&plan, &far), false);
 
     let verify = VerifyRecord {
         verified_at: 1,
@@ -76,25 +76,25 @@ fn meta_heuristics_fire_and_miss_on_synthetic_inputs() {
     };
     let mut verify_inputs = inputs(&plan, &far);
     verify_inputs.verify = Some(&verify);
-    assert_meta("verify-surprise", verify_inputs, true);
-    assert_meta("verify-surprise", inputs(&plan, &far), false);
+    assert_meta("verify-surprise", &verify_inputs, true);
+    assert_meta("verify-surprise", &inputs(&plan, &far), false);
 
     let mut rerouting = inputs(&plan, &far);
     rerouting.rerouting_event_count = 1;
-    assert_meta("rerouting-event", rerouting, true);
-    assert_meta("rerouting-event", inputs(&plan, &far), false);
+    assert_meta("rerouting-event", &rerouting, true);
+    assert_meta("rerouting-event", &inputs(&plan, &far), false);
 
     let mut high_stakes = risky.clone();
     high_stakes.phases[0].working_tree = Some("/tmp/external".to_string());
-    assert_meta("high-stakes-combo", inputs(&high_stakes, &far), true);
-    assert_meta("high-stakes-combo", inputs(&risky, &far), false);
+    assert_meta("high-stakes-combo", &inputs(&high_stakes, &far), true);
+    assert_meta("high-stakes-combo", &inputs(&risky, &far), false);
 
     let mut sampled = inputs(&plan, &far);
     sampled.random_sample = Some(0.01);
-    assert_meta("uniform-random", sampled, true);
+    assert_meta("uniform-random", &sampled, true);
     let mut unsampled = inputs(&plan, &far);
     unsampled.random_sample = Some(0.5);
-    assert_meta("uniform-random", unsampled, false);
+    assert_meta("uniform-random", &unsampled, false);
 }
 
 #[test]
@@ -262,12 +262,12 @@ fn heuristic_cases() -> Vec<HeuristicCase> {
     ]
 }
 
-fn assert_meta(name: &str, inputs: MetaHeuristicInputs<'_>, expected: bool) {
+fn assert_meta(name: &str, inputs: &MetaHeuristicInputs<'_>, expected: bool) {
     let heuristic = META_HEURISTICS
         .iter()
         .find(|heuristic| heuristic.name() == name)
         .unwrap();
-    assert_eq!(heuristic.fires(&inputs), expected, "{name}");
+    assert_eq!(heuristic.fires(inputs), expected, "{name}");
 }
 
 fn inputs<'a>(
@@ -308,7 +308,7 @@ fn plan_with(phases: Vec<PhaseInputs>) -> PlanInputs {
         name: "synthetic".to_string(),
         flavor: "codex".to_string(),
         worktype: Some("refactor".to_string()),
-        phase_count: phases.len() as u32,
+        phase_count: u32::try_from(phases.len()).unwrap(),
         wave_count: 1,
         max_chain_depth: 1,
         repo_spread: 1,
@@ -360,7 +360,7 @@ fn with_phase_count(mut plan: PlanInputs, phase_count: u32) -> PlanInputs {
 }
 
 fn with_waves(mut plan: PlanInputs, waves: Vec<Vec<u32>>) -> PlanInputs {
-    plan.wave_count = waves.len() as u32;
+    plan.wave_count = u32::try_from(waves.len()).unwrap();
     plan.waves = waves;
     plan
 }

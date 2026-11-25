@@ -68,11 +68,10 @@ pub fn load_t3_caches(dir: &Utf8Path) -> Result<Vec<Provider>> {
         }
         let snapshot = (|| -> Result<Provider> {
             let mut provider: Provider = serde_json::from_slice(&fs::read(&path)?)?;
-            provider.instance_id = path
-                .file_stem()
+            path.file_stem()
                 .and_then(|stem| stem.to_str())
                 .context("non-UTF-8 provider instance ID")?
-                .to_owned();
+                .clone_into(&mut provider.instance_id);
             Ok(provider)
         })();
         match snapshot {

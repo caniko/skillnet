@@ -117,13 +117,10 @@ fn read_json(path: &PathBuf) -> Value {
 }
 
 fn managed_count(settings: &Value, event: &str) -> usize {
-    settings["hooks"][event]
-        .as_array()
-        .map(|entries| {
-            entries
-                .iter()
-                .filter(|entry| entry["_skillnet_managed"] == true)
-                .count()
-        })
-        .unwrap_or(0)
+    settings["hooks"][event].as_array().map_or(0, |entries| {
+        entries
+            .iter()
+            .filter(|entry| entry["_skillnet_managed"] == true)
+            .count()
+    })
 }

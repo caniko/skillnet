@@ -501,6 +501,7 @@ pub(crate) enum ConfigCommand {
     ///
     /// This command operates on the current working directory and ignores --config
     /// and --catalog-config overrides.
+    #[expect(clippy::doc_markdown, reason = "Clap prints this as plain-text help")]
     Migrate {
         /// Print decisions without touching the filesystem.
         #[arg(long)]
@@ -526,6 +527,7 @@ pub(crate) enum HookCommand {
     /// Read one hook payload and record it.
     Ingest {
         /// Hook event name as Claude Code passes it, such as PostToolUse or SessionEnd.
+        #[expect(clippy::doc_markdown, reason = "Clap prints this as plain-text help")]
         #[arg(long, env = "CLAUDE_HOOK_EVENT")]
         event: String,
         /// Harness producing the hook payload.
@@ -877,6 +879,7 @@ pub(super) enum SubscriptionCommand {
 #[command(disable_help_subcommand = true)]
 pub(super) enum CatalogCommand {
     /// Rebuild CATALOG.md, ROUTING.md, SKILL_CONFLICTS.md, and project INDEX.md files.
+    #[expect(clippy::doc_markdown, reason = "Clap prints this as plain-text help")]
     Generate,
     /// Validate effective catalog metadata and routing hygiene.
     Lint,
@@ -891,6 +894,29 @@ pub(super) enum CatalogCommand {
 mod tests {
     use super::*;
     use clap::CommandFactory;
+
+    #[test]
+    fn help_uses_plain_text_for_literal_names() {
+        let cases: &[(&[&str], &str)] = &[
+            (
+                &["skillnet", "config", "--help"],
+                "$XDG_CONFIG_HOME/skillnet/",
+            ),
+            (
+                &["skillnet", "hook", "ingest", "--help"],
+                "PostToolUse or SessionEnd",
+            ),
+            (
+                &["skillnet", "catalog", "--help"],
+                "ROUTING.md, SKILL_CONFLICTS.md",
+            ),
+        ];
+        for &(args, expected) in cases {
+            let help = Cli::try_parse_from(args).unwrap_err();
+            assert_eq!(help.kind(), clap::error::ErrorKind::DisplayHelp);
+            assert!(help.to_string().contains(expected), "{help}");
+        }
+    }
 
     #[test]
     fn path_args_read_environment_fallbacks() {
@@ -1043,7 +1069,7 @@ mod tests {
             .unwrap_err();
         let message = err.to_string();
 
-        assert!(!message.is_empty());
+        assert_ne!(message, "");
         assert!(message.contains("--apply-promote"));
         assert!(message.contains("--no-promote"));
     }
@@ -1053,7 +1079,7 @@ mod tests {
         let err = Cli::try_parse_from(["skillnet", "sync", "--force", "--no-promote"]).unwrap_err();
         let message = err.to_string();
 
-        assert!(!message.is_empty());
+        assert_ne!(message, "");
         assert!(message.contains("--force"));
         assert!(message.contains("--no-promote"));
     }

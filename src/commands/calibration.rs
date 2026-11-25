@@ -9,7 +9,7 @@ use crate::{
     config::DbTarget,
 };
 
-pub fn run(args: CalibrationArgs, target: DbTarget) -> Result<()> {
+pub(crate) fn run(args: CalibrationArgs, target: DbTarget) -> Result<()> {
     if let CalibrationCommand::ShapeHash { plan_dir } = &args.command {
         return calibration::shape_hash::run(plan_dir.as_std_path());
     }
@@ -192,20 +192,14 @@ fn category_filter(category: HeuristicCategoryArg) -> calibration::heuristics_cm
 fn open_db(target: DbTarget) -> Result<Db> {
     let db = match target {
         DbTarget::Sqlite(path) => Db::open(&path),
-        DbTarget::Postgres(_url) => {
-            #[cfg(feature = "postgres")]
-            {
-                Db::open_postgres(&_url)
-            }
-            #[cfg(not(feature = "postgres"))]
-            {
-                anyhow::bail!(
-                    "Postgres calibration database requested, but this skillnet binary was built \
-                     without the `postgres` feature; rebuild with `--features postgres` or select \
-                     the sqlite backend"
-                )
-            }
-        }
+        #[cfg(feature = "postgres")]
+        DbTarget::Postgres(url) => Db::open_postgres(&url),
+        #[cfg(not(feature = "postgres"))]
+        DbTarget::Postgres(_) => anyhow::bail!(
+            "Postgres calibration database requested, but this skillnet binary was built \
+             without the `postgres` feature; rebuild with `--features postgres` or select \
+             the sqlite backend"
+        ),
     }?;
     calibration::catalog::ThresholdStore::load(&db)?;
     Ok(db)

@@ -333,7 +333,7 @@ fn write_plan(path: &std::path::Path) {
     fs::write(path.join("03-integrate.md"), PHASE_3).unwrap();
 }
 
-const README: &str = r#"# Synthetic calibration plan
+const README: &str = r"# Synthetic calibration plan
 
 > **Recommended Codex model: GPT 5.5 medium**
 
@@ -342,9 +342,9 @@ const README: &str = r#"# Synthetic calibration plan
 | 01 | [01-foundation.md](./01-foundation.md) | — | `src/lib.rs` | 02 |
 | 02 | [02-external.md](./02-external.md) | — | `src/lib.rs` | 01 |
 | 03 | [03-integrate.md](./03-integrate.md) | 01, 02 | `tests/e2e.rs` | — |
-"#;
+";
 
-const PHASE_1: &str = r#"# Phase 01 — foundation
+const PHASE_1: &str = r"# Phase 01 — foundation
 
 > **Recommended Codex model: GPT 5.5 medium**
 
@@ -355,9 +355,9 @@ same as primary
 ## Files likely touched
 
 - `src/lib.rs`
-"#;
+";
 
-const PHASE_2: &str = r#"# Phase 02 — external
+const PHASE_2: &str = r"# Phase 02 — external
 
 > **Recommended Codex model: GPT 5.5 high**
 
@@ -368,9 +368,9 @@ const PHASE_2: &str = r#"# Phase 02 — external
 ## Files likely touched
 
 - `src/lib.rs`
-"#;
+";
 
-const PHASE_3: &str = r#"# Phase 03 — integrate
+const PHASE_3: &str = r"# Phase 03 — integrate
 
 > **Recommended Codex model: GPT 5.5 max**
 
@@ -381,4 +381,4 @@ same as primary
 ## Files likely touched
 
 - `tests/e2e.rs`
-"#;
+";

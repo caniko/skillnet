@@ -16,7 +16,7 @@ pub(super) fn canonical_skill_dirs(target: &Target) -> Result<Vec<Utf8PathBuf>> 
     }
 }
 
-pub fn list(ctx: &Context, scopes: &[Scope]) -> Result<()> {
+pub(crate) fn list(ctx: &Context, scopes: &[Scope]) -> Result<()> {
     for target in ctx.targets(scopes)? {
         println!("# {}", target.name);
         for skill in canonical_skill_dirs(&target)? {
@@ -26,7 +26,7 @@ pub fn list(ctx: &Context, scopes: &[Scope]) -> Result<()> {
     Ok(())
 }
 
-pub fn targets(ctx: &Context) -> Result<()> {
+pub(crate) fn targets(ctx: &Context) -> Result<()> {
     for target in ctx.all_targets()? {
         println!("{}", target.name);
     }

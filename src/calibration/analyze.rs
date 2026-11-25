@@ -32,7 +32,7 @@
 //! ```
 //!
 //! See `docs/src/calibration/json-schema.md` for the canonical field
-//! reference and SemVer commitment.
+//! reference and `SemVer` commitment.
 //!
 //! The analyzer scores only plans that have a verification row. For each
 //! trigger `T`:
@@ -191,6 +191,10 @@ struct RawStats {
     false_negative_plan_ids: Vec<String>,
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Keep the public owned-options API"
+)]
 pub fn run(db: &Db, options: AnalyzeOptions, format: OutputFormat) -> anyhow::Result<()> {
     let report = analyze(db, &options)?;
     match format {

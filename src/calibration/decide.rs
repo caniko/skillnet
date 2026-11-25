@@ -18,6 +18,10 @@ impl Decision {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Keep the public owned-decision API"
+)]
 pub fn run(
     db: &mut Db,
     proposal_id: i64,

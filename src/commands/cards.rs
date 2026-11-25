@@ -47,7 +47,7 @@ pub(crate) fn trigger(
         &root,
         args.harness.trim(),
         session.as_deref(),
-        Limits {
+        &Limits {
             max_cards: args
                 .max_cards
                 .unwrap_or(if args.event == Event::Audit { 20 } else { 2 }),

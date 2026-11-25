@@ -13,8 +13,8 @@ use crate::link::{resolve_link_strategy, LinkStrategy};
 use crate::model::{Target, TargetScope, ViewTarget};
 use crate::project_discovery::{discover, DiscoveredProject, ProjectDiscoveryConfig};
 
-pub const PROJECT_CANONICAL_REL: &str = ".skills";
-pub const DEFAULT_PROJECT_WORKING_COPY_REL: &str = ".agents/skills";
+pub(crate) const PROJECT_CANONICAL_REL: &str = ".skills";
+pub(crate) const DEFAULT_PROJECT_WORKING_COPY_REL: &str = ".agents/skills";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -149,7 +149,7 @@ pub enum ViewScope {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GlobalConfig {
-    /// Where the canonical mirror lives. Defaults to <mirror_root>/global.
+    /// Where the canonical mirror lives. Defaults to `<mirror_root>/global`.
     #[serde(default)]
     pub canonical_path: Option<String>,
     /// View destinations populated by `skillnet view sync`.
@@ -227,7 +227,7 @@ fn default_subscription_source() -> String {
     "global_skills".into()
 }
 
-pub fn validate_project_name(name: &str) -> Result<()> {
+pub(crate) fn validate_project_name(name: &str) -> Result<()> {
     if name.is_empty() || name.contains('/') || name.contains('\\') {
         bail!("project name must be a non-empty scope name, not a path");
     }
@@ -293,7 +293,7 @@ fn merge_projects(
     Ok(projects)
 }
 
-pub fn default_data_dir() -> PathBuf {
+pub(crate) fn default_data_dir() -> PathBuf {
     for var in ["skillnet_DATA_DIR", "SKILLNET_DATA_DIR"] {
         if let Some(dir) = env::var_os(var) {
             return PathBuf::from(dir);
@@ -326,14 +326,14 @@ fn reject_legacy_schema(text: &str, path: &Utf8Path) -> Result<()> {
         toml::from_str(text).with_context(|| format!("failed to parse config file {path}"))?;
     let mut found = Vec::new();
     collect_legacy_fields(&value, LEGACY_FIELDS, &mut found);
-    found.sort();
+    found.sort_unstable();
     found.dedup();
 
     if found.is_empty() {
         return Ok(());
     }
 
-    let primary = found.first().cloned().unwrap_or("unknown");
+    let primary = found.first().copied().unwrap_or("unknown");
     bail!(
         "skillnet.toml uses the pre-Option-B schema (field `{primary}` found).\n\
 These fields were removed in skillnet 0.5.0. See the migration guide for the new `views` / `canonical_rel` schema:\n\
@@ -422,12 +422,10 @@ impl Config {
         Ok(Self::read(path)?.database)
     }
 
-    #[allow(dead_code)]
     pub fn resolve_db(&self) -> Result<DbTarget> {
         self.database.resolve_db()
     }
 
-    #[allow(dead_code)]
     pub fn resolve_db_with_overrides(&self, overrides: &DbOverrides) -> Result<DbTarget> {
         self.database.resolve_db_with_overrides(overrides)
     }
@@ -551,14 +549,14 @@ impl Config {
     }
 }
 
-pub fn legacy_project_canonical_warning(target: &Target) -> Option<String> {
-    if !target.canonical_path.is_dir() {
+pub(crate) fn legacy_project_canonical_warning(target: &Target) -> Option<String> {
+    if target.canonical_path.is_dir() {
+        None
+    } else {
         Some(format!(
             "project {}: canonical '.skills' store is missing at {}; create it or run `skillnet skill new {}/<name>`.",
             target.name, target.canonical_path, target.name
         ))
-    } else {
-        None
     }
 }
 
@@ -591,7 +589,6 @@ fn normalize_project_rel(rel: &str) -> &str {
 }
 
 impl DatabaseConfig {
-    #[allow(dead_code)]
     pub fn resolve_db(&self) -> Result<DbTarget> {
         self.resolve_db_with_overrides(&DbOverrides::default())
     }
@@ -638,7 +635,7 @@ impl DatabaseConfig {
 fn env_database_url() -> Option<String> {
     ["SKILLNET_DATABASE_URL", "SKILLNET_DB_URL", "DATABASE_URL"]
         .into_iter()
-        .find_map(|var| env::var(var).ok().and_then(non_empty_owned))
+        .find_map(|var| non_empty(env::var(var).ok().as_deref()).map(str::to_owned))
 }
 
 fn env_data_dir_path() -> Option<PathBuf> {
@@ -666,12 +663,7 @@ fn non_empty(value: Option<&str>) -> Option<&str> {
     })
 }
 
-fn non_empty_owned(value: String) -> Option<String> {
-    let trimmed = value.trim();
-    (!trimmed.is_empty()).then(|| trimmed.to_string())
-}
-
-pub fn expand_path(raw: &str) -> Result<Utf8PathBuf> {
+pub(crate) fn expand_path(raw: &str) -> Result<Utf8PathBuf> {
     let raw = expand_env_vars(raw)?;
     if raw == "~" {
         return home_dir();
@@ -743,30 +735,28 @@ fn is_env_name_char(ch: char) -> bool {
     ch == '_' || ch.is_ascii_alphanumeric()
 }
 
-pub fn default_config_path() -> Result<Utf8PathBuf> {
+pub(crate) fn default_config_path() -> Result<Utf8PathBuf> {
     default_xdg_config_path("skillnet.toml")
 }
 
-pub fn default_catalog_config_path() -> Result<Utf8PathBuf> {
+pub(crate) fn default_catalog_config_path() -> Result<Utf8PathBuf> {
     default_xdg_config_path("skillnet.catalog.toml")
 }
 
-pub fn legacy_config_path() -> Utf8PathBuf {
+pub(crate) fn legacy_config_path() -> Utf8PathBuf {
     Utf8PathBuf::from("skillnet.toml")
 }
 
-pub fn legacy_catalog_config_path() -> Utf8PathBuf {
+pub(crate) fn legacy_catalog_config_path() -> Utf8PathBuf {
     Utf8PathBuf::from("skillnet.catalog.toml")
 }
 
-pub fn config_is_hm_managed(path: &Utf8Path) -> bool {
+pub(crate) fn config_is_hm_managed(path: &Utf8Path) -> bool {
     let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.into());
-    Utf8PathBuf::from_path_buf(canonical)
-        .map(|path| path.as_str().starts_with("/nix/store/"))
-        .unwrap_or(false)
+    Utf8PathBuf::from_path_buf(canonical).is_ok_and(|path| path.as_str().starts_with("/nix/store/"))
 }
 
-pub fn hm_managed_error_message(path: &Utf8Path, file_name: &str) -> String {
+pub(crate) fn hm_managed_error_message(path: &Utf8Path, file_name: &str) -> String {
     format!(
         "{file_name} at {path} is managed by Home Manager (read-only).\n\
          hint: edit programs.skillnet.settings in your Home Manager configuration,\n\
@@ -787,9 +777,10 @@ fn xdg_data_home() -> PathBuf {
         return PathBuf::from(dir);
     }
 
-    env::var_os("HOME")
-        .map(|home| PathBuf::from(home).join(".local/share"))
-        .unwrap_or_else(|| PathBuf::from(".local/share"))
+    env::var_os("HOME").map_or_else(
+        || PathBuf::from(".local/share"),
+        |home| PathBuf::from(home).join(".local/share"),
+    )
 }
 
 fn home_dir() -> Result<Utf8PathBuf> {
@@ -803,7 +794,10 @@ fn home_dir() -> Result<Utf8PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
+    use std::{
+        fmt::Write as _,
+        sync::{Mutex, OnceLock},
+    };
     use tempfile::tempdir;
 
     #[test]
@@ -890,12 +884,12 @@ views = []
     #[test]
     fn load_rejects_legacy_global_sources_schema() {
         let err = load_config_from_text(
-            r#"
+            r"
 [global]
 sources = []
 sync_paths = []
 stale_codex_skill_paths = []
-"#,
+",
         );
 
         let message = err.to_string();
@@ -910,12 +904,12 @@ stale_codex_skill_paths = []
     #[test]
     fn load_rejects_legacy_root_project_source_rules_schema() {
         let err = load_config_from_text(
-            r#"
+            r"
 project_source_rules = []
 
 [global]
 views = []
-"#,
+",
         );
 
         let message = err.to_string();
@@ -1264,20 +1258,19 @@ path = "{}"
             .to_string()
             .contains("another discovered checkout"));
 
-        let aliases = [
+        let mut with_aliases = discovery;
+        for (name, relative) in [
             ("owned-demo", "owned/demo"),
             ("fork-demo", "forks/demo"),
             ("global-checkout", "owned/global"),
-        ]
-        .into_iter()
-        .map(|(name, relative)| {
-            format!(
+        ] {
+            let _ = write!(
+                with_aliases,
                 "\n[[projects]]\nname = {name:?}\npath = {:?}\n",
                 root.join(relative).to_str().unwrap()
-            )
-        })
-        .collect::<String>();
-        fs::write(&path, format!("{discovery}{aliases}")).unwrap();
+            );
+        }
+        fs::write(&path, with_aliases).unwrap();
         let config = Config::load(&path).unwrap();
         assert_eq!(
             config

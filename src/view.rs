@@ -37,6 +37,10 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Public options are independent flags"
+)]
 pub struct ViewSyncOptions {
     pub allow_delete: bool,
     pub preserve_authored: bool,
@@ -125,6 +129,10 @@ pub enum Preference {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Public options are independent flags"
+)]
 pub struct PromotionOptions {
     pub apply_promote: bool,
     pub force_demote: bool,
@@ -253,6 +261,10 @@ pub fn materialize_view_with_expected(
     Ok(summary)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Keep the public owned-options API"
+)]
 pub fn materialize_view_with_promotion(
     canonical_root: &Utf8Path,
     view: &ViewTarget,
@@ -289,12 +301,9 @@ pub fn materialize_view_with_promotion(
     let mut summary = PromotionSummary::default();
     for (skill, canonical_skill) in &expected {
         let link = view.path.join(skill);
-        let desired_target = options
-            .link_root
-            .as_ref()
-            .map(|root| root.join(skill))
-            .unwrap_or_else(|| canonical_skill.clone());
-        let desired = desired_link_target(&view.path, &desired_target, options.relative_links)?;
+        let link_target = options.link_root.as_ref().map(|root| root.join(skill));
+        let desired_target = link_target.as_ref().unwrap_or(canonical_skill);
+        let desired = desired_link_target(&view.path, desired_target, options.relative_links)?;
         match fs::symlink_metadata(&link) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 let current = read_link_utf8(&link)?;
@@ -309,7 +318,7 @@ pub fn materialize_view_with_promotion(
                 let outcome = compare_view_entry(canonical_skill, &link)
                     .with_context(|| format!("failed to compare skill `{skill}`"))?;
                 apply_reconcile_outcome(
-                    ReconcileAction {
+                    &ReconcileAction {
                         skill,
                         link: &link,
                         canonical_skill,
@@ -370,7 +379,7 @@ struct ReconcileAction<'a> {
 }
 
 fn apply_reconcile_outcome(
-    action: ReconcileAction<'_>,
+    action: &ReconcileAction<'_>,
     outcome: ReconcileOutcome,
     options: &PromotionOptions,
     ensure_clean: &impl Fn(&Utf8Path) -> Result<()>,
@@ -824,6 +833,10 @@ pub fn materialize_project_with_options(
     })
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Keep the public owned-options API"
+)]
 pub fn materialize_project_with_promotion(
     target: &Target,
     options: PromotionOptions,

@@ -6,7 +6,7 @@ use serde_json::{json, Map, Value};
 
 const MANAGED_KEY: &str = "_skillnet_managed";
 
-pub fn install(
+pub(crate) fn install(
     settings: &Utf8Path,
     events: &[String],
     matchers: &[String],
@@ -35,7 +35,7 @@ pub fn install(
     Ok(())
 }
 
-pub fn uninstall(settings: &Utf8Path) -> Result<()> {
+pub(crate) fn uninstall(settings: &Utf8Path) -> Result<()> {
     let settings = expand_settings_path(settings)?;
     let existed = settings.exists();
     let mut document = load_settings(&settings)?;
@@ -50,7 +50,7 @@ pub fn uninstall(settings: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-pub fn is_installed(settings: &Utf8Path) -> Result<bool> {
+pub(crate) fn is_installed(settings: &Utf8Path) -> Result<bool> {
     let settings = expand_settings_path(settings)?;
     let document = load_settings(&settings)?;
     let Some(hooks) = document.get("hooks") else {

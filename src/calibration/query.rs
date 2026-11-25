@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use anyhow::{bail, Context};
 use serde::Serialize;
 use serde_json::Value;
@@ -92,6 +94,10 @@ pub fn show(db: &Db, plan_id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Keep the public owned-options API"
+)]
 pub fn query(db: &Db, options: QueryOptions, format_kind: OutputFormat) -> anyhow::Result<()> {
     let plans = query_plans(db, &options)?;
     match format_kind {
@@ -161,7 +167,7 @@ fn query_plans(db: &Db, options: &QueryOptions) -> anyhow::Result<Vec<PlanRow>> 
         );
         if options.fired || options.missed {
             let fired_placeholder = push_param(&mut params, options.fired);
-            clause.push_str(&format!(" AND fired = {fired_placeholder}"));
+            let _ = write!(clause, " AND fired = {fired_placeholder}");
         }
         clause.push(')');
         clauses.push(clause);
@@ -172,9 +178,10 @@ fn query_plans(db: &Db, options: &QueryOptions) -> anyhow::Result<Vec<PlanRow>> 
         sql.push_str(&clauses.join(" AND "));
     }
     let limit_placeholder = push_param(&mut params, i64::from(options.limit));
-    sql.push_str(&format!(
+    let _ = write!(
+        sql,
         " ORDER BY created_at DESC, id ASC LIMIT {limit_placeholder}"
-    ));
+    );
 
     db.query_all(&sql, &params, plan_from_row)
         .context("failed to run calibration query")

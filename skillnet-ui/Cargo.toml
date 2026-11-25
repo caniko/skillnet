@@ -6,6 +6,9 @@ rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 publish = false
 
+# The lint ratchet applies to the default (CLI/library) package.
+[lints]
+
 [dependencies]
 anyhow = "1.0.103"
 camino = "1.1"

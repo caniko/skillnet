@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Severity {
+pub(crate) enum Severity {
     Info,
     Warn,
     Error,
@@ -34,13 +34,13 @@ impl fmt::Display for Severity {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Issue {
+pub(crate) struct Issue {
     pub severity: Severity,
     pub message: String,
     pub scope: String,
 }
 
-pub fn run(ctx: &Context) -> Result<()> {
+pub(crate) fn run(ctx: &Context) -> Result<()> {
     let issues = lint(ctx)?;
     if issues.is_empty() {
         println!("doctor: no issues");
@@ -56,7 +56,7 @@ pub fn run(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-pub fn lint(ctx: &Context) -> Result<Vec<Issue>> {
+pub(crate) fn lint(ctx: &Context) -> Result<Vec<Issue>> {
     let mut issues = Vec::new();
     for target in ctx.all_targets()? {
         warn_legacy_project_layout(&target);
@@ -98,7 +98,9 @@ fn check_global(ctx: &Context, target: &Target, issues: &mut Vec<Issue>) -> Resu
     let canonical_skills = canonical_skill_names(&target.canonical_path)?;
     let bundle = ctx.bundle_plan(target)?;
     if let Some(bundle) = &bundle {
-        check_bundle_materialization(target, bundle, issues)?;
+        for message in bundle.materialization_issues() {
+            issue(issues, target, Severity::Error, message);
+        }
     }
     for view in &target.views {
         if let Some(bundle) = &bundle {
@@ -106,17 +108,6 @@ fn check_global(ctx: &Context, target: &Target, issues: &mut Vec<Issue>) -> Resu
         } else {
             check_global_view(target, view, &canonical_real, &canonical_skills, issues)?;
         }
-    }
-    Ok(())
-}
-
-fn check_bundle_materialization(
-    target: &Target,
-    bundle: &crate::bundle::BundlePlan,
-    issues: &mut Vec<Issue>,
-) -> Result<()> {
-    for message in bundle.materialization_issues()? {
-        issue(issues, target, Severity::Error, message);
     }
     Ok(())
 }
@@ -152,7 +143,7 @@ fn check_bundle_view(
                 target,
                 &bundle.bundle_root.join(&name),
                 &entry,
-                format!(
+                format_args!(
                     "bundle view `{}` entry `{name}` is not a symlink: {entry}",
                     view.label
                 ),
@@ -250,7 +241,7 @@ fn check_global_view(
                 target,
                 &target.canonical_path.join(&name),
                 &entry,
-                format!(
+                format_args!(
                     "view `{}` entry `{name}` is not a symlink: {entry}",
                     view.label
                 ),
@@ -427,7 +418,7 @@ fn check_project_view(
                 target,
                 &target.canonical_path.join(&name),
                 &entry,
-                format!(
+                format_args!(
                     "project view `{}` entry `{name}` is not a symlink: {entry}",
                     view.label
                 ),
@@ -672,7 +663,7 @@ fn issue_non_symlink(
     target: &Target,
     canonical_skill: &Utf8Path,
     view_entry: &Utf8Path,
-    prefix: String,
+    prefix: fmt::Arguments<'_>,
 ) {
     let (severity, hint) = match compare_view_entry(canonical_skill, view_entry) {
         Ok(outcome) => {
