@@ -64,6 +64,258 @@ fn fingerprint_is_deterministic_and_finds_the_repository_root_from_a_subdirector
         .contains(&json!("openpencil-ui-parity")));
 }
 
+#[test]
+fn fingerprint_counts_workspace_sources_without_counting_builds_or_test_crates() {
+    let root = TempDir::new().unwrap();
+    write(
+        root.path(),
+        "Cargo.toml",
+        "[workspace]\nmembers = ['crates/a', 'crates/b']",
+    );
+    write(root.path(), "crates/a/src/lib.rs", "// one\n// two");
+    write(root.path(), "crates/b/src/lib.rs", "// three\n");
+    write(root.path(), ".git/copied/src/lib.rs", "// excluded");
+    for dir in [
+        "target",
+        ".hidden",
+        ".direnv",
+        "node_modules",
+        "vendor",
+        "dist",
+        "build",
+        "result",
+        "tests",
+        "benches",
+        "examples",
+    ] {
+        write(
+            root.path(),
+            &format!("crates/a/{dir}/copied/src/lib.rs"),
+            "// excluded",
+        );
+    }
+    write(root.path(), "crates/b/build.rs", "// not in src");
+    write(root.path(), "a/b/c/d/e/f/g/src/lib.rs", "// too deep");
+    let fingerprint = || json_output(skillnet(root.path()).args(["fingerprint", "--json"]));
+    let virtual_workspace = fingerprint();
+    assert_eq!(virtual_workspace["rust_has_workspace"], true);
+    assert_eq!(virtual_workspace["rust_files"], 2);
+    assert_eq!(virtual_workspace["rust_loc"], 3);
+    write(root.path(), "src/lib.rs", "// root crate");
+    assert_eq!(fingerprint()["rust_files"], 3);
+    write(root.path(), "Cargo.toml", "[package]\nname = 'standalone'");
+    assert_eq!(fingerprint()["rust_files"], 1);
+    assert_eq!(fingerprint()["rust_loc"], 1);
+    fs::remove_file(root.path().join("src/lib.rs")).unwrap();
+    fs::remove_dir(root.path().join("src")).unwrap();
+    assert_eq!(fingerprint()["rust_files"], 0);
+}
+
+#[test]
+fn fingerprint_skips_nested_repositories_and_symlinks() {
+    let root = TempDir::new().unwrap();
+    fs::create_dir(root.path().join(".git")).unwrap();
+    write(root.path(), "checkout/.git/config", "");
+    write(root.path(), "worktree/.git", "gitdir: elsewhere\n");
+    for dir in ["checkout", "worktree", "vendor", ".hidden"] {
+        write(root.path(), &format!("{dir}/src/lib.rs"), "// excluded");
+        write(root.path(), &format!("{dir}/design.fig"), "");
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink("checkout/src", root.path().join("src")).unwrap();
+        std::os::unix::fs::symlink("checkout/design.fig", root.path().join("linked.fig")).unwrap();
+    }
+    let fingerprint = || json_output(skillnet(root.path()).args(["fingerprint", "--json"]));
+    let without_cargo = fingerprint();
+    assert_eq!(without_cargo["has_rust"], false);
+    assert_eq!(without_cargo["has_openpencil"], false);
+    assert_eq!(without_cargo["rust_files"], 0);
+    assert_eq!(without_cargo["rust_loc"], 0);
+    write(root.path(), "Cargo.toml", "[package]\nname = 'standalone'");
+    assert_eq!(fingerprint()["rust_files"], 0);
+    #[cfg(unix)]
+    fs::remove_file(root.path().join("src")).unwrap();
+    write(root.path(), "src/nested/.git", "gitdir: elsewhere\n");
+    write(root.path(), "src/nested/lib.rs", "// excluded");
+    write(root.path(), "src/lib.rs", "// included");
+    assert_eq!(fingerprint()["rust_files"], 1);
+    write(root.path(), "Cargo.toml", "[workspace]");
+    write(root.path(), "crates/a/src/lib.rs", "// included");
+    let workspace = fingerprint();
+    assert_eq!(workspace["rust_files"], 2);
+    assert_eq!(workspace["rust_loc"], 2);
+}
+
+#[test]
+fn fingerprint_uses_the_nearest_cargo_root_or_a_shallow_workspace() {
+    let root = TempDir::new().unwrap();
+    fs::create_dir(root.path().join(".git")).unwrap();
+    write(root.path(), "cli/Cargo.toml", "[workspace]");
+    write(root.path(), "cli/crates/a/src/lib.rs", "// one\n// two");
+    write(root.path(), "cli/crates/b/src/lib.rs", "// three\n");
+    write(root.path(), "outside/src/lib.rs", "// not in CLI");
+    let fingerprint =
+        |cwd| json_output(skillnet(root.path()).args(["fingerprint", "--cwd", cwd, "--json"]));
+    for cwd in ["cli", "cli/crates/a/src", "."] {
+        let output = fingerprint(cwd);
+        assert_eq!(output["root"], root.path().to_str().unwrap());
+        assert_eq!(output["rust_has_workspace"], true, "{cwd}");
+        assert_eq!(output["rust_files"], 2, "{cwd}");
+        assert_eq!(output["rust_loc"], 3, "{cwd}");
+    }
+    write(
+        root.path(),
+        "cli/crates/a/Cargo.toml",
+        "[package]\nname = 'a'",
+    );
+    let member = fingerprint("cli/crates/a/src");
+    assert_eq!(member["rust_has_workspace"], false);
+    assert_eq!(member["rust_files"], 1);
+    assert_eq!(member["rust_loc"], 2);
+}
+
+fn finding(source: &str, code: &str, file: Option<&str>, line: u64, severity: &str) -> Value {
+    json!({"v":1,"source":source,"code":code,"file":file,"line":line,"severity":severity})
+}
+
+#[test]
+fn findings_reads_cargo_json_and_selects_primary_span_or_first_span() {
+    let root = TempDir::new().unwrap();
+    let diagnostic = |code, level, primary| {
+        json!({
+            "reason": "compiler-message", "message": {
+                "level": level, "code": {"code": code}, "spans": [
+                    {"file_name": "src/first.rs", "line_start": 3, "is_primary": false},
+                    {"file_name": "src/main.rs", "line_start": 8, "is_primary": primary}
+                ]
+            }
+        })
+    };
+    let input = format!(
+        "Compiling crate\n{}\n{}\n{}\n{}\n{}\n",
+        json!({"reason":"build-finished"}),
+        diagnostic("E0382", "error", true),
+        diagnostic("clippy::too_many_arguments", "warning", false),
+        diagnostic("dead_code", "warning", true),
+        diagnostic("dead_code", "note", true),
+    );
+    let expected = json!({"findings": [
+        finding("rustc", "rustc::E0382", Some("src/main.rs"), 8, "error"),
+        finding("clippy", "clippy::too_many_arguments", Some("src/first.rs"), 3, "warn"),
+        finding("rustc", "rustc::dead_code", Some("src/main.rs"), 8, "warn"),
+    ]});
+    for format in ["cargo-json", "auto"] {
+        let output = json_output(
+            skillnet(root.path())
+                .args(["findings", "--from", format])
+                .write_stdin(input.as_str()),
+        );
+        assert_eq!(output, expected);
+    }
+}
+
+const CARGO_STDERR: &str = "\
+error[E0382]: borrow of moved value
+ --> src/main.rs:12:5
+ ::: src/other.rs:4:1
+
+error[E0277]: a trait bound is not satisfied
+ --> src/main.rs:24:8
+
+warning: this function has too many arguments
+ --> src/lib.rs:4:1
+  = note: `#[warn(clippy::too_many_arguments)]` on by default
+
+warning: function is never used
+ --> src/lib.rs:22:9
+  = note: `#[warn(dead_code)]` on by default
+
+error: used `unwrap()`
+ --> src/lib.rs:30:1
+  = note: requested on the command line with `-D clippy::unwrap-used`
+";
+
+#[test]
+fn findings_reads_cargo_text_and_opencode_lsp_codes() {
+    let root = TempDir::new().unwrap();
+    let input = format!(
+        "{CARGO_STDERR}\nERROR [12:5] [E0382] moved\n\
+        <diagnostics file=\"crates/other crate/src/lib.rs\">\n\
+        WARN [4:1] [clippy::unwrap_used] used unwrap\n</diagnostics>"
+    );
+    let expected = json!({"findings": [
+        finding("rustc", "rustc::E0382", Some("src/main.rs"), 12, "error"),
+        finding("rustc", "rustc::E0277", Some("src/main.rs"), 24, "error"),
+        finding("clippy", "clippy::too_many_arguments", Some("src/lib.rs"), 4, "warn"),
+        finding("rustc", "rustc::dead_code", Some("src/lib.rs"), 22, "warn"),
+        finding("clippy", "clippy::unwrap_used", Some("src/lib.rs"), 30, "error"),
+        finding("rustc", "rustc::E0382", None, 12, "error"),
+        finding("clippy", "clippy::unwrap_used", Some("crates/other crate/src/lib.rs"), 4, "warn"),
+    ]});
+    for format in ["cargo-text", "auto"] {
+        assert_eq!(
+            json_output(
+                skillnet(root.path())
+                    .args(["findings", "--from", format])
+                    .write_stdin(input.as_str())
+            ),
+            expected,
+        );
+    }
+}
+
+#[test]
+fn findings_reads_both_jscpd_file_reports() {
+    let root = TempDir::new().unwrap();
+    for (name, report, expected) in [
+        (
+            "jscpd-report.json",
+            json!({"duplicates": [
+                {"firstFile": {"name":"src/a.rs","start":3}, "secondFile": {"name":"src/b.rs","start":5}},
+                {"firstFile": {"name":"src/c.rs","start":7}, "secondFile": {"name":"src/c.rs","start":7}},
+                {"firstFile": {"name":"src/d.rs","start":9}, "secondFile": {"name":"src/d.rs","start":15}}
+            ]}),
+            json!([
+                finding("jscpd", "jscpd::clone", Some("src/a.rs"), 3, "warn"),
+                finding("jscpd", "jscpd::clone", Some("src/b.rs"), 5, "warn"),
+                finding("jscpd", "jscpd::clone", Some("src/c.rs"), 7, "warn"),
+                finding("jscpd", "jscpd::clone", Some("src/d.rs"), 9, "warn"),
+                finding("jscpd", "jscpd::clone", Some("src/d.rs"), 15, "warn"),
+            ]),
+        ),
+        (
+            "basta-report.json",
+            json!({"findings": [
+                {"category":"dead_code", "path":"src/lib.rs", "start":{"line":7,"column":2}}
+            ]}),
+            json!([finding(
+                "jscpd",
+                "jscpd::dead_code",
+                Some("src/lib.rs"),
+                7,
+                "warn"
+            )]),
+        ),
+    ] {
+        write(root.path(), name, &report.to_string());
+        for format in ["auto", "jscpd"] {
+            let output = skillnet(root.path())
+                .args(["findings", "--from", format, "--input", name, "--pretty"])
+                .assert()
+                .success()
+                .get_output()
+                .stdout
+                .clone();
+            assert!(output.starts_with(b"{\n"));
+            assert_eq!(
+                serde_json::from_slice::<Value>(&output).unwrap(),
+                json!({"findings": expected})
+            );
+        }
+    }
+}
+
 const ADVISE: &str = r#"+++
 id = "rust/check"
 pack = "rust"
@@ -123,6 +375,196 @@ fn trigger(root: &Path, session: &str, event: &str) -> Command {
         "--json",
     ]);
     command
+}
+
+#[test]
+fn post_tool_extracts_raw_harness_output_but_respects_supplied_findings() {
+    let root = TempDir::new().unwrap();
+    pack(root.path());
+    for (name, diagnostic) in [
+        ("ownership-errors", "rustc::E0382"),
+        ("trait-errors", "rustc::E0277"),
+        ("delete-first", "clippy::too_many_arguments"),
+        ("std-traits", "clippy::should_implement_trait"),
+    ] {
+        write(root.path(), &format!("packs/rust/cards/{name}.md"), &format!(
+            "+++\nid = \"rust/{name}\"\npack = \"rust\"\ntier = \"advise\"\ncooldown = \"session\"\n\
+             fixture = \"unused.json\"\nevents = [\"post-tool\"]\n[on]\npath = [\"**/src/**/*.rs\"]\n\
+             diagnostic = [\"{diagnostic}\"]\n+++\nNote\n"
+        ));
+    }
+    let cargo = json!({"reason":"compiler-message","message":{
+        "level":"warning","code":{"code":"clippy::should_implement_trait"},
+        "spans":[{"file_name":"src/lib.rs","line_start":7,"is_primary":true}]
+    }});
+    for (session, payload, expected) in [
+        (
+            "claude",
+            json!({"hook_event_name":"PostToolUse", "tool_name":"Bash",
+            "tool_input":{"command":"cargo clippy"},
+            "tool_response":{"stderr": CARGO_STDERR}}),
+            json!([
+                "rust/delete-first",
+                "rust/ownership-errors",
+                "rust/trait-errors"
+            ]),
+        ),
+        (
+            "claude-failure",
+            json!({"hook_event_name":"PostToolUseFailure","tool_name":"Bash",
+            "error":"error[E0382]: moved\n --> src/main.rs:12:5"}),
+            json!(["rust/ownership-errors"]),
+        ),
+        (
+            "opencode",
+            json!({"tool":"bash","result":{"output":format!("{cargo}\n{CARGO_STDERR}")}}),
+            json!([
+                "rust/delete-first",
+                "rust/ownership-errors",
+                "rust/std-traits",
+                "rust/trait-errors"
+            ]),
+        ),
+        (
+            "supplied",
+            json!({"stderr":CARGO_STDERR,
+            "findings":[{"code":"rustc::E0277", "file":"src/main.rs"}]}),
+            json!(["rust/trait-errors"]),
+        ),
+    ] {
+        let output = json_output(
+            trigger(root.path(), session, "post-tool")
+                .args(["--max-cards", "10"])
+                .write_stdin(payload.to_string()),
+        );
+        assert_eq!(output["event"], "post-tool");
+        let ids: Vec<_> = output["inject"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|card| &card["card"])
+            .collect();
+        assert_eq!(json!(ids), expected);
+    }
+}
+
+#[test]
+fn pre_push_base_shares_state_and_budget_across_files_and_stdin_findings() {
+    let root = TempDir::new().unwrap();
+    pack(root.path());
+    write(
+        root.path(),
+        "packs/rust/cards/check.md",
+        &ADVISE.replace("post-edit", "pre-push"),
+    );
+    write(
+        root.path(),
+        "packs/nix/pack.toml",
+        "name = 'nix'\ndescription = 'Nix'",
+    );
+    for (name, tier, path, rule) in [
+        ("gate", "gate", "**/*.nix", "diff_regex = ['dangerous']"),
+        ("note", "advise", "**/*.nix", "diff_regex = ['dangerous']"),
+        (
+            "removed",
+            "gate",
+            "**/*.nix",
+            "diff_regex = ['removed_only']",
+        ),
+        (
+            "diagnostic",
+            "advise",
+            "other.rs",
+            "diagnostic = ['rustc::E0382']",
+        ),
+    ] {
+        write(root.path(), &format!("packs/nix/cards/{name}.md"), &format!(
+            "+++\nid = \"nix/{name}\"\npack = \"nix\"\ntier = \"{tier}\"\ncooldown = \"session\"\n\
+             fixture = \"unused.json\"\nevents = [\"pre-push\"]\n[on]\npath = ['{path}']\n{rule}\n+++\nNote\n"
+        ));
+    }
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .current_dir(root.path())
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap()
+    };
+    git(&["init", "-q"]);
+    for file in ["src/a.rs", "src/β b.rs"] {
+        write(root.path(), file, "fn f() {}\n");
+    }
+    write(root.path(), "z/flake.nix", "removed_only\n");
+    git(&["add", "src", "z"]);
+    git(&[
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.org",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "commit",
+        "-qm",
+        "fixture",
+        "--no-gpg-sign",
+    ]);
+    let sha = git(&["rev-parse", "HEAD"]);
+    for file in ["src/a.rs", "src/β b.rs"] {
+        write(root.path(), file, "fn f() { x.unwrap(); }\n");
+    }
+    write(root.path(), "z/flake.nix", "dangerous\nunwrap();\n");
+    let payload = json!({"findings":[
+        {"code":"rustc::E0382","file":"other.rs"},
+        {"code":"clippy::unwrap_used","file":root.path().join("src/a.rs")},
+    ]});
+    let run = |session, max_cards| {
+        let mut cmd = skillnet(root.path());
+        if let Some(session) = session {
+            cmd.args(["trigger", "--session", session, "--state-dir", "state"]);
+        } else {
+            cmd.arg("trigger");
+        }
+        json_output(
+            cmd.args([
+                "--event",
+                "pre-push",
+                "--cwd",
+                "src",
+                "--base",
+                sha.trim(),
+                "--max-cards",
+                max_cards,
+                "--json",
+            ])
+            .write_stdin(payload.to_string()),
+        )
+    };
+    let output = run(None, "3");
+    assert_eq!(output["matched_count"], 5);
+    assert_eq!(output["collapsed"], json!({"rust/check":1}));
+    assert_eq!(output["deny"]["card"], "nix/gate");
+    let mut ids: Vec<_> = output["inject"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|card| card["card"].as_str().unwrap())
+        .collect();
+    ids.sort_unstable();
+    assert_eq!(ids, ["nix/diagnostic", "nix/note", "rust/check"]);
+    let capped = run(Some("capped"), "1");
+    assert_eq!(capped["inject"].as_array().unwrap().len(), 1);
+    assert_eq!(capped["budget_dropped"], 3);
+    let repeated = run(Some("capped"), "3");
+    assert_eq!(
+        repeated["collapsed"],
+        json!({"nix/diagnostic":1,"rust/check":1})
+    );
 }
 
 #[test]

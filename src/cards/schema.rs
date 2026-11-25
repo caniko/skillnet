@@ -19,6 +19,7 @@ pub(crate) enum Event {
     SessionStart,
     PostEdit,
     PreTool,
+    PostTool,
     PrePush,
     Ci,
     Audit,
@@ -218,7 +219,8 @@ impl Card {
                 "fixture is not a file inside the pack directory"
             );
             let fixture: Fixture = serde_json::from_slice(&fs::read(path)?)?;
-            let payload = fixture.payload.unwrap_or(fixture.flat);
+            let mut payload = fixture.payload.unwrap_or(fixture.flat);
+            payload.extract_findings(fixture.event);
             let fp = payload.fingerprint(RepoFingerprint::default())?;
             let input = MatchInput::new(fixture.event, &payload, &fp.root, &fp)?;
             ensure!(

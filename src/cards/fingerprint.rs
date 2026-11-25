@@ -7,7 +7,7 @@ use std::{
 use anyhow::{ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -51,35 +51,78 @@ pub(crate) enum Forge {
 }
 
 pub(crate) fn repo_root(cwd: &Utf8Path) -> Result<Utf8PathBuf> {
+    Ok(git_root(&resolve_cwd(cwd)?).to_owned())
+}
+
+fn resolve_cwd(cwd: &Utf8Path) -> Result<Utf8PathBuf> {
     let cwd = cwd
         .canonicalize_utf8()
         .with_context(|| format!("resolve {cwd}"))?;
     ensure!(cwd.is_dir(), "{cwd} is not a directory");
-    Ok(cwd
-        .ancestors()
+    Ok(cwd)
+}
+
+fn git_root(cwd: &Utf8Path) -> &Utf8Path {
+    cwd.ancestors()
         .find(|p| p.join(".git").exists())
-        .unwrap_or(&cwd)
-        .to_owned())
+        .unwrap_or(cwd)
+}
+
+fn keep_entry(entry: &DirEntry) -> bool {
+    !entry.file_type().is_symlink()
+        && (entry.depth() == 0
+            || !entry.file_type().is_dir()
+            || (!entry.file_name().as_encoded_bytes().starts_with(b".")
+                && !matches!(
+                    entry.file_name().to_str(),
+                    Some("target" | "node_modules" | "vendor" | "dist" | "build" | "result")
+                )
+                && entry.path().join(".git").symlink_metadata().is_err()))
+}
+
+fn cargo_root(cwd: &Utf8Path, root: &Utf8Path) -> Result<Option<Utf8PathBuf>> {
+    let has_manifest = |path: &std::path::Path| {
+        path.join("Cargo.toml")
+            .symlink_metadata()
+            .is_ok_and(|meta| meta.is_file())
+    };
+    if let Some(path) = cwd
+        .ancestors()
+        .take_while(|p| p.starts_with(root))
+        .find(|p| has_manifest(p.as_std_path()))
+    {
+        return Ok(Some(path.to_owned()));
+    }
+    // A monorepo may keep its Cargo workspace one level below its Git root.
+    for entry in WalkDir::new(root)
+        .max_depth(1)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(keep_entry)
+    {
+        let entry = entry?;
+        if entry.depth() == 1 && entry.file_type().is_dir() && has_manifest(entry.path()) {
+            return Ok(Some(Utf8PathBuf::try_from(entry.into_path())?));
+        }
+    }
+    Ok(None)
 }
 
 impl RepoFingerprint {
-    pub(crate) fn detect(root: Utf8PathBuf) -> Result<Self> {
+    pub(crate) fn detect(cwd: &Utf8Path) -> Result<Self> {
+        let cwd = resolve_cwd(cwd)?;
+        let root = git_root(&cwd).to_owned();
+        let cargo_root = cargo_root(&cwd, &root)?;
         let file = |name: &str| root.join(name).is_file();
         let dir = |name: &str| root.join(name).is_dir();
-        let cargo = fs::read_to_string(root.join("Cargo.toml"))
-            .ok()
-            .and_then(|text| toml::from_str::<toml::Table>(&text).ok());
         let mut fp = Self {
-            has_rust: file("Cargo.toml"),
+            has_rust: cargo_root.is_some(),
             has_nix: file("flake.nix") || file("default.nix") || file("shell.nix"),
             has_python: file("pyproject.toml")
                 || file("requirements.txt")
                 || file("setup.py")
                 || file("setup.cfg"),
             has_typescript: file("tsconfig.json"),
-            rust_has_workspace: cargo.as_ref().is_some_and(|manifest| {
-                manifest.get("workspace").is_some_and(toml::Value::is_table)
-            }),
             forge: detect_forge(&root)?,
             has_forgejo: dir(".forgejo"),
             has_github_workflows: dir(".github/workflows"),
@@ -92,29 +135,14 @@ impl RepoFingerprint {
             ..Self::default()
         };
 
-        let src = fp.root.join("src");
-        if src.is_dir() {
-            let mut line = Vec::new();
-            for entry in WalkDir::new(src).follow_root_links(false) {
-                let entry = entry?;
-                if entry.file_type().is_file()
-                    && entry.path().extension().is_some_and(|ext| ext == "rs")
-                {
-                    fp.rust_files += 1;
-                    let mut reader = BufReader::new(File::open(entry.path())?);
-                    while reader.read_until(b'\n', &mut line)? != 0 {
-                        fp.rust_loc += 1;
-                        line.clear();
-                    }
-                }
-            }
+        if let Some(cargo_root) = cargo_root {
+            fp.scan_rust(&cargo_root)?;
         }
-        fp.has_rust |= fp.rust_files > 0;
 
         for entry in WalkDir::new(&fp.root)
             .max_depth(3)
             .into_iter()
-            .filter_entry(|entry| entry.file_name() != ".git")
+            .filter_entry(keep_entry)
         {
             let entry = entry?;
             if !entry.file_type().is_file() {
@@ -170,6 +198,51 @@ impl RepoFingerprint {
             }
         }
         Ok(fp)
+    }
+
+    fn scan_rust(&mut self, root: &Utf8Path) -> Result<()> {
+        let workspace = fs::read_to_string(root.join("Cargo.toml"))
+            .ok()
+            .and_then(|text| toml::from_str::<toml::Table>(&text).ok())
+            .is_some_and(|manifest| manifest.get("workspace").is_some_and(toml::Value::is_table));
+        self.rust_has_workspace = workspace;
+        let walk = WalkDir::new(root);
+        let walk = if workspace { walk.max_depth(8) } else { walk };
+        let mut line = Vec::new();
+        for entry in walk.into_iter().filter_entry(|entry| {
+            let wanted = if workspace {
+                entry.depth() == 0
+                    || !entry.file_type().is_dir()
+                    || !matches!(
+                        entry.file_name().to_str(),
+                        Some("tests" | "benches" | "examples")
+                    )
+            } else {
+                entry.depth() != 1 || (entry.file_type().is_dir() && entry.file_name() == "src")
+            };
+            wanted && keep_entry(entry)
+        }) {
+            let entry = entry?;
+            if !entry.file_type().is_file()
+                || entry.path().extension().is_none_or(|ext| ext != "rs")
+                || (workspace
+                    && !entry
+                        .path()
+                        .ancestors()
+                        .skip(1)
+                        .take_while(|parent| *parent != root.as_std_path())
+                        .any(|parent| parent.file_name().is_some_and(|name| name == "src")))
+            {
+                continue;
+            }
+            self.rust_files += 1;
+            let mut reader = BufReader::new(File::open(entry.path())?);
+            while reader.read_until(b'\n', &mut line)? != 0 {
+                self.rust_loc += 1;
+                line.clear();
+            }
+        }
+        Ok(())
     }
 }
 

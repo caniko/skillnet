@@ -168,6 +168,16 @@ pub(super) enum Command {
     },
     /// Resolve cards for a repository event.
     Trigger(TriggerArgs),
+    /// Normalize Cargo, rustc, Clippy, or jscpd output as trigger findings.
+    Findings {
+        #[arg(long, value_enum, default_value = "auto")]
+        from: crate::cards::findings::FindingFormat,
+        /// Read from a file instead of stdin.
+        #[arg(long, value_name = "PATH")]
+        input: Option<Utf8PathBuf>,
+        #[arg(long)]
+        pretty: bool,
+    },
     /// Inspect and validate code-triggered cards.
     Card(CardArgs),
 }
@@ -182,6 +192,9 @@ pub(crate) struct TriggerArgs {
     pub session: Option<String>,
     #[arg(long, default_value = ".")]
     pub cwd: Utf8PathBuf,
+    /// Evaluate all tracked changes since this Git revision.
+    #[arg(long, value_name = "REV")]
+    pub base: Option<String>,
     #[arg(long)]
     pub packs_dir: Option<Utf8PathBuf>,
     #[arg(long)]
