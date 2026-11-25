@@ -9,8 +9,9 @@ use serde::Serialize;
 
 use crate::{
     cards::{
-        load_cards, repo_root, resolve, validate_cards, Event, Limits, MatchInput, Payload,
-        RepoFingerprint, Resolution,
+        findings::{extract, FindingFormat},
+        git_diff, load_cards, repo_root, resolve, validate_cards, Event, Limits, MatchInput,
+        Payload, RepoFingerprint, Resolution,
     },
     cli::{
         args::{CardArgs, CardCommand, TriggerArgs},
@@ -19,8 +20,29 @@ use crate::{
     config::{Config, DbOverrides},
 };
 
+pub(crate) fn findings(
+    format: FindingFormat,
+    input: Option<&Utf8Path>,
+    pretty: bool,
+) -> Result<()> {
+    let text = if let Some(path) = input {
+        fs::read_to_string(path).with_context(|| format!("read findings input {path}"))?
+    } else {
+        io::read_to_string(io::stdin().lock()).context("read findings from stdin")?
+    };
+    let findings = extract(&text, format)?;
+    if pretty {
+        let mut out = io::stdout().lock();
+        serde_json::to_writer_pretty(&mut out, &findings)?;
+        writeln!(out)?;
+        Ok(())
+    } else {
+        print_json(&findings)
+    }
+}
+
 pub(crate) fn fingerprint(cwd: &Utf8Path, json: bool) -> Result<()> {
-    let fingerprint = RepoFingerprint::detect(repo_root(cwd)?)?;
+    let fingerprint = RepoFingerprint::detect(cwd)?;
     if json {
         print_json(&fingerprint)
     } else {
@@ -34,11 +56,19 @@ pub(crate) fn trigger(
     config: &Utf8Path,
     mirror: Option<&Utf8PathBuf>,
 ) -> Result<()> {
-    let root = repo_root(&args.cwd)?;
-    let payload = read_payload(args.payload_file.as_deref(), args.no_stdin)?;
+    let detected = RepoFingerprint::detect(&args.cwd)?;
+    let root = detected.root.clone();
+    let mut payload = read_payload(args.payload_file.as_deref(), args.no_stdin)?;
+    payload.extract_findings(args.event);
     let cards = load_cards(&packs_dir(args.packs_dir, config, mirror)?)?;
-    let fp = payload.fingerprint(RepoFingerprint::detect(root.clone())?)?;
-    let input = MatchInput::new(args.event, &payload, &root, &fp)?;
+    let fp = payload.fingerprint(detected)?;
+    let changes = args
+        .base
+        .as_deref()
+        .map(|base| git_diff(&args.cwd, base))
+        .transpose()?;
+    let input = MatchInput::new(args.event, &payload, &root, &fp)?
+        .with_changes(changes.as_deref().unwrap_or_default());
     let session = session(args.session);
     let out = resolve(
         &cards,

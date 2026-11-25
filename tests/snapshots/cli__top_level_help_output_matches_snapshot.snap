@@ -26,6 +26,7 @@ Commands:
   usage         Record and report normalized skill usage
   fingerprint   Detect repository languages, tooling, and relevant skills
   trigger       Resolve cards for a repository event
+  findings      Normalize Cargo, rustc, Clippy, or jscpd output as trigger findings
   card          Inspect and validate code-triggered cards
 
 Options:

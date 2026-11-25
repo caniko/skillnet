@@ -54,6 +54,14 @@ pub fn run() -> Result<()> {
     if let Command::Fingerprint { cwd, json } = command {
         return commands::cards::fingerprint(&cwd, json);
     }
+    if let Command::Findings {
+        from,
+        input,
+        pretty,
+    } = command
+    {
+        return commands::cards::findings(from, input.as_deref(), pretty);
+    }
 
     // Unlike legacy commands, cards must not discover a config (and packs) from the current repo.
     if let Command::Trigger(args) = command {
@@ -221,7 +229,8 @@ pub fn run() -> Result<()> {
         | Command::Usage(_)
         | Command::Fingerprint { .. }
         | Command::Trigger(_)
-        | Command::Card(_) => unreachable!("handled before context loading"),
+        | Command::Card(_)
+        | Command::Findings { .. } => unreachable!("handled before context loading"),
         Command::Config { .. }
         | Command::Calibration(_)
         | Command::Hook(_)
