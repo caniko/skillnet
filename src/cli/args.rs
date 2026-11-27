@@ -209,6 +209,9 @@ pub(crate) struct TriggerArgs {
     pub max_cards: Option<usize>,
     #[arg(long, default_value_t = 1_500)]
     pub max_tokens: usize,
+    /// Skip recording card injection telemetry.
+    #[arg(long)]
+    pub no_record: bool,
     #[arg(long)]
     pub json: bool,
 }
@@ -244,6 +247,15 @@ pub(crate) enum CardCommand {
     },
     /// Check card metadata, references, and positive/negative fixtures.
     Validate,
+    /// Report per-card injection and read-through statistics.
+    Stats {
+        /// Include events at or after a relative duration such as 90d or 24h.
+        #[arg(long)]
+        since: Option<String>,
+        /// Output format.
+        #[arg(long, default_value = "table")]
+        format: UsageFormat,
+    },
 }
 
 #[derive(Debug, Subcommand)]

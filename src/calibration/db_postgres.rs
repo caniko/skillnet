@@ -1,4 +1,4 @@
-use std::{cell::RefCell, error::Error};
+use std::{cell::RefCell, error::Error, str::FromStr, time::Duration};
 
 use anyhow::{bail, Context};
 use postgres::{
@@ -37,6 +37,18 @@ struct PgText<'a>(&'a str);
 impl PostgresBackend {
     pub(super) fn connect(url: &str) -> anyhow::Result<Self> {
         let client = Client::connect(url, NoTls).context("failed to connect to postgres")?;
+        Ok(Self {
+            client: RefCell::new(client),
+        })
+    }
+
+    pub(super) fn connect_with_timeout(url: &str, timeout: Duration) -> anyhow::Result<Self> {
+        let mut config =
+            postgres::Config::from_str(url).context("invalid postgres connection url")?;
+        config.connect_timeout(timeout);
+        let client = config
+            .connect(NoTls)
+            .context("failed to connect to postgres")?;
         Ok(Self {
             client: RefCell::new(client),
         })
