@@ -150,6 +150,19 @@ impl Db {
         Ok(db)
     }
 
+    #[cfg(feature = "postgres")]
+    pub fn open_postgres_with_timeout(
+        url: &str,
+        timeout: std::time::Duration,
+    ) -> anyhow::Result<Db> {
+        let backend = db_postgres::PostgresBackend::connect_with_timeout(url, timeout)?;
+        let mut db = Db {
+            backend: Backend::Postgres(Box::new(backend)),
+        };
+        db.migrate()?;
+        Ok(db)
+    }
+
     pub fn default_path() -> PathBuf {
         for var in ["skillnet_DATA_DIR", "SKILLNET_DATA_DIR"] {
             if let Some(dir) = std::env::var_os(var) {
@@ -250,7 +263,8 @@ impl Db {
             (BackendKind::Sqlite, Some(since)) => (
                 "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
                         MIN(started_at), MAX(started_at) FROM skill_invocations \
-                  WHERE started_at >= datetime(?1, 'unixepoch') AND hook_event <> 'CardRead' \
+                  WHERE started_at >= datetime(?1, 'unixepoch') \
+                    AND hook_event NOT IN ('CardRead', 'CardInjected') \
                  GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
                  ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
                 vec![DbParam::Integer(since)],
@@ -258,7 +272,7 @@ impl Db {
             (BackendKind::Sqlite, None) => (
                 "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
                         MIN(started_at), MAX(started_at) FROM skill_invocations \
-                  WHERE hook_event <> 'CardRead' \
+                  WHERE hook_event NOT IN ('CardRead', 'CardInjected') \
                  GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
                  ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
                 Vec::new(),
@@ -267,7 +281,8 @@ impl Db {
             (BackendKind::Postgres, Some(since)) => (
                 "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
                         MIN(started_at)::text, MAX(started_at)::text FROM skill_invocations \
-                  WHERE started_at >= to_timestamp(($1::bigint)::double precision) AND hook_event <> 'CardRead' \
+                  WHERE started_at >= to_timestamp(($1::bigint)::double precision) \
+                    AND hook_event NOT IN ('CardRead', 'CardInjected') \
                  GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
                  ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
                 vec![DbParam::Integer(since)],
@@ -276,9 +291,72 @@ impl Db {
             (BackendKind::Postgres, None) => (
                 "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness, COUNT(*), COUNT(DISTINCT session_id), \
                         MIN(started_at)::text, MAX(started_at)::text FROM skill_invocations \
-                  WHERE hook_event <> 'CardRead' \
+                  WHERE hook_event NOT IN ('CardRead', 'CardInjected') \
                  GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness \
                  ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name), harness",
+                Vec::new(),
+            ),
+        }
+    }
+
+    pub fn card_stats(&self, since_unix: Option<i64>) -> anyhow::Result<Vec<CardStat>> {
+        let (sql, params) = Self::card_stats_query(self.backend_kind(), since_unix);
+        self.query_all(sql, &params, |row| {
+            Ok(CardStat {
+                card: row.get_string(0)?,
+                injected: row.get_i64(1)?,
+                read: row.get_i64(2)?,
+            })
+        })
+    }
+
+    fn card_stats_query(
+        backend: BackendKind,
+        since_unix: Option<i64>,
+    ) -> (&'static str, Vec<DbParam<'static>>) {
+        match (backend, since_unix) {
+            (BackendKind::Sqlite, Some(since)) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), \
+                        SUM(CASE WHEN hook_event = 'CardInjected' THEN 1 ELSE 0 END), \
+                        SUM(CASE WHEN hook_event = 'CardRead' THEN 1 ELSE 0 END) \
+                   FROM skill_invocations \
+                  WHERE started_at >= datetime(?1, 'unixepoch') \
+                    AND hook_event IN ('CardInjected', 'CardRead') \
+                  GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name) \
+                  ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name)",
+                vec![DbParam::Integer(since)],
+            ),
+            (BackendKind::Sqlite, None) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), \
+                        SUM(CASE WHEN hook_event = 'CardInjected' THEN 1 ELSE 0 END), \
+                        SUM(CASE WHEN hook_event = 'CardRead' THEN 1 ELSE 0 END) \
+                   FROM skill_invocations \
+                  WHERE hook_event IN ('CardInjected', 'CardRead') \
+                  GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name) \
+                  ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name)",
+                Vec::new(),
+            ),
+            #[cfg(feature = "postgres")]
+            (BackendKind::Postgres, Some(since)) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), \
+                        COALESCE(SUM(CASE WHEN hook_event = 'CardInjected' THEN 1 ELSE 0 END), 0)::bigint, \
+                        COALESCE(SUM(CASE WHEN hook_event = 'CardRead' THEN 1 ELSE 0 END), 0)::bigint \
+                   FROM skill_invocations \
+                  WHERE started_at >= to_timestamp(($1::bigint)::double precision) \
+                    AND hook_event IN ('CardInjected', 'CardRead') \
+                  GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name) \
+                  ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name)",
+                vec![DbParam::Integer(since)],
+            ),
+            #[cfg(feature = "postgres")]
+            (BackendKind::Postgres, None) => (
+                "SELECT COALESCE(NULLIF(canonical_skill_name, ''), skill_name), \
+                        COALESCE(SUM(CASE WHEN hook_event = 'CardInjected' THEN 1 ELSE 0 END), 0)::bigint, \
+                        COALESCE(SUM(CASE WHEN hook_event = 'CardRead' THEN 1 ELSE 0 END), 0)::bigint \
+                   FROM skill_invocations \
+                  WHERE hook_event IN ('CardInjected', 'CardRead') \
+                  GROUP BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name) \
+                  ORDER BY COALESCE(NULLIF(canonical_skill_name, ''), skill_name)",
                 Vec::new(),
             ),
         }
@@ -409,6 +487,13 @@ pub struct UsageAggregate {
     pub sessions: i64,
     pub first_seen: String,
     pub last_seen: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CardStat {
+    pub card: String,
+    pub injected: i64,
+    pub read: i64,
 }
 
 impl Tx<'_> {
@@ -804,15 +889,17 @@ mod usage_tests {
     use super::*;
 
     #[test]
-    fn sqlite_usage_filters_before_the_unix_cutoff_and_excludes_card_reads() {
+    fn sqlite_usage_filters_before_the_unix_cutoff_and_excludes_card_events() {
         let dir = tempfile::tempdir().unwrap();
         let db = Db::open(&dir.path().join("usage.sqlite")).unwrap();
         db.execute_batch(
             "INSERT INTO skill_invocations (session_id, skill_name, started_at, payload, hook_event)
              VALUES ('old', 'alpha', '2023-12-31 23:59:59', '{}', 'SkillActivated'),
                     ('new', 'alpha', '2024-01-01 00:00:00', '{}', 'SkillActivated'),
-                    ('card', 'rust/check', '2024-01-01 00:00:01', '{}', 'CardRead');",
-        ).unwrap();
+                    ('card-r', 'rust/check', '2024-01-01 00:00:01', '{}', 'CardRead'),
+                    ('card-i', 'rust/check', '2024-01-01 00:00:02', '{}', 'CardInjected');",
+        )
+        .unwrap();
         let all = db.usage_aggregate(None).unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].uses, 2);
@@ -824,13 +911,70 @@ mod usage_tests {
         assert_eq!(recent[0].first_seen, "2024-01-01 00:00:00");
     }
 
+    #[test]
+    fn sqlite_card_stats_aggregates_injected_and_read_with_optional_cutoff() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(&dir.path().join("cards.sqlite")).unwrap();
+        db.execute_batch(
+            "INSERT INTO skill_invocations (session_id, skill_name, started_at, payload, hook_event)
+             VALUES ('s1', 'alpha', '2024-01-01 00:00:00', '{}', 'SkillActivated'),
+                    ('s1', 'rust/check', '2023-12-31 23:59:59', '{}', 'CardInjected'),
+                    ('s2', 'rust/check', '2024-01-01 00:00:01', '{}', 'CardInjected'),
+                    ('s2', 'rust/check', '2024-01-01 00:00:02', '{}', 'CardRead'),
+                    ('s3', 'nix/flake', '2024-01-01 00:00:03', '{}', 'CardRead');",
+        )
+        .unwrap();
+        let all = db.card_stats(None).unwrap();
+        assert_eq!(
+            all,
+            vec![
+                CardStat {
+                    card: "nix/flake".to_owned(),
+                    injected: 0,
+                    read: 1,
+                },
+                CardStat {
+                    card: "rust/check".to_owned(),
+                    injected: 2,
+                    read: 1,
+                },
+            ]
+        );
+        let recent = db.card_stats(Some(1_704_067_200)).unwrap();
+        assert_eq!(
+            recent,
+            vec![
+                CardStat {
+                    card: "nix/flake".to_owned(),
+                    injected: 0,
+                    read: 1,
+                },
+                CardStat {
+                    card: "rust/check".to_owned(),
+                    injected: 1,
+                    read: 1,
+                },
+            ]
+        );
+    }
+
     #[cfg(feature = "postgres")]
     #[test]
-    fn postgres_usage_binds_unix_seconds_as_bigint() {
+    fn postgres_usage_and_card_stats_bind_unix_seconds_as_bigint() {
         let (sql, params) = Db::usage_query(BackendKind::Postgres, Some(1_704_067_200));
         assert!(sql.contains("started_at >= to_timestamp(($1::bigint)::double precision)"));
+        assert!(sql.contains("hook_event NOT IN ('CardRead', 'CardInjected')"));
         assert!(matches!(
             params.as_slice(),
+            [DbParam::Integer(1_704_067_200)]
+        ));
+
+        let (stats_sql, stats_params) =
+            Db::card_stats_query(BackendKind::Postgres, Some(1_704_067_200));
+        assert!(stats_sql.contains("started_at >= to_timestamp(($1::bigint)::double precision)"));
+        assert!(stats_sql.contains("hook_event IN ('CardInjected', 'CardRead')"));
+        assert!(matches!(
+            stats_params.as_slice(),
             [DbParam::Integer(1_704_067_200)]
         ));
     }

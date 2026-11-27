@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{bail, Context as AnyhowContext, Result};
@@ -13,6 +13,29 @@ use crate::{
     commands::Context,
     config::DbTarget,
 };
+
+const CARD_TELEMETRY_TIMEOUT: Duration = Duration::from_millis(500);
+
+#[derive(Debug, Serialize)]
+struct CardStatsRow {
+    card: String,
+    injected: i64,
+    read: i64,
+    read_through_rate: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+struct CardStatsTotals {
+    injected: i64,
+    read: i64,
+    read_through_rate: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+struct CardStatsReport {
+    cards: Vec<CardStatsRow>,
+    totals: CardStatsTotals,
+}
 
 #[derive(Debug, Serialize)]
 struct UsageReportRow {
@@ -92,7 +115,97 @@ pub(super) fn record_card_read(
     )
 }
 
+pub(super) fn record_card_injected(
+    target: DbTarget,
+    cards: &[&str],
+    harness: &str,
+    session: Option<&str>,
+    root: &str,
+) -> Result<()> {
+    if cards.is_empty() {
+        return Ok(());
+    }
+    let db = open_db_with_timeout(target, CARD_TELEMETRY_TIMEOUT)?;
+    let session_id = session.map_or_else(|| uuid::Uuid::nil().to_string(), str::to_owned);
+    for &card in cards {
+        let event = UsageEvent {
+            skill: card.to_owned(),
+            harness: harness.to_owned(),
+            session: session_id.clone(),
+            project: Some(root.to_owned()),
+            event_id: format!("card-injected:{}", uuid::Uuid::new_v4()),
+            outcome: "ok".to_owned(),
+            adapter_version: "1".to_owned(),
+        };
+        insert_event(&db, &event, "CardInjected", "skillnet-trigger")?;
+    }
+    Ok(())
+}
+
+pub(super) fn card_stats(target: DbTarget, since: Option<&str>, format: UsageFormat) -> Result<()> {
+    let since_unix = since.map(parse_duration).transpose()?;
+    let db = open_db(target)?;
+    let stats = db.card_stats(since_unix)?;
+    let mut total_injected = 0_i64;
+    let mut total_read = 0_i64;
+    let cards: Vec<CardStatsRow> = stats
+        .into_iter()
+        .map(|stat| {
+            total_injected += stat.injected;
+            total_read += stat.read;
+            CardStatsRow {
+                card: stat.card,
+                injected: stat.injected,
+                read: stat.read,
+                read_through_rate: read_through_rate(stat.injected, stat.read),
+            }
+        })
+        .collect();
+    let totals = CardStatsTotals {
+        injected: total_injected,
+        read: total_read,
+        read_through_rate: read_through_rate(total_injected, total_read),
+    };
+    let report = CardStatsReport { cards, totals };
+    match format {
+        UsageFormat::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+        UsageFormat::Table => {
+            println!("card\tinjected\tread\tread_through_rate");
+            for row in &report.cards {
+                println!(
+                    "{}\t{}\t{}\t{}",
+                    row.card,
+                    row.injected,
+                    row.read,
+                    format_rate(row.read_through_rate)
+                );
+            }
+            println!(
+                "TOTAL\t{}\t{}\t{}",
+                report.totals.injected,
+                report.totals.read,
+                format_rate(report.totals.read_through_rate)
+            );
+        }
+    }
+    Ok(())
+}
+
+fn read_through_rate(injected: i64, read: i64) -> Option<f64> {
+    (injected > 0).then(|| read as f64 / injected as f64)
+}
+
+fn format_rate(rate: Option<f64>) -> String {
+    rate.map_or_else(|| "-".to_owned(), |value| format!("{:.1}%", value * 100.0))
+}
+
 fn record(target: DbTarget, event: &UsageEvent, hook_event: &str, tool: &str) -> Result<()> {
+    validate_event(event)?;
+    let db = open_db(target)?;
+    insert_event(&db, event, hook_event, tool)
+}
+
+fn validate_event(event: &UsageEvent) -> Result<()> {
     for (label, value) in [
         ("skill", event.skill.as_str()),
         ("harness", event.harness.as_str()),
@@ -103,7 +216,11 @@ fn record(target: DbTarget, event: &UsageEvent, hook_event: &str, tool: &str) ->
             bail!("{label} must not be empty");
         }
     }
-    let db = open_db(target)?;
+    Ok(())
+}
+
+fn insert_event(db: &Db, event: &UsageEvent, hook_event: &str, tool: &str) -> Result<()> {
+    validate_event(event)?;
     db.execute(
         "INSERT INTO skill_invocations (
             session_id, skill_name, tool_name, project_dir, started_at, ended_at,
@@ -293,6 +410,22 @@ fn open_db(target: DbTarget) -> Result<Db> {
             "Postgres usage database requested, but this skillnet binary was built without the \
              `postgres` feature; rebuild with `--features postgres` or select the sqlite backend"
         ),
+    }
+}
+
+fn open_db_with_timeout(target: DbTarget, timeout: Duration) -> Result<Db> {
+    match target {
+        DbTarget::Sqlite(path) => Db::open(&path),
+        #[cfg(feature = "postgres")]
+        DbTarget::Postgres(url) => Db::open_postgres_with_timeout(&url, timeout),
+        #[cfg(not(feature = "postgres"))]
+        DbTarget::Postgres(_) => {
+            let _ = timeout;
+            bail!(
+                "Postgres usage database requested, but this skillnet binary was built without the \
+                 `postgres` feature; rebuild with `--features postgres` or select the sqlite backend"
+            )
+        }
     }
 }
 

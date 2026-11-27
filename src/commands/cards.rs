@@ -55,6 +55,7 @@ pub(crate) fn trigger(
     args: TriggerArgs,
     config: &Utf8Path,
     mirror: Option<&Utf8PathBuf>,
+    db: &DbOverrides,
 ) -> Result<()> {
     let detected = RepoFingerprint::detect(&args.cwd)?;
     let root = detected.root.clone();
@@ -70,12 +71,13 @@ pub(crate) fn trigger(
     let input = MatchInput::new(args.event, &payload, &root, &fp)?
         .with_changes(changes.as_deref().unwrap_or_default());
     let session = session(args.session);
+    let harness = args.harness.trim();
     let out = resolve(
         &cards,
         &input,
         args.state_dir.as_deref(),
         &root,
-        args.harness.trim(),
+        harness,
         session.as_deref(),
         &Limits {
             max_cards: args
@@ -84,12 +86,29 @@ pub(crate) fn trigger(
             max_tokens: args.max_tokens,
         },
     )?;
+    let injected_ids: Vec<&str> = out.inject.iter().map(|card| card.card).collect();
     if args.json {
-        print_json(&out)
+        print_json(&out)?;
     } else {
         print_resolution(out);
-        Ok(())
     }
+    let _ = io::stdout().flush();
+    if !args.no_record && !injected_ids.is_empty() {
+        let record = || -> Result<()> {
+            let db = Config::load_database_or_default(config)?.resolve_db_with_overrides(db)?;
+            super::usage::record_card_injected(
+                db,
+                &injected_ids,
+                harness,
+                session.as_deref(),
+                root.as_str(),
+            )
+        };
+        if let Err(err) = record() {
+            eprintln!("skillnet: warning: failed to record card injection: {err}");
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn card(
@@ -98,6 +117,10 @@ pub(crate) fn card(
     mirror: Option<&Utf8PathBuf>,
     db: &DbOverrides,
 ) -> Result<()> {
+    if let CardCommand::Stats { since, format } = args.command {
+        let target = Config::load_database_or_default(config)?.resolve_db_with_overrides(db)?;
+        return super::usage::card_stats(target, since.as_deref(), format);
+    }
     let cards = load_cards(&packs_dir(args.packs_dir, config, mirror)?)?;
     match args.command {
         CardCommand::List { pack, json } => {
@@ -157,6 +180,7 @@ pub(crate) fn card(
             validate_cards(&cards)?;
             println!("validated {} cards", cards.len());
         }
+        CardCommand::Stats { .. } => unreachable!("handled before loading cards"),
     }
     Ok(())
 }
@@ -228,6 +252,12 @@ fn print_json(value: &impl Serialize) -> Result<()> {
 }
 
 fn print_resolution(out: Resolution<'_>) {
+    if let Some(skills) = out.projected_skills.filter(|skills| !skills.is_empty()) {
+        println!("Projected playbooks for this repo: {}", skills.join(", "));
+    }
+    if let Some(packs) = out.recommended_packs.filter(|packs| !packs.is_empty()) {
+        println!("Recommended packs for this repo: {}", packs.join(", "));
+    }
     if let Some(deny) = out.deny {
         println!("DENY {}\n{}", deny.card, deny.reason);
     }

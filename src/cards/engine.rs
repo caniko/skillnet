@@ -99,6 +99,8 @@ pub(crate) struct MatchInput<'a> {
     signals: Vec<&'a str>,
     fields: Map<String, Value>,
     audit_packs: Option<&'a [String]>,
+    recommended_packs: &'a [String],
+    projected_skills: &'a [String],
 }
 
 impl<'a> MatchInput<'a> {
@@ -174,6 +176,8 @@ impl<'a> MatchInput<'a> {
                 .collect(),
             fields: fingerprint_fields(fp)?,
             audit_packs: audit_sweep.then_some(fp.recommended_packs.as_slice()),
+            recommended_packs: &fp.recommended_packs,
+            projected_skills: &fp.projected_skills,
         })
     }
 
@@ -322,6 +326,10 @@ pub(crate) struct Resolution<'a> {
     pub collapsed: BTreeMap<&'a str, usize>,
     pub matched_count: usize,
     pub budget_dropped: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommended_packs: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub projected_skills: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -352,6 +360,14 @@ pub(crate) fn resolve<'a>(
     session: Option<&str>,
     limits: &Limits,
 ) -> Result<Resolution<'a>> {
+    let (recommended_packs, projected_skills) = if input.event == Event::SessionStart {
+        (
+            Some(input.recommended_packs.to_vec()),
+            Some(input.projected_skills.to_vec()),
+        )
+    } else {
+        (None, None)
+    };
     let mut out = Resolution {
         event: input.event,
         inject: Vec::new(),
@@ -359,6 +375,8 @@ pub(crate) fn resolve<'a>(
         collapsed: BTreeMap::new(),
         matched_count: 0,
         budget_dropped: 0,
+        recommended_packs,
+        projected_skills,
     };
     let mut advice = Vec::new();
     for card in cards {

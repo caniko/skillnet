@@ -66,7 +66,12 @@ pub fn run() -> Result<()> {
     // Unlike legacy commands, cards must not discover a config (and packs) from the current repo.
     if let Command::Trigger(args) = command {
         let config = config.map_or_else(default_config_path, Ok)?;
-        return commands::cards::trigger(args, &config, mirror_root.as_ref());
+        return commands::cards::trigger(
+            args,
+            &config,
+            mirror_root.as_ref(),
+            &DbOverrides { database_url },
+        );
     }
     if let Command::Card(args) = command {
         let config = config.map_or_else(default_config_path, Ok)?;

@@ -969,3 +969,316 @@ fn resolves_pack_paths_in_precedence_order() {
         "rust/check"
     );
 }
+
+#[test]
+fn trigger_records_card_injected_respects_no_record_and_feeds_card_stats() {
+    let root = TempDir::new().unwrap();
+    pack(root.path());
+    write(root.path(), "global_skills/demo/SKILL.md", "# demo\n");
+
+    let payload = r#"{"file":"src/lib.rs","new_string":"unwrap("}"#;
+    let db = root.path().join("data/multi-phase-plan/calibration.sqlite");
+
+    // --no-record skips creating or writing the DB.
+    let out = json_output(
+        trigger(root.path(), "s0", "post-edit")
+            .arg("--no-record")
+            .write_stdin(payload),
+    );
+    assert_eq!(out["inject"][0]["card"], "rust/check");
+    assert!(!db.exists());
+
+    // Normal trigger records CardInjected best-effort.
+    let out1 = json_output(
+        trigger(root.path(), "s1", "post-edit")
+            .args(["--harness", "codex"])
+            .write_stdin(payload),
+    );
+    assert_eq!(out1["inject"][0]["card"], "rust/check");
+    let out2 = json_output(
+        trigger(root.path(), "s2", "post-edit")
+            .args(["--harness", "claude"])
+            .write_stdin(payload),
+    );
+    assert_eq!(out2["inject"][0]["card"], "rust/check");
+
+    // Record one CardRead for rust/check and one CardRead for a never-injected card.
+    skillnet(root.path())
+        .args([
+            "card",
+            "show",
+            "rust/check",
+            "--harness",
+            "codex",
+            "--session",
+            "s1",
+        ])
+        .assert()
+        .success();
+
+    // Also record a regular skill activation and verify usage report excludes card events.
+    skillnet(root.path())
+        .args([
+            "usage",
+            "record",
+            "--skill",
+            "global/demo",
+            "--harness",
+            "claude",
+            "--session",
+            "s1",
+            "--event-id",
+            "evt-1",
+        ])
+        .assert()
+        .success();
+
+    let usage = json_output(skillnet(root.path()).args(["usage", "report", "--format", "json"]));
+    let usage_rows = usage.as_array().unwrap();
+    assert_eq!(usage_rows.len(), 1);
+    assert_eq!(usage_rows[0]["skill"], "global/demo");
+    assert_eq!(usage_rows[0]["uses"], 1);
+
+    // Insert a direct CardRead for another card so we also exercise injected == 0.
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute(
+        "INSERT INTO skill_invocations (session_id, skill_name, started_at, payload, hook_event, canonical_skill_name)
+         VALUES ('s3', 'nix/flake', CURRENT_TIMESTAMP, '{}', 'CardRead', 'nix/flake')",
+        [],
+    )
+    .unwrap();
+
+    // card stats works without packs configured too.
+    let stats_json = json_output(
+        skillnet(root.path())
+            .env("SKILLNET_CONFIG", root.path().join("missing.toml"))
+            .args(["card", "stats", "--format", "json"]),
+    );
+    assert_eq!(
+        stats_json,
+        json!({
+            "cards": [
+                {
+                    "card": "nix/flake",
+                    "injected": 0,
+                    "read": 1,
+                    "read_through_rate": Value::Null,
+                },
+                {
+                    "card": "rust/check",
+                    "injected": 2,
+                    "read": 1,
+                    "read_through_rate": 0.5,
+                }
+            ],
+            "totals": {
+                "injected": 2,
+                "read": 2,
+                "read_through_rate": 1.0,
+            }
+        })
+    );
+
+    skillnet(root.path())
+        .args(["card", "stats", "--since", "24h", "--format", "table"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("card\tinjected\tread\tread_through_rate\n")
+                .and(predicate::str::contains("nix/flake\t0\t1\t-\n"))
+                .and(predicate::str::contains("rust/check\t2\t1\t50.0%\n"))
+                .and(predicate::str::contains("TOTAL\t2\t2\t100.0%\n")),
+        );
+}
+
+#[test]
+fn trigger_succeeds_best_effort_when_database_is_unreachable() {
+    let root = TempDir::new().unwrap();
+    pack(root.path());
+    let payload = r#"{"file":"src/lib.rs","new_string":"unwrap("}"#;
+
+    for no_record in [false, true] {
+        let mut cmd = trigger(
+            root.path(),
+            &format!("unreachable-{no_record}"),
+            "post-edit",
+        );
+        cmd.args(["--database-url", "not://a/postgres/url"]);
+        if no_record {
+            cmd.arg("--no-record");
+        }
+        let assert = cmd.write_stdin(payload).assert().success();
+        let out: Value = serde_json::from_slice(&assert.get_output().stdout).unwrap();
+        assert_eq!(out["inject"][0]["card"], "rust/check");
+        if no_record {
+            assert.stderr(predicate::str::is_empty());
+        } else {
+            assert.stderr(predicate::str::contains(
+                "skillnet: warning: failed to record card injection:",
+            ));
+        }
+    }
+}
+
+#[test]
+fn fingerprint_computes_bounded_rust_trait_and_suppression_census() {
+    let root = TempDir::new().unwrap();
+    write(
+        root.path(),
+        "Cargo.toml",
+        "[workspace]\nmembers = ['crates/a']\n",
+    );
+    write(
+        root.path(),
+        "crates/a/src/lib.rs",
+        r##"#![allow(dead_code)]
+
+#[expect(clippy::too_many_lines, reason = "not an allow attr")]
+#[allow(clippy::unwrap_used)]
+pub trait SingleImpl {
+    fn run(&self);
+}
+
+#[cfg_attr(test, allow(unused_variables))]
+pub(crate) trait MultiImpl {
+    fn go(&self);
+}
+
+#[mockall::automock]
+trait AutoMocked {
+    fn ping(&self);
+}
+
+trait HandMocked {
+    fn fetch(&self);
+}
+
+// trait FakeComment {}
+/*
+   /* nested comment with trait NestedComment {} and #[allow(all)] and &dyn Foo */
+   impl SingleImpl for CommentType {}
+*/
+const IGNORED: &str = "trait InString {} #[allow(dead_code)] &dyn Fake";
+const RAW_IGNORED: &str = r#"
+trait InRawString {}
+#[allow(unused)]
+fn f(x: &dyn RawTrait) {}
+"#;
+const QUOTE: char = '"';
+
+struct Prod;
+struct Other;
+struct MockClient;
+
+impl SingleImpl for Prod {
+    fn run(&self) {}
+}
+
+impl MultiImpl
+    for Prod
+{
+    fn go(&self) {}
+}
+
+impl MultiImpl for Other {
+    fn go(&self) {}
+}
+
+impl HandMocked for Prod {
+    fn fetch(&self) {}
+}
+
+impl HandMocked for MockClient {
+    fn fetch(&self) {}
+}
+
+fn use_dyn(a: &dyn SingleImpl, b: Box<dyn MultiImpl + Send>) {
+    let dyn_var = 1;
+    let _ = (a, b, dyn_var, IGNORED, RAW_IGNORED, QUOTE);
+}
+"##,
+    );
+    // Tests directory is excluded from the bounded census.
+    write(
+        root.path(),
+        "crates/a/tests/integration.rs",
+        "#[allow(all)]\ntrait TestOnly {}\nfn f(_: &dyn TestOnly) {}\n",
+    );
+
+    let fp = json_output(skillnet(root.path()).args(["fingerprint", "--json"]));
+    assert_eq!(fp["rust_local_traits"], 4);
+    assert_eq!(fp["rust_single_impl_traits"], 1);
+    assert_eq!(fp["rust_dyn_sites"], 2);
+    assert_eq!(fp["rust_mock_traits"], 2);
+    assert_eq!(fp["rust_allow_attrs"], 3);
+}
+
+#[test]
+fn session_start_projects_playbooks_and_recommended_packs_in_json_and_text() {
+    let root = TempDir::new().unwrap();
+    pack(root.path());
+    write(root.path(), "Cargo.toml", "[package]\nname = 'demo'\n");
+    write(root.path(), "src/lib.rs", "pub fn ok() {}\n");
+    write(root.path(), "design.fig", "");
+
+    let json_out = json_output(trigger(root.path(), "s-start", "session-start").arg("--no-stdin"));
+    assert_eq!(json_out["event"], "session-start");
+    assert_eq!(
+        json_out["projected_skills"],
+        json!(["openpencil-ui-parity", "openpencil-designer"])
+    );
+    assert_eq!(json_out["recommended_packs"], json!(["rust", "gates"]));
+
+    skillnet(root.path())
+        .args([
+            "trigger",
+            "--event",
+            "session-start",
+            "--session",
+            "s-start-text",
+            "--state-dir",
+            "state",
+            "--no-stdin",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains(
+                "Projected playbooks for this repo: openpencil-ui-parity, openpencil-designer\n",
+            )
+            .and(predicate::str::contains(
+                "Recommended packs for this repo: rust, gates\n",
+            )),
+        );
+
+    // Non-session-start events omit the projection fields.
+    let other = json_output(trigger(root.path(), "s-other", "post-edit").arg("--no-stdin"));
+    assert!(other.get("projected_skills").is_none());
+    assert!(other.get("recommended_packs").is_none());
+
+    // When no projected skills apply, JSON keeps an empty array and text omits the playbooks line.
+    fs::remove_file(root.path().join("design.fig")).unwrap();
+    let plain = json_output(trigger(root.path(), "s-plain", "session-start").arg("--no-stdin"));
+    assert_eq!(plain["projected_skills"], json!([]));
+    assert_eq!(plain["recommended_packs"], json!(["rust", "gates"]));
+    skillnet(root.path())
+        .args([
+            "trigger",
+            "--event",
+            "session-start",
+            "--session",
+            "s-plain-text",
+            "--state-dir",
+            "state",
+            "--no-stdin",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("Projected playbooks for this repo:")
+                .not()
+                .and(predicate::str::contains(
+                    "Recommended packs for this repo: rust, gates\n",
+                )),
+        );
+}
