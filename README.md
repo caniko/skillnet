@@ -6,20 +6,13 @@
 
 <!-- simit:badges:end -->
 
-`skillnet` is a CLI for managing canonical AI skill stores, materialising derived agent views, and recording calibration data for `multi-phase-plan`.
+`skillnet` is a CLI for managing canonical AI skill stores, materialising derived agent views, and recording `multi-phase-plan` calibration data.
 
-Global views may use `link_strategy = "hardlink"` when multiple agent roots
-should share immutable skill files without duplicating their contents. Hardlink
-views are derived and converge from the canonical mirror; use the canonical
-store for edits.
+Global views can use `link_strategy = "hardlink"` to share immutable skill files across agent roots without duplicating contents. Hardlink views are derived from the canonical mirror; edit skills in the canonical store.
 
-The supported interface in `0.6.0` is the `skillnet` binary. This crate does not commit to a stable embeddable Rust API yet.
+Since `0.6.0`, the supported interface is the `skillnet` binary; no stable embeddable Rust API is promised yet.
 
-For project scopes, the canonical store is
-`<project>/.skills`. The default project-local working copy is
-`<project>/.agents/skills`, hardlinked from canonical, and the default Claude
-view is `<project>/.claude/skills` as per-skill relative symlinks into
-`.agents/skills`.
+Project scopes keep their canonical store at `<project>/.skills`, materialise a hardlinked working copy at `<project>/.agents/skills` by default, and default the Claude view at `<project>/.claude/skills` to per-skill relative symlinks into `.agents/skills`.
 
 ## Install
 
@@ -35,11 +28,7 @@ cargo install --path .
 
 ## Hook ingestion
 
-`skillnet hook install` wires Claude Code to record skill invocations through
-`skillnet hook ingest`, storing rows in `skill_invocations`. Use
-`skillnet hook status` to confirm the managed hook entries are installed. See
-the mdBook chapter at [docs/src/hook-ingestion.md](docs/src/hook-ingestion.md)
-for Postgres, SQLite, and CLI setup.
+`skillnet hook install` configures Claude Code to record skill invocations via `skillnet hook ingest` into `skill_invocations`. Run `skillnet hook status` to verify the managed entries. See [docs/src/hook-ingestion.md](docs/src/hook-ingestion.md) for Postgres, SQLite, and CLI setup.
 
 Normalized harness adapters can record directly with:
 
@@ -60,34 +49,13 @@ skillnet card show rust/unwrap-in-lib --full
 skillnet card validate
 ```
 
-Cards are read from `--packs-dir`, `$AI_SKILLS_REPO/packs`, or the `packs/`
-directory next to the configured global skills source, in that order. The
-current repository's packs are not auto-discovered. `card show --full` reads
-only references that resolve to files inside the packs' source tree.
+Cards load from `--packs-dir`, `$AI_SKILLS_REPO/packs`, or the `packs/` directory next to the configured global skills source, in that order; the current repository's packs are not auto-discovered. `card show --full` reads only references that resolve to files inside the packs' source tree.
 
-`trigger` takes JSON on stdin or from `--payload-file`; for example,
-`{"file":"src/lib.rs","diff":"+load().unwrap()"}`. With no event details,
-`audit` selects advice from the fingerprint's recommended packs. Use
-`--no-stdin` to run an empty audit without reading stdin. The default maximum
-is 20 cards for audit and 2 otherwise; JSON reports budget omissions as
-`budget_dropped`. Globs match the whole
-repo-relative path using `globset` defaults (`*` can span `/`). Use `--session` to
-persist the advice budget and session cooldown across calls (defaults to
-`CLAUDE_SESSION_ID` if set). State lives in
-`${XDG_STATE_HOME:-$HOME/.local/state}/skillnet/trigger-state` unless
-`--state-dir` is set. Callers use the JSON `deny` field to block an action;
-it is not a command exit code. `card validate` checks positive and negative
-fixtures without consuming cooldowns or budget.
+`trigger` reads JSON from stdin or `--payload-file` (for example, `{"file":"src/lib.rs","diff":"+load().unwrap()"}`). Without event details, `audit` selects advice from the fingerprint's recommended packs; pass `--no-stdin` for an empty audit without reading stdin. Defaults cap output at 20 cards for audit and 2 otherwise; JSON reports the count omitted by the budget as `budget_dropped`. Globs match full repo-relative paths using `globset` defaults (`*` can span `/`). Pass `--session` (defaulting to `CLAUDE_SESSION_ID` when set) to persist the advice budget and cooldown in `${XDG_STATE_HOME:-$HOME/.local/state}/skillnet/trigger-state`, or override with `--state-dir`. Callers inspect the JSON `deny` field rather than the exit code to block an action. `card validate` checks positive and negative fixtures without consuming cooldowns or budget.
 
-Reports include every current catalog skill, including zero-use skills. A zero
-count is only evidence of non-use when the corresponding harness coverage has
-been healthy for the entire requested window. Events store metadata only;
-source-event IDs make adapter retries idempotent.
+Usage reports include every current catalog skill, including zero-use entries; a zero count is only evidence of non-use when harness coverage stayed healthy across the full window. Events store metadata only, and source-event IDs make retries idempotent.
 
-Harness integrations such as Infernix own adapter and plugin installation.
-Skillnet remains the generic owner of canonical skills, materialised views,
-catalogs, and normalized usage events; it does not own external plugin
-payloads or harness-specific installation policy.
+Harness integrations such as Infernix own adapter and plugin installation. Skillnet owns canonical skills, materialised views, catalogs, and normalized usage events, not external plugin payloads or harness installation policy.
 
 ### Nix Home Manager
 
@@ -116,32 +84,17 @@ programs.skillnet = {
 };
 ```
 
-The module is exported as both `hmModules.default` and `hmModules.skillnet`.
-It installs `skillnet` on `PATH`. When `settings` is declared, the module
-renders `$XDG_CONFIG_HOME/skillnet/skillnet.toml`, which the CLI discovers by
-default. When `catalogSettings` is declared, it renders
-`$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`. `skillsRoot`, `mirrorRoot`, and the
-declarative database options are folded into generated `skillnet.toml`, so a
-normal declarative Home Manager install does not depend on shell-specific env
-imports. Without `settings`, you can still drop your own TOMLs and point
-`programs.skillnet.configFile` at them. When SQLite is selected, the module
-exports `skillnet_DATA_DIR` and `SKILLNET_DATA_DIR` for compatibility; the CLI
-creates runtime database directories when commands need them.
+Exported as `hmModules.default` and `hmModules.skillnet`, the module puts `skillnet` on `PATH`. Declaring `settings` renders `$XDG_CONFIG_HOME/skillnet/skillnet.toml` (discovered by default) with `skillsRoot`, `mirrorRoot`, and declarative database options folded in, avoiding shell-specific env imports. Declaring `catalogSettings` renders `$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`. Without `settings`, you can keep user-managed TOMLs in the standard XDG location or optionally point `programs.skillnet.configFile` and `programs.skillnet.catalogConfigFile` at custom paths. Under SQLite, the module exports `skillnet_DATA_DIR` and `SKILLNET_DATA_DIR` for compatibility; the CLI creates runtime database directories on demand.
 
-If you also want the module to define where the `ai-skills` checkout lives,
-set `skillsRoot`. On atlas, that path is:
+To declare the `ai-skills` checkout path, set `skillsRoot` (on atlas):
 
 ```nix
 programs.skillnet.skillsRoot = "/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/ai-skills";
 ```
 
-When configured, the module writes `skills_root` into `skillnet.toml`, exports
-`AI_SKILLS_REPO` for compatibility. `skillsRoot` points at the skills checkout
-and VCS working tree; `dataDir` is the runtime data location for bundles and
-local calibration state.
+Setting `skillsRoot` writes `skills_root` into `skillnet.toml` and exports `AI_SKILLS_REPO` for compatibility. `skillsRoot` points at the skills checkout and VCS working tree, while `dataDir` holds runtime bundles and local calibration state.
 
-Postgres is the default calibration backend and requires a connection URL.
-SQLite is also supported by selecting it explicitly:
+Postgres is the default calibration backend and requires a connection URL. Select SQLite explicitly when needed:
 
 ```nix
 programs.skillnet = {
@@ -154,16 +107,11 @@ programs.skillnet = {
 };
 ```
 
-The Postgres backend is included in default builds. If you override
-`programs.skillnet.package` with a custom `--no-default-features` build, choose
-a package that includes the `postgres` feature when using the Postgres backend.
+Default builds include Postgres support. If you override `programs.skillnet.package` with a `--no-default-features` build, keep the `postgres` feature enabled when using Postgres.
 
-The `database.url` value is written into the Nix store. For production secrets,
-prefer `database.urlFile`, which reads the Postgres URL from a file at shell
-initialization time.
+Because `database.url` lands in the Nix store, prefer `database.urlFile` for production secrets so the URL is read from a file at shell initialization time.
 
-Home Manager does not run `skillnet` commands during activation. After a rebuild
-or `home-manager switch`, run materialisation and hook workflows explicitly:
+Home Manager does not run `skillnet` commands during activation. After a rebuild or `home-manager switch`, run materialisation and hook workflows explicitly:
 
 ```sh
 skillnet sync
@@ -172,41 +120,21 @@ skillnet hook install
 
 Options:
 
-- `user` selects the principal used for schema-version-2 manifest access
-  filtering. It is optional for legacy unrestricted manifests.
-- `programs.skillnet.dataDir` defaults to `${config.xdg.dataHome}/skillnet`.
-  This is skillnet's runtime data location, including generated bundles.
-- `programs.skillnet.skillsRoot` sets `skills_root` in generated
-  `skillnet.toml`, exports `AI_SKILLS_REPO` for compatibility, and is the
-  canonical mirror destination/VCS working tree; atlas uses
-  `/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/ai-skills`.
-- `programs.skillnet.mirrorRoot` is the legacy mirror destination option. When
-  both `skillsRoot` and `mirrorRoot` are set, they must match.
-- `programs.skillnet.database.backend` selects `sqlite` or `postgres` and
-  defaults to `postgres`.
-- `programs.skillnet.database.path` optionally sets the SQLite database path;
-  when unset, calibration data lives at
-  `<dataDir>/multi-phase-plan/calibration.sqlite`.
-- `programs.skillnet.database.url` is written into generated `skillnet.toml`
-  when `settings` is declared, or exported as `SKILLNET_DATABASE_URL` for
-  user-managed config.
-- `programs.skillnet.dataDir` is written as `data_dir`, so generated bundles
-  use the same runtime location for SQLite and Postgres setups.
-- `programs.skillnet.database.urlFile` reads a Postgres URL from a file at
-  shell initialization time.
-- `programs.skillnet.settings` and `programs.skillnet.catalogSettings` render
-  `skillnet.toml` and `skillnet.catalog.toml` from Nix.
-- `programs.skillnet.configFile` and `programs.skillnet.catalogConfigFile`
-  point the CLI at user-managed TOML files.
-- `programs.skillnet.package` overrides the package. If `pkgs.skillnet` is not
-  available in your package set, use
-  `inputs.skillnet.packages.${pkgs.system}.skillnet`.
+- `user`: principal for schema-version-2 manifest access filtering (optional for legacy unrestricted manifests).
+- `programs.skillnet.dataDir`: runtime data directory (written as `data_dir` for both SQLite and Postgres bundles); defaults to `${config.xdg.dataHome}/skillnet`.
+- `programs.skillnet.skillsRoot`: canonical mirror destination/VCS working tree; writes `skills_root` in generated `skillnet.toml` and exports `AI_SKILLS_REPO` for compatibility (atlas uses `/data/nvme0/can/canix/projects/repos/owned/github.com/caniko/ai-skills`).
+- `programs.skillnet.mirrorRoot`: legacy mirror destination option; must match `skillsRoot` when both are set.
+- `programs.skillnet.database.backend`: `sqlite` or `postgres` (default `postgres`).
+- `programs.skillnet.database.path`: optional SQLite path; defaults to `<dataDir>/multi-phase-plan/calibration.sqlite`.
+- `programs.skillnet.database.url`: written into generated `skillnet.toml` when `settings` is declared, or exported as `SKILLNET_DATABASE_URL` for user-managed config.
+- `programs.skillnet.database.urlFile`: reads a Postgres URL from a file at shell initialization time.
+- `programs.skillnet.settings` and `programs.skillnet.catalogSettings`: render `skillnet.toml` and `skillnet.catalog.toml` from Nix.
+- `programs.skillnet.configFile` and `programs.skillnet.catalogConfigFile`: point the CLI at user-managed TOML files.
+- `programs.skillnet.package`: package override; use `inputs.skillnet.packages.${pkgs.system}.skillnet` if `pkgs.skillnet` is not in your package set.
 
 ### External Git providers
 
-Provider subscriptions fetch a repository and compose every immediate
-`SKILL.md` directory below `source` into the generated global views. They do
-not copy into or modify the canonical skill store:
+Provider subscriptions fetch a repository and compose every immediate `SKILL.md` directory under `source` into generated global views without copying into or modifying the canonical store:
 
 ```nix
 programs.skillnet = {
@@ -220,12 +148,7 @@ programs.skillnet = {
 };
 ```
 
-With an interval configured, Home Manager starts a user service at login and a
-timer thereafter. Updates are validated against the complete bundle before
-publication; a conflicting or invalid update restores the last working
-checkout and views. Without an interval, run
-`skillnet subscription sync --all` explicitly. Copy subscriptions retain their
-existing behavior and require `target` instead of `provider = true`.
+When an interval is set, Home Manager runs a user service at login and a timer thereafter. Updates validate against the full bundle before publication; a conflicting or invalid update restores the last working checkout and views. Without an interval, run `skillnet subscription sync --all` explicitly. Copy subscriptions keep their existing behavior and require `target` instead of `provider = true`.
 
 ## Storage backends
 
@@ -236,7 +159,7 @@ Postgres is the default calibration backend:
 url = "postgres://skillnet@localhost/skillnet"
 ```
 
-SQLite is available by selecting it explicitly:
+Select SQLite explicitly when needed:
 
 ```toml
 [database]
@@ -244,51 +167,19 @@ backend = "sqlite"
 path = "/home/alice/.local/share/skillnet/multi-phase-plan/calibration.sqlite"
 ```
 
-The `path` key is optional. Without it, `skillnet` uses
-`$skillnet_DATA_DIR/multi-phase-plan/calibration.sqlite`,
-`$SKILLNET_DATA_DIR/multi-phase-plan/calibration.sqlite`, or
-`$XDG_DATA_HOME/skillnet/multi-phase-plan/calibration.sqlite`.
+Without `path`, `skillnet` uses the first set variable — `$skillnet_DATA_DIR/multi-phase-plan/calibration.sqlite`, then `$SKILLNET_DATA_DIR/multi-phase-plan/calibration.sqlite` — or falls back to `$XDG_DATA_HOME/skillnet/multi-phase-plan/calibration.sqlite`.
 
 ## Pkl skill manifests and bundles
 
-`packages.x86_64-linux.greptile-skills` composes the official `check-pr`,
-`greploop`, and `cli-review` imports from the immutable `caniko/ai-skills`
-revision recorded in `nix/greptile-bundle.nix`. Its `view/` directory contains
-consumer entrypoints with repository contracts and transitive Skillnet
-dependencies. `checks.x86_64-linux.greptile-skills` qualifies that real
-composition in the existing hosted flake workflow, including license
-retention and reference-only dependency visibility.
+`packages.x86_64-linux.greptile-skills` composes `check-pr`, `greploop`, and `cli-review` from the pinned `caniko/ai-skills` revision in `nix/greptile-bundle.nix`. Its `view/` directory exposes consumer entrypoints with repository contracts and transitive Skillnet dependencies. `checks.x86_64-linux.greptile-skills` verifies that composition in hosted CI, including license retention and reference-only dependency visibility.
 
-`packages.x86_64-linux.greptile-skills-archive` exports the three composed
-entrypoints as `greptile-consumer-skills.tar.gz`, together with
-`provenance.json` and `SHA256SUMS`. Tar entries are dereferenced and have
-normalized ordering, ownership, and timestamps, so the archive can be used
-after the producing runner and its Nix store disappear. The composition
-check rejects links, special files, and paths outside the three entrypoints.
+`packages.x86_64-linux.greptile-skills-archive` packages those three entrypoints into `greptile-consumer-skills.tar.gz` alongside `provenance.json` and `SHA256SUMS`. Tar entries are dereferenced with normalized order, ownership, and timestamps so the archive outlives the producing runner and Nix store. The check rejects links, special files, and paths outside the three entrypoints.
 
-Until the artifact-upload workflow is available, this repository's hosted
-development shell emits the qualified archive once per runner as
-`SKILLNET_CONSUMER_ARCHIVE_V1` JSON frames. Each frame binds the file's SHA-256,
-byte count, chunk count, and index; consumers must recover every chunk and
-verify those fields and `SHA256SUMS` before extraction. The transport is
-limited to 1 MiB per file. Ordinary development shells do not emit these
-frames.
+Until the artifact-upload workflow is available, the hosted development shell emits the qualified archive once per runner as `SKILLNET_CONSUMER_ARCHIVE_V1` JSON frames. Each frame carries the file's SHA-256, byte count, chunk count, and index; consumers must reassemble every chunk and verify those fields plus `SHA256SUMS` before extracting (1 MiB per-file transport limit). Ordinary development shells do not emit these frames.
 
-An optional `Skillnet.pkl` at the root of a canonical skill store enables
-manifest-driven composition. It is evaluated by the Rust `pklr` integration
-with local imports confined to that store; environment, network, temporary
-directory, and glob access are disabled.
+Placing `Skillnet.pkl` at a canonical store root enables manifest-driven composition via the Rust `pklr` integration. Local imports stay confined to that store; environment, network, temp-dir, and glob access are disabled.
 
-The manifest declares `schemaVersion = 1`, `schemaVersion = 2` or `schemaVersion = 3` and a `skills` mapping. Skills not
-listed in the mapping remain entrypoints. Listed skills may use `role =
-"entrypoint"` or `role = "reference"` and may name other skills in
-`dependencies`. `defaultDependencies` applies to canonical skills that do not
-need a special dependency list:
-
-Canonical manifest entries backed by `source` use their explicit
-`dependencies`; external manifests retain their own `defaultDependencies` for
-source-backed entries. This keeps reference-only source entries from
-accidentally depending on themselves through a global default.
+A manifest declares `schemaVersion = 1`, `schemaVersion = 2`, or `schemaVersion = 3` and a `skills` mapping. Unlisted skills stay entrypoints; listed skills may set `role = "entrypoint"` or `role = "reference"` and declare `dependencies`. `defaultDependencies` applies to canonical skills without a custom dependency list. Canonical entries backed by `source` use only their explicit `dependencies`, which keeps reference-only source entries from depending on themselves through a global default; external manifests keep their own `defaultDependencies` for source-backed entries.
 
 ```pkl
 class Skill {
@@ -308,18 +199,9 @@ skills: Mapping<String, Skill> = new {
 }
 ```
 
-For a manifest-enabled scope, `skillnet` materialises generated bundles under
-`<dataDir>/bundles/<scope>`. Views expose only entrypoints; dependencies are
-available inside each generated bundle at `.skillnet/deps/<skill>`. Bundle
-scopes require symlink views. Stores without `Skillnet.pkl` retain the legacy
-direct canonical-to-view behaviour.
+Manifest-enabled scopes materialise bundles under `<dataDir>/bundles/<scope>`, expose only entrypoints in views, and link dependencies inside each bundle at `.skillnet/deps/<skill>`. Bundle scopes require symlink views; stores without `Skillnet.pkl` keep direct canonical-to-view linking.
 
-Schema version 2 adds optional per-user materialisation. `defaultUsers` applies
-to skills whose `users` field is omitted; an omitted default keeps the manifest
-unrestricted for backwards compatibility. An explicit empty list denies every
-user. When a manifest declares access, the generated `skillnet.toml` must set
-`user`; the Home Manager module writes the current `home.username` there.
-Every dependency of a materialised skill must be granted to that user as well.
+Schema version 2 adds optional per-user filtering. `defaultUsers` applies when a skill omits `users`; omitting the default leaves the manifest unrestricted for backwards compatibility, while an explicit empty list denies every user. When a manifest declares access, `skillnet.toml` must set `user` (Home Manager writes `home.username`), and every dependency of a materialised skill must also be granted to that user.
 
 ```pkl
 class Skill {
@@ -336,29 +218,23 @@ skills: Mapping<String, Skill> = new {
 }
 ```
 
-Schema version 3 adds `defaultHosts` and per-skill `hosts` using the same
-inheritance rules as users. Omitted lists are unrestricted; empty lists deny
-all hosts. Set `host = "atlas"` in `skillnet.toml`, or
-`programs.skillnet.host = "atlas"` in Home Manager. User and host grants must
-both match, including every dependency. A host policy without an explicit host
-fails before materialisation. The destination host is configuration, never the
-hostname of the builder. Versions 1 and 2 remain supported.
+Schema version 3 adds `defaultHosts` and per-skill `hosts` with the same inheritance rules: omitted lists are unrestricted and empty lists deny all hosts. Configure `host = "atlas"` in `skillnet.toml` or `programs.skillnet.host = "atlas"` in Home Manager. Both user and host grants must match for every skill and dependency; a host policy without an explicit host fails before materialisation (destination host is always configured, never read from the builder hostname). Versions 1 and 2 remain supported.
 
-Select Postgres with an environment variable:
+Select Postgres via environment variable:
 
 ```sh
 export SKILLNET_DATABASE_URL='postgres://skillnet@localhost/skillnet'
 skillnet calibration migrate
 ```
 
-Or with `skillnet.toml`:
+Or via `skillnet.toml`:
 
 ```toml
 [database]
 url = "postgres://skillnet@localhost/skillnet"
 ```
 
-Or through the Home Manager module:
+Or via Home Manager:
 
 ```nix
 programs.skillnet = {
@@ -371,24 +247,13 @@ programs.skillnet = {
 };
 ```
 
-`--database-url <URL>` overrides both environment and config for one command.
-Plain URLs in `programs.skillnet.database.url` are written into the Nix store;
-use `programs.skillnet.database.urlFile` with `sops-nix`, `agenix`, or another
-secret-backed file for production credentials.
+`--database-url <URL>` overrides both environment and config for one command. Use `programs.skillnet.database.urlFile` with `sops-nix`, `agenix`, or another secret-backed file for production credentials instead of writing plain URLs into the Nix store via `programs.skillnet.database.url`.
 
 ## Model-bound skill templates
 
-A global canonical skill with `SKILL.md.tmpl` instead of `SKILL.md` is
-rendered into a regular `SKILL.md` when you sync the global bundle. The
-canonical source stays untouched. Other children link into the bundle, except
-the template and its optional `skillnet-template.toml` metadata.
+Global canonical skills containing `SKILL.md.tmpl` instead of `SKILL.md` render into a regular `SKILL.md` file during global bundle sync while leaving canonical sources untouched. Other child entries link into the bundle, excluding the template and optional `skillnet-template.toml` metadata.
 
-Template tokens are `{{name}}`, `{{seat_count}}`, and `{{seat_labels}}`.
-Each `{{#seats}}` … `{{/seats}}` block (blocks may follow each other but not nest) repeats for each seat and can also use
-`{{seat.name}}`, `{{seat.label}}`, and `{{seat.dispatch}}`. Standalone block
-tags do not add blank lines. To require exactly one seat, put `min = 1` and
-`max = 1` under `[seats]` in `skillnet-template.toml`. Without metadata the
-minimum is one and there is no maximum.
+Supported tokens are `{{name}}`, `{{seat_count}}`, and `{{seat_labels}}`. Each `{{#seats}}` … `{{/seats}}` block (sequential blocks allowed, nesting disallowed) repeats per seat with `{{seat.name}}`, `{{seat.label}}`, and `{{seat.dispatch}}`; standalone block tags emit no blank lines. Set `min = 1` and `max = 1` under `[seats]` in `skillnet-template.toml` to require one seat; without metadata, the minimum is one with no maximum.
 
 ```toml
 [templates]
@@ -399,15 +264,7 @@ local = "~/.config/skillnet/skill-models.local.pkl"     # this host only
 t3_caches = "~/.local/share/t3code-native/caches"
 ```
 
-Both sections are optional. `local` loads after `fleet`: it replaces each skill
-it names, and replaces `ui` if it supplies that section. A configured file that
-does not exist is skipped. A template without a binding stops global sync.
-Global sync builds a bundle when a canonical template exists.
-Keep binding files outside Skillnet's data directory: sync prunes the bundle,
-so it refuses a binding path under the bundle as written or as resolved.
-Symlink chains that pass through the bundle are not supported.
-`ui.providers` can restrict the model list to named provider instance IDs.
-Omit it or set it to `null` to list all enabled providers.
+Both sections are optional. `local` loads after `fleet`, replacing any skill it names and replacing `ui` if supplied. Missing binding files are skipped, while a template without a binding fails global sync. Any unexcluded canonical template triggers bundle mode during global sync. Keep binding files outside Skillnet's data directory: sync prunes the bundle and refuses binding paths inside the bundle (as written or resolved), and symlink chains passing through the bundle are unsupported. Set `ui.providers` to named provider instance IDs to filter the model list, or omit / set it to `null` to list all enabled providers.
 
 ```sh
 skillnet template render sol-loop                          # preview without writing
@@ -418,14 +275,14 @@ skillnet models list --caches ./snapshots                 # override the cache d
 
 ## Quick Start
 
-Inspect configured scopes and current view drift:
+Inspect configured scopes and view drift:
 
 ```sh
 skillnet status
 skillnet scope list
 ```
 
-Materialise derived views and then inspect or regenerate catalog output:
+Materialise views and regenerate catalog output:
 
 ```sh
 skillnet sync
@@ -433,11 +290,9 @@ skillnet skill list --scope global
 skillnet catalog generate
 ```
 
-`skillnet sync` is dry-run-on-conflict for promotion candidates: a real
-view-side directory newer than canonical prints `would promote ...` and exits 2. Rerun with `--apply-promote` to pull that content into canonical. See
-[docs/src/commands.md](docs/src/commands.md) for the full flag table.
+`skillnet sync` is dry-run-on-conflict for promotion candidates: a real view directory newer than canonical prints `would promote ...` and exits 2. Rerun with `--apply-promote` to pull it into canonical. See [docs/src/commands.md](docs/src/commands.md) for the full flag table.
 
-Calibration commands are available under the dedicated command group:
+Run calibration queries under the `calibration` group:
 
 ```sh
 skillnet calibration analyze --format table
@@ -461,44 +316,22 @@ cargo test-pg
 
 ## Configuration Model
 
-`skillnet` keeps canonical skill stores separate from generated agent views:
+`skillnet` separates canonical skill stores from derived agent views:
 
-- `global/` stores the canonical global skills by default.
-- Project canonical stores live in each project repository at `<project>/.skills`.
-- A checkout is eligible for declarative project discovery when it is a Git
-  repository under an enabled primary project-tree class and contains a real
-  `.skills` directory. Worktrees and protected roots are not discovered.
-- Home Manager supplies the project-tree JSON and discovery policy in
-  `project_discovery`; do not maintain the list with `skillnet project add`.
-- Protected projects and compatibility scope names can still be declared as
-  explicit `[[projects]]` entries.
-- Project-local working copies live at each project's `canonical_rel`,
-  defaulting to `.agents/skills`, and are materialised from canonical.
-- Global and project views such as `.claude/skills` are generated symlink
-  views. Project views use per-skill relative symlinks into the project
-  working copy.
-- Link strategy defaults are `symlink` for global scopes and `hardlink` for
-  project working copies. Set top-level `link_strategy`, per-project
-  `link_strategy`, or pass `--link symlink|hardlink` to materialisation
-  commands to override a run.
+- Global canonical skills default to `global/`; project canonical stores live at `<project>/.skills`.
+- Declarative project discovery includes Git repositories under an enabled primary project-tree class containing a real `.skills` directory; worktrees and protected roots are excluded.
+- Home Manager supplies project-tree JSON and policy via `project_discovery`; do not maintain discovered entries with `skillnet project add`. Protected projects and compatibility scope names can still be declared as explicit `[[projects]]` entries when needed.
+- Project working copies materialise from canonical at `canonical_rel` (default `.agents/skills`).
+- Global and project views (such as `.claude/skills`) are generated symlink views; project views use per-skill relative symlinks into the project working copy.
+- `link_strategy` defaults to `symlink` for global scopes and `hardlink` for project working copies. Override globally, per project, or per run with `--link symlink|hardlink`.
 
-Hardlink project working copies require `.skills` and the working-copy path to
-live on the same filesystem. Cross-device hardlink failures are reported as errors;
-skillnet does not silently fall back to copying or symlinking. If a Git pull or
-editor rewrite severs a hardlink but leaves matching content, `skillnet sync`
-or `skillnet project sync` re-links it. Project working copies are generated
-from canonical and are replaced when they drift.
+Hardlink project working copies require `.skills` and the working copy on the same filesystem; cross-device failures error without copying or symlinking. When a Git pull or editor rewrite severs a hardlink with matching content, `skillnet sync` or `skillnet project sync` re-links it; drifted working copies are replaced from canonical.
 
-Configuration lives in `$XDG_CONFIG_HOME/skillnet/skillnet.toml`. Catalog
-metadata uses `$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`. The legacy
-cwd fallbacks `./skillnet.toml` and `./skillnet.catalog.toml` still work in
-`0.6.x` with a deprecation warning and are scheduled for removal in `0.7.0`.
-Run `skillnet config migrate` from the old config directory to centralise
-existing files.
+Config lives at `$XDG_CONFIG_HOME/skillnet/skillnet.toml` and catalog metadata at `$XDG_CONFIG_HOME/skillnet/skillnet.catalog.toml`. Legacy cwd fallbacks `./skillnet.toml` and `./skillnet.catalog.toml` remain active with a deprecation warning (deprecated since `0.6.x`, originally scheduled for removal in `0.7.0`); run `skillnet config migrate` from the old directory to centralise them.
 
 ## Command Surface
 
-The current top-level commands are:
+Top-level commands:
 
 - `status`
 - `completions`
@@ -511,20 +344,11 @@ The current top-level commands are:
 - `catalog`
 - `calibration`
 
-Many scope-aware commands accept `--scope <name>`. The selector
-`--scope projects` expands to every configured project, and `--scope all`
-selects global plus every project. `skillnet sync --all` is an alias for
-`skillnet sync --scope all`.
+Many scope-aware commands (such as `sync`, `project sync`, and `status`) accept `--scope <name>`, `--scope projects` (every configured project), or `--scope all` (global plus every project); `view` manages only the global scope. `skillnet sync --all` aliases `skillnet sync --scope all`.
 
-`skillnet project list` shows the resolved explicit and discovered projects.
-Use `skillnet project list --format json` for automation; discovered rows
-include their workspace-relative path and source.
+`skillnet project list` prints resolved explicit and discovered projects; `skillnet project list --format json` includes `source` on every row and a workspace-relative path for discovery matches (null when unmatched).
 
-Use `skillnet export` from a repo root to copy repo-stored global skills from
-`skills/` into the configured global canonical store and sync global views.
-This is intended for repos such as `visual-rubric`, `fragpipe`, and `tzu` that
-VCS skills under `skills/`; existing `.skills/` directories remain
-project-scoped stores unless passed explicitly with `--source .skills`.
+Run `skillnet export` from a repo root to copy repo-stored global skills from `skills/` into the global canonical store and sync global views (for repos such as `visual-rubric`, `fragpipe`, and `tzu`). `.skills/` directories remain project-scoped unless passed explicitly with `--source .skills`.
 
 Generate shell completions with:
 

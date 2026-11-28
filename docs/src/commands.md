@@ -5,11 +5,10 @@ Top-level commands:
 - `status`: show canonical store, view drift, destination, and catalog health.
 - `doctor`: check configured views for invariant violations.
 - `completions`: generate shell completion scripts.
-- `sync`: materialise every configured view, promoting view to canonical when
-  a view entry is a real directory newer than canonical and promotion is
-  explicitly applied.
-- `export`: copy repo-stored skills from `skills/` into the configured global
-  canonical store, then sync global views.
+- `sync`: materialise configured views, promoting newer real-directory view
+  entries to canonical when explicitly applied.
+- `export`: copy repo-stored skills from `skills/` into the global canonical
+  store and sync global views.
 - `view`: materialise and inspect global view symlinks.
 - `skill`: list, inspect, and edit canonical skill directories.
 - `scope`: inspect configured canonical scopes.
@@ -40,42 +39,40 @@ skillnet hook status
 
 ## View And Project Commands
 
-`skillnet project list` reports the resolved project set, including projects
-discovered from the declarative `project_discovery` policy. Use
-`--format json` for automation; rows include `name`, `path`, `source`, and
-`relative_path`. Discovery scans direct children of the configured project-tree
-classes only when they are Git checkouts with a real `.skills` directory.
-Protected roots and compatibility aliases remain explicit configuration, and
+`skillnet project list` prints explicit and `project_discovery`-resolved
+projects. With `--format json`, rows include `name`, `path`, `source`, and
+`relative_path`. Discovery scans direct children of configured project-tree
+classes only when a direct child is a Git checkout with a real `.skills`
+directory. Protected roots and compatibility aliases stay explicit, and
 `project add`/`project remove` never mutate discovered entries.
 
-Project-tree schemas 1 and 2 use the same confined primary-class discovery.
-Unknown versions are rejected before scanning.
+Project-tree schemas 1 and 2 share this confined primary-class discovery;
+unknown versions fail before scanning.
 
 ## Bundle exclusions
 
-Set `excluded_skills = ["retired-example"]` at the top level of
-`skillnet.toml` to omit a skill from every generated bundle. The policy applies
-to canonical directories, explicit manifest sources and subscription providers,
-including manifest-free stores. It preserves source files and subscription
-contents. Refreshing a provider cannot recreate the excluded bundle entry.
+Set `excluded_skills = ["retired-example"]` at the top level of `skillnet.toml`
+to omit a skill from every generated bundle. Exclusions apply to canonical
+directories, explicit manifest sources, and subscription providers (including
+manifest-free stores) while preserving source files and subscription contents;
+refreshing a provider cannot recreate excluded entries.
 
-Run `skillnet view sync --all --allow-delete` to remove stale generated view
-entries. Exclusions never authorize deleting authored source files. A retained
-skill that depends on an excluded skill fails validation before materialization;
-the policy does not silently remove its dependencies.
+Run `skillnet view sync --all --allow-delete` to prune stale generated view
+entries. Exclusions never delete authored source files, and a retained skill
+that depends on an excluded skill fails validation before materialization.
 
-Nix consumers pass `excludedSkills` to `lib.<system>.mkBundle` and set
-`programs.skillnet.excludedSkills` to the same list for runtime composition.
-The producer supplies the mechanism; consumers choose the names.
+Nix consumers pass `excludedSkills` to `lib.<system>.mkBundle` and match it in
+`programs.skillnet.excludedSkills` for runtime composition. The producer
+supplies the mechanism; consumers choose the names.
 
-For provider-only exclusions, set `excluded_provider_skills` (or the Nix
-`excludedProviderSkills` option/argument). This leaves same-named authored or
-external-manifest skills available. Consumers can detect this interface through
-`lib.bundleExclusionSupport` and supported project-tree schemas through
-`lib.projectTreeSchemaVersions`, also exposed in the per-system library.
+For provider-only exclusions, set `excluded_provider_skills` (or Nix
+`excludedProviderSkills` option/argument); same-named authored or
+external-manifest skills remain available. Feature detection is exposed via
+`lib.bundleExclusionSupport` and `lib.projectTreeSchemaVersions` (and their
+per-system equivalents).
 
-`skillnet export` is for repositories that intentionally VCS their own
-globally useful skills under `skills/`. From the repository root, run:
+Run `skillnet export` from a repository root that keeps globally useful skills
+in VCS under `skills/`:
 
 ```sh
 skillnet export
@@ -83,58 +80,80 @@ skillnet export --skill visual-rubric
 skillnet --dry-run export --source skills
 ```
 
-The command exports every immediate child directory containing `SKILL.md` to
-the configured global canonical store, then materialises configured global
-views such as `~/.agents/skills`. Use `--source <PATH>` for non-default source
-directories, `--no-view-sync` to skip the view pass, and `--prune` to remove
-valid global skill directories absent from the source listing. Repos observed
-with this shape include `fragpipe/skills/*`, `tzu/skills/*`, and
-`visual-rubric/skills/visual-rubric`. Existing `.skills/` directories are
-usually project-scoped skillnet stores; export them only with an explicit
-`--source .skills` when the intent is truly global.
+It exports each immediate child directory containing `SKILL.md` to the global
+canonical store and syncs global views such as `~/.agents/skills`. Pass
+`--source <PATH>` for another source directory, `--no-view-sync` to skip view
+sync, and `--prune` to remove valid global skill directories absent from the
+source listing. Known examples include `fragpipe/skills/*`, `tzu/skills/*`, and
+`visual-rubric/skills/visual-rubric`. `.skills/` directories are usually
+project-scoped; export them only with an explicit `--source .skills`.
 
-`skillnet sync` is the top-level materialisation command. It resolves every
-selected global view and project view from `skillnet.toml`, materialises the
-view symlinks, materialises project working copies, bootstraps project mirror
-canonicals when possible, and reports real-directory view entries that may need
-promotion back into canonical.
+`skillnet sync` resolves selected global and project views from `skillnet.toml`,
+materialises view symlinks and project working copies, bootstraps project
+mirror canonicals when possible, and reports real-directory view entries that
+may need promotion to canonical.
 
-When a view entry is already a symlink, `sync` keeps the normal generated-view
-behaviour. When a view entry is a real directory, `sync` compares that content
-with the canonical skill of the same name. A view entry whose content is newer
-than canonical is reported as a would-promote candidate by default; pass
-`--apply-promote` to copy that view content into canonical and then replace the
-view entry with a symlink.
+Existing symlinks keep normal generated-view behaviour. Promotion applies to
+non-symlink entries in promotion-enabled symlink views (global hardlink views
+and generated global bundle views do not use this promotion path) and always
+targets the view's own canonical store (global view to global canonical,
+project view to that project's canonical; never cross-scope). For each
+non-symlink view entry, the comparator checks:
+
+- **Missing canonical sibling** -> `AdoptCandidate` (evaluated before checking
+  mtimes).
+- **Matching content signature** (relative paths, file bytes, and symlink
+  targets; executable-bit-only diffs are not included, so mode-only edits can
+  be discarded on relink) -> `Identical`, automatically relinked to a symlink.
+- **Future view mtime** (newest mtime ahead of wall clock) -> downgraded to
+  `EqualMtimeDifferentContent`, requiring an explicit `--prefer` tie-break.
+- **Path divergence** (older side has paths absent from the newer side) ->
+  `BothAdvanced`, preventing "newer wins" and requiring `--prefer`.
+- **View newer / canonical newer / equal mtime with different content** ->
+  `ViewNewer`, `CanonicalNewer`, or `EqualMtimeDifferentContent`.
+
+By default, `skillnet sync` still performs clean symlink updates for other
+entries and automatically relinks `Identical` entries, while printing pending
+promotion/conflict lines and exiting `2` when unresolved entries remain; pass
+global `--dry-run` for a non-mutating preview. With `--apply-promote`,
+promotion stages and replaces one whole skill at a time (copying into staging,
+removing the existing canonical directory, renaming the staged copy into place,
+then relinking the view), preserving mtimes and permissions; there is no
+per-file three-way merge or crash-atomic transactional rollback (an
+interruption can leave canonical absent or the view unlinked). Sync diagnostics
+and `skillnet status` are the inspection surface: `skillnet sync` prints both
+mtimes for `would promote`, short hashes for `EqualMtimeDifferentContent` ties,
+and summary counts for applied promotions (no `RECONCILIATION.md` manifest or
+automatic Git commit is produced).
 
 Promotion flags:
 
-| Flag                         | Default | Behaviour                                                                                                                                                                               |
-| ---------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--apply-promote`            | off     | Executes pending `ViewNewer` outcomes and any `--prefer`-resolved or `--adopt-new`-promoted outcomes. Without this flag, those outcomes are reported as would-promote/would-adopt only. |
-| `--no-promote`               | off     | Hard-disables the promotion path entirely. Non-symlink view entries error as in `0.5.x`. Use this for CI and consumer-only hosts.                                                       |
-| `--force`                    | off     | Demotes `CanonicalNewer` entries, destroying view-side content. In `0.6.0`, this is the destructive demote branch rather than the promotion branch.                                     |
-| `--prefer <view\|canonical>` | unset   | Tie-breaker for `EqualMtimeDifferentContent` and `BothAdvanced`. Only consulted when `--apply-promote` is also passed.                                                                  |
-| `--adopt-new`                | off     | Treats `AdoptCandidate` outcomes as promotion candidates. Only acts when `--apply-promote` is also passed.                                                                              |
-| `--allow-delete`             | off     | Existing pruning semantics. Removes view entries with no canonical sibling and no `--adopt-new`.                                                                                        |
-| `--scope <SCOPE>`            | unset   | Selects named scopes. Use `--scope projects` for every project, or `--scope all` for global plus every project. May be repeated.                                                        |
-| `--all`                      | off     | Alias for `--scope all`.                                                                                                                                                                |
-| `--link <symlink\|hardlink>` | unset   | Overrides the resolved link strategy for this materialisation run. Global scopes default to symlink; project working copies default to hardlink.                                        |
-| `--dry-run`                  | off     | Global flag. Never mutates and never escalates would-promote work to exit code `2`; prints would-\* lines and exits `0`.                                                                |
-| `--allow-dirty-destination`  | off     | Global flag. Allows canonical writes even when the destination Git working tree is dirty. This now gates every canonical write site, not just `mirror_root`.                            |
+| Flag                         | Default | Behaviour                                                                                                                                                                                                                                                                               |
+| ---------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--apply-promote`            | off     | Executes pending `ViewNewer` outcomes, `--prefer view` tie-breaks, and `--adopt-new` promotions; without it, no would-promote/would-adopt mutation occurs (top-level `sync` prints `would promote` lines and leaves unadopted real directories untouched without a `would-adopt` line). |
+| `--no-promote`               | off     | Disables promotion; non-symlink view entries error as in `0.5.x`. Use for CI and consumer-only hosts.                                                                                                                                                                                   |
+| `--force`                    | off     | Destructively demotes `CanonicalNewer` entries (discarding view content), and resolves `EqualMtimeDifferentContent`/`BothAdvanced` in favor of canonical when paired with `--prefer canonical`. Since `0.6.0`, this is the destructive demote branch, not promotion.                    |
+| `--prefer <view\|canonical>` | unset   | Tie-breaker for `EqualMtimeDifferentContent` and `BothAdvanced`. Pass `--apply-promote --prefer view` to promote the view, or `--force --prefer canonical` to destructively discard view edits (`--apply-promote --prefer canonical` alone leaves the conflict pending).                |
+| `--adopt-new`                | off     | Treats `AdoptCandidate` entries as promotion candidates; acts only with `--apply-promote`.                                                                                                                                                                                              |
+| `--allow-delete`             | off     | Prunes stale view symlinks (and entries with no canonical sibling under `--no-promote`); in promotion mode, unadopted real skill directories stay untouched unless `--no-promote --allow-delete` is passed.                                                                             |
+| `--scope <SCOPE>`            | unset   | Selects scopes: named scope, `--scope projects`, or `--scope all`. Repeatable.                                                                                                                                                                                                          |
+| `--all`                      | off     | Alias for `--scope all`.                                                                                                                                                                                                                                                                |
+| `--link <symlink\|hardlink>` | unset   | Overrides link strategy for this run (global scopes default to symlink; project working copies default to hardlink).                                                                                                                                                                    |
+| `--dry-run`                  | off     | Global flag. Never mutates and never escalates would-promote work to exit `2`; prints would-\* lines and exits `0`.                                                                                                                                                                     |
+| `--allow-dirty-destination`  | off     | Global flag. Allows canonical writes into dirty Git working trees across every canonical write site, not just `mirror_root`.                                                                                                                                                            |
 
-`--apply-promote` conflicts with `--no-promote`. `--force` also conflicts with
-`--no-promote`, so a destructive demote must be requested as its own explicit
-mode.
+`--no-promote` conflicts with both `--apply-promote` and `--force`, keeping
+destructive demotion an explicit mode.
 
 Exit codes:
 
-| Code | Meaning                                                                                                                             |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | All outcomes were created, updated, unchanged, removed, identical, auto-demoted, or adopt candidates left visible but not promoted. |
-| `2`  | At least one would-promote, would-demote-destructive, or needs-tie-break outcome was reported and not actioned.                     |
-| `1`  | Any other error, including IO errors, parse errors, dirty destinations, or parse-time flag conflicts.                               |
+| Code | Meaning                                                                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `0`  | All outcomes were created, updated, unchanged, removed, identical, auto-demoted, or adopt candidates left visible but not promoted.                                      |
+| `2`  | Either CLI usage / parse-time flag conflict (from argument parsing), or a parsed sync run with pending would-promote, would-demote-destructive, or needs-tie-break work. |
+| `1`  | Any runtime error (IO, config parse, dirty destination, etc.).                                                                                                           |
 
-`--dry-run` collapses exit code `2` to `0` because it is an explicit preview.
+`--dry-run` collapses sync's pending-work exit code `2` to `0`.
 
 Example:
 
@@ -149,44 +168,40 @@ skillnet sync --apply-promote
 # exits 0
 ```
 
-Use `skillnet doctor` before a promotion run when you want a read-only
-classification of non-symlink entries. Doctor reports `Identical`,
-`ViewNewer`, `CanonicalNewer`, `EqualMtimeDifferentContent`, `BothAdvanced`,
-and `AdoptCandidate` with hints for the matching `sync` flag. For the
-centralised XDG config migration and Home Manager pattern, see
+Use `skillnet doctor` before promotion when you want a read-only classification
+of non-symlink entries (`Identical`, `ViewNewer`, `CanonicalNewer`,
+`EqualMtimeDifferentContent`, `BothAdvanced`, `AdoptCandidate`) with matching
+`sync` flag hints. For XDG config migration and Home Manager setup, see
 [Centralised config (0.6.0)](migration/centralised-config.md).
 
-`skillnet view sync --all` materialises configured global views from the
-canonical global store. It accepts `--link symlink|hardlink` for parity with
-the materialisation interface, but global views default to generated symlinks.
+`skillnet view sync --all` materialises global views from the canonical global
+store and accepts `--link symlink|hardlink` (defaulting to generated symlinks).
+Unlike top-level `skillnet sync`, user-facing `skillnet view sync` enables
+promotion and adoption by default for ordinary global symlink views (preserving
+authored directories and limiting `--allow-delete` to dangling symlinks); in
+bundle mode, promotion is disabled and authored directories are preserved.
 
-`skillnet project sync --all` materialises project-local working copies at
-each project's `canonical_rel` (default `.agents/skills`) from the canonical
-`<project>/.skills` store, then materialises configured project views.
-Project views such as `.claude/skills` remain per-skill relative symlinks into
-the project working copy. Project working copies default to hardlinked
-directory twins of the canonical store. Use `--link symlink` or
-`link_strategy = "symlink"` only when you intentionally want the working copy to
-be a directory symlink.
+`skillnet project sync --all` materialises project working copies at
+`canonical_rel` (default `.agents/skills`) from `<project>/.skills`, then
+materialises project views (such as `.claude/skills`) as per-skill relative
+symlinks into the working copy. Working copies default to hardlinked directory
+twins; pass `--link symlink` or set `link_strategy = "symlink"` only when you
+want a directory symlink.
 
-Hardlink working copies are read and repaired by status-aware sync:
+Status-aware sync repairs hardlink working copies:
 
-- missing or foreign working copies are replaced during sync;
-- severed, identical, or diverged working-copy files are re-linked from
-  canonical;
-- cross-filesystem hardlink failures are errors, with no copy or symlink
-  fallback.
+- missing or foreign working copies are replaced;
+- severed, identical, or diverged files are re-linked from canonical;
+- cross-filesystem hardlink failures error without copying or symlinking.
 
-`skillnet project clone --all` clones every configured project whose `path`
-does not exist and whose `origin` is configured, then runs
-`skillnet project sync --all`. It is idempotent for projects already present on
-disk. Use `--dry-run` to print intended clones without invoking Git. By
-default, HTTPS origins are refused; pass `--ssh-strict=false` only when HTTPS
-clones are intended.
+`skillnet project clone --all` clones missing configured projects that set
+`origin`, then runs `skillnet project sync --all`. Existing paths are skipped,
+`--dry-run` previews clones without invoking Git, and HTTPS origins are refused
+unless `--ssh-strict=false` is passed.
 
-Use `view status|diff` and `project status|diff` to inspect derived view drift
-without mutating files. `skillnet sync` is the preferred one-shot command when
-you want all configured views materialised from the same config.
+Inspect drift without mutating files via `view status|diff` and
+`project status|diff`; use `skillnet sync` to materialise all configured views
+in one shot.
 
 Scope selectors:
 
@@ -216,39 +231,44 @@ Scope selectors:
 ]
 ```
 
-Rows include `would_promote` and `needs_tie_break` counts. Individual
-non-symlink drift entries may also include `view_mtime_nanos`,
-`canonical_mtime_nanos`, `view_sha`, and `canonical_sha` so promotion
-decisions can be inspected without mutating the filesystem.
+Rows include `would_promote` and `needs_tie_break` counts. Non-symlink drift
+entries may also include `view_mtime_nanos`, `canonical_mtime_nanos`,
+`view_sha`, and `canonical_sha` for read-only inspection of promotion
+decisions.
 
 ## Doctor
 
-`skillnet doctor` checks the Option B canonical/view/working-copy invariants:
+`skillnet doctor` validates Option B canonical/view/working-copy invariants:
 
 - global canonical store existence and global view symlinks;
-- project `.skills` canonical stores, project working copies, and committed
-  in-repo view symlinks;
-- orphan view entries that do not correspond to canonical skill names;
+- project `.skills` canonical stores, working copies, and committed in-repo
+  view symlinks;
+- orphan view entries without canonical siblings;
 - broken or unexpected symlink targets.
 
-Missing configured project repositories are warnings because a fresh host may
-not have cloned every project yet. Non-symlink view entries are classified by
-the same comparator used by `skillnet sync`: `Identical`, `ViewNewer`,
-`CanonicalNewer`, `EqualMtimeDifferentContent`, `BothAdvanced`, or
-`AdoptCandidate`.
+Missing configured project repositories emit warnings so partially bootstrapped
+hosts are not flagged as corrupted. Non-symlink view entries use the same
+comparator as `skillnet sync`:
 
-For project working copies, doctor follows the configured link strategy.
-Symlink strategy checks the configured working-copy path points at
-`<project>/.skills`. Hardlink strategy verifies the project-local
-working-copy directory's regular files are hardlinked twins of canonical files.
+- `Identical` and `AdoptCandidate` report as Info (do not cause a non-zero
+  exit). If a promotion run was interrupted after updating canonical and before
+  relinking, the matching view directory reports as `Identical` (Info) and
+  rerunning `skillnet sync` relinks it; a missing link is reported separately.
+- `ViewNewer` reports as Warn (non-zero exit).
+- `CanonicalNewer`, `EqualMtimeDifferentContent`, and `BothAdvanced` report as
+  Error (non-zero exit).
+
+Project working-copy checks follow the configured link strategy: symlink
+strategy checks that the working copy points at `<project>/.skills`; hardlink
+strategy verifies regular files are hardlinked twins of canonical files.
 Missing working copies, symlink working copies under hardlink strategy, foreign
-trees, and diverged files are errors. Severed-but-identical files are warnings
-because `skillnet project sync` can re-link them without discarding content.
+trees, and diverged files are errors; severed-but-identical files are warnings
+because `skillnet project sync` re-links them without losing content.
 
 ## Config File Location
 
-`skillnet --config <path>` is the highest-precedence source. When the flag is
-omitted, the binary reads:
+Config file discovery precedence, highest first (`skillnet --config <path>`
+wins):
 
 | Rank | Source                          | Resolves to                                                                      |
 | ---- | ------------------------------- | -------------------------------------------------------------------------------- |
@@ -258,31 +278,31 @@ omitted, the binary reads:
 | 4    | legacy cwd config, when present | `./skillnet.toml`                                                                |
 | 5    | missing-config error path       | XDG path                                                                         |
 
-The same file precedence applies to `--catalog-config` /
-`SKILLNET_CATALOG_CONFIG`, using `skillnet.catalog.toml` as the file name.
+`--catalog-config` / `SKILLNET_CATALOG_CONFIG` follows the same ladder for
+`skillnet.catalog.toml`. Rank 4 legacy cwd discovery remains active with a
+deprecation warning (removal was targeted for `0.7.0` and is deferred to a
+future release).
 
-The destination root precedence is `--mirror-root`, then
-`SKILLNET_MIRROR_ROOT`, then `skills_root` in `skillnet.toml`, then the legacy
-`mirror_root` key, then `.`. When the destination is a Git repository,
-`skillnet status` reports branch, origin, and dirty state. Commands that write
-to the mirror destination refuse to run when that repository is dirty unless
-`--allow-dirty-destination` is passed.
+Destination root precedence: `--mirror-root`, `SKILLNET_MIRROR_ROOT`,
+`skills_root` in `skillnet.toml`, legacy `mirror_root`, then `.`. For Git
+destinations, `skillnet status` reports branch, origin, and dirty state, and
+writing commands refuse dirty repositories unless `--allow-dirty-destination`
+is passed.
 
-The removed `sync pull` auto-commit flow still has no replacement in `0.6.0`.
-Promotion writes canonical content when explicitly applied, but the user still
-commits canonical store changes with Git directly.
+The removed `sync pull` auto-commit flow has no replacement since `0.6.0`;
+promotion writes canonical files when applied, and the user commits Git changes
+directly.
 
 ## Calibration Database
 
-Calibration commands use Postgres by default. The backend can be selected in
-`skillnet.toml`:
+Calibration defaults to Postgres. Select it in `skillnet.toml`:
 
 ```toml
 [database]
 url = "postgres://user@host/skillnet"
 ```
 
-SQLite remains available by selecting it explicitly:
+Select SQLite explicitly:
 
 ```toml
 [database]
@@ -290,7 +310,7 @@ backend = "sqlite"
 path = "/abs/path/calibration.sqlite"
 ```
 
-`path` is used only for SQLite. `url` selects the Postgres backend.
+`path` applies only to SQLite; `url` selects Postgres.
 
 Database target precedence, highest first:
 
@@ -303,5 +323,5 @@ Database target precedence, highest first:
 | 5    | `[database].path` with `backend = "sqlite"`  | SQLite at the configured path                                                                       |
 | 6    | no override                                  | Postgres, requiring `database.url`, `SKILLNET_DATABASE_URL`, `SKILLNET_DB_URL`, or `--database-url` |
 
-When a database URL and `SKILLNET_DATA_DIR`/`skillnet_DATA_DIR` are both set,
-the URL wins and `skillnet` prints a warning.
+If both a database URL and `SKILLNET_DATA_DIR`/`skillnet_DATA_DIR` are set, the
+URL wins and `skillnet` prints a warning.
