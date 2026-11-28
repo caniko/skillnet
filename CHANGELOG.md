@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `skillnet fingerprint`, `skillnet trigger`, and `skillnet card` to profile
   repositories and match, inspect, and validate code-triggered cards.
+- Export Nix helpers to generate, sync, and check project commands and skills
+  for OpenCode, Antigravity, shared `.agents` consumers, and Claude.
 
 ### Fixed
 
