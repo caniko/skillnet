@@ -1,8 +1,9 @@
 # Centralised Config (0.6.0)
 
 `0.6.0` keeps skillnet's canonical/view layout but moves the normal config
-story to XDG and Home Manager. The old working-directory pickup still works
-for one release, but it is deprecated and will be removed in `0.7.0`.
+story to XDG and Home Manager. Working-directory pickup was deprecated in
+`0.6.0` (originally targeted for removal in `0.7.0`) and remains active with a
+deprecation warning until a future release removes rank 4.
 
 The target layout is:
 
@@ -24,9 +25,9 @@ fresh hosts. A shell started in another directory does not see the config, and
 Home Manager cannot own the files cleanly while they live as mutable checkout
 state.
 
-`0.6.0` therefore prints a deprecation warning whenever it falls through to
-legacy cwd discovery. The fallback remains available through the `0.6.x`
-series so users can migrate deliberately. `0.7.0` removes rank 4.
+`0.6.0` prints a deprecation warning whenever discovery falls through to legacy
+cwd pickup. The fallback remains active in `0.6.x` and `0.7.0` so users can
+migrate deliberately; removing rank 4 is still pending for a future release.
 
 ## One-Shot Migration
 
@@ -53,12 +54,17 @@ Breadcrumb files are plain text:
 - `.skillnet.toml.moved-to-xdg`
 - `.skillnet.catalog.toml.moved-to-xdg`
 
-Each breadcrumb contains the absolute XDG destination path. After every host
-has migrated, remove stale breadcrumbs with:
+Each breadcrumb contains the absolute XDG destination path plus a trailing
+newline. After every host has migrated, remove stale breadcrumbs in the current
+working directory (the command checks only the cwd of invocation and does not
+traverse) with:
 
 ```sh
 skillnet config migrate --remove-breadcrumbs
 ```
+
+`skillnet config migrate` remains available as an idempotent command even after
+rank-4 legacy discovery is removed.
 
 ## Home Manager Pattern
 
@@ -262,3 +268,22 @@ ls -la "$XDG_CONFIG_HOME/skillnet"
 Remove any leftover cwd TOML files after confirming their XDG copies are
 correct. Breadcrumbs are harmless, but stale cwd TOMLs keep rank 4 discovery
 alive when no XDG file is present.
+
+## Pending Follow-Ups
+
+Items deferred or unverified from the `0.6.0` design:
+
+- **Rank-4 cwd discovery sunset:** legacy `./skillnet.toml` and
+  `./skillnet.catalog.toml` fallback is still active in `0.7.0`, and the
+  runtime warning in `src/cli/mod.rs` still states removal in `0.7.0`. Keep
+  `skillnet config migrate` when removing rank 4.
+- **Downstream host rollout:** migrating external `ai-skills` checkouts and
+  host Home Manager declarations (modeled in the example above) is tracked
+  outside this repository.
+- **Applied `BothAdvanced` test coverage:** `tests/view_sync.rs` currently
+  covers the pending `BothAdvanced` outcome; add applied `--prefer view` and
+  `--force --prefer canonical` cases.
+- **Unshipped promotion design details:** `would promote` lines currently emit
+  mtimes without `view_sha[..8]`, applied promotions print summary counts
+  rather than per-skill overwrite lines, and canonical replacement stages,
+  removes, and renames rather than performing a crash-atomic swap.

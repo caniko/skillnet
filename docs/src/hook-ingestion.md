@@ -1,11 +1,11 @@
 # Hook ingestion
 
-`skillnet hook ingest` records Claude Code hook payloads into the
-`skill_invocations` table. This captures every configured skill invocation as
-it happens, without requiring a later `skillnet calibration record` pass and
-without mixing raw hook events into the multi-phase-plan calibration tables.
-The normalized `skillnet usage record` command provides the same storage
-contract to other harness adapters.
+`skillnet hook ingest` records metadata for matching configured Claude Code
+skill invocations into `skill_invocations` (coverage depends on installed
+event/matcher entries), without requiring a later `skillnet calibration record`
+pass or mixing raw hook events into multi-phase-plan calibration tables. Other
+harness adapters can use `skillnet usage record` against the same storage
+contract.
 
 ## Quick start
 
@@ -15,27 +15,27 @@ contract to other harness adapters.
    cargo install skillnet
    ```
 
-2. Point skillnet at your calibration database. For Postgres, set one of the
-   supported URL variables:
+2. Point skillnet at your calibration database. For Postgres, set a supported
+   URL variable:
 
    ```sh
    export DATABASE_URL='postgres://skillnet@localhost/skillnet'
    ```
 
-   For SQLite, select the runtime data directory instead:
+   For SQLite, set the runtime data directory instead:
 
    ```sh
    export SKILLNET_DATA_DIR="$HOME/.local/share/skillnet"
    ```
 
-3. Install the Claude Code hook entries and confirm status:
+3. Install Claude Code hooks and check status:
 
    ```sh
    skillnet hook install
    skillnet hook status
    ```
 
-4. Run any Claude Code skill, then inspect recent rows:
+4. Run a Claude Code skill and inspect recent rows:
 
    ```sh
    psql "$DATABASE_URL" -c \
@@ -48,23 +48,22 @@ For a catalog-wide, zero-filled report:
 skillnet usage report --since 90d --format table
 ```
 
-Use `skillnet usage record` from a native harness activation event. Supply a
-stable `--event-id`; retries with the same ID are ignored. Do not parse
-transcripts or retain prompts as a substitute for a native event.
+Invoke `skillnet usage record` from native harness activation events with a
+stable `--event-id` so retries are ignored; do not parse transcripts or retain
+prompts instead.
 
 ## Managed entries
 
-`skillnet hook install` edits only the selected Claude Code settings file,
-defaulting to `$HOME/.claude/settings.json`. It preserves unrelated settings
-and hook entries, creates a one-time `.bak` next to an existing settings file,
-and writes through a temporary file before renaming.
+`skillnet hook install` modifies only the target Claude Code settings file
+(default `$HOME/.claude/settings.json`), preserving unrelated settings and
+hooks, writing a one-time `.bak` alongside an existing file, and replacing it
+atomically via a temporary file.
 
-Managed hook entries are marked with `_skillnet_managed: true`. Re-running
-`skillnet hook install` removes previous skillnet-managed entries for the
-selected events, then writes fresh entries. That makes the command idempotent
-and safe to run from provisioning tools.
+Managed entries carry `_skillnet_managed: true`. Rerunning
+`skillnet hook install` replaces prior skillnet-managed entries for the selected
+events, keeping the command idempotent for provisioning tools.
 
-To remove only skillnet-managed entries:
+Remove only skillnet-managed entries with:
 
 ```sh
 skillnet hook uninstall
@@ -72,26 +71,27 @@ skillnet hook uninstall
 
 ## Home Manager
 
-The Home Manager module installs the `skillnet` binary and can render database
-configuration, but it does not edit Claude Code settings during activation. Run
-the hook workflow explicitly after changing configuration:
+The Home Manager module installs `skillnet` and can render database config, but
+does not edit Claude Code settings during activation. Run hook commands
+explicitly after config changes:
 
 ```sh
 skillnet hook install
 skillnet hook status
 ```
 
-Run `skillnet hook uninstall` explicitly when you want to remove managed entries.
+Run `skillnet hook uninstall` explicitly to remove managed entries.
 
 ## Troubleshooting
 
-- `skillnet hook ingest` is designed for Claude Code hook execution. Without
-  `--strict`, database and payload errors are printed to stderr and the command
-  exits 0 so a broken logging path does not break interactive tool use.
-- Use `skillnet hook ingest --strict --event PostToolUse` in tests and CI when
-  failures should be fatal.
-- If `skillnet hook install` reports a JSON parse error, clean up comments or
-  invalid JSON in the settings file first. The command refuses to rewrite
-  invalid JSON rather than risk dropping user content.
+- Without `--strict`, `skillnet hook ingest` prints handled database and
+  payload ingestion errors to stderr and exits 0 so a broken logging path does
+  not break interactive tool use (config loading and database-target resolution
+  can still fail before non-strict handling runs).
+- Pass `skillnet hook ingest --strict --event PostToolUse` in tests and CI when
+  failures must be fatal.
+- If `skillnet hook install` fails with a JSON parse error, fix comments or
+  invalid JSON in the settings file first; the command refuses to rewrite
+  invalid JSON.
 - If `skillnet hook status` prints `not installed`, run `skillnet hook install`
-  against the same `--settings` path that Claude Code reads.
+  with the same `--settings` path Claude Code reads.
