@@ -206,6 +206,8 @@
       mkBundle = import ./nix/bundle.nix {
         inherit package pkgs;
       };
+      integrations = import ./nix/integrations.nix {inherit pkgs;};
+      integrationsTest = import ./nix/test-integrations.nix {inherit pkgs integrations;};
       greptileSkills = import ./nix/greptile-bundle.nix {
         inherit mkBundle pkgs;
         skillnetVersion = package.version;
@@ -285,7 +287,16 @@
         hostSelectionSupport = true;
         bundleExclusionSupport = true;
         projectTreeSchemaVersions = [1 2];
+        harnessIntegrationSupport = true;
         inherit mkBundle;
+        inherit
+          (integrations)
+          renderHarnessCommand
+          mkHarnessIntegration
+          mkIntegrationSync
+          mkIntegrationCheck
+          supportedHarnesses
+          ;
       };
 
       checks =
@@ -303,6 +314,7 @@
           deny = denyCheck;
           hm-module = hmModuleTest;
           bundle = bundleCheck;
+          harness-integrations = integrationsTest;
           greptile-skills = greptileSkills.check;
           # A CI-only runtime hook must not make the composition a dev-shell input.
           # Attribute-name lookup only: preserve the shell's real dependency context.
@@ -412,6 +424,7 @@
           hostSelectionSupport = true;
           bundleExclusionSupport = true;
           projectTreeSchemaVersions = [1 2];
+          harnessIntegrationSupport = true;
         };
     };
 }
